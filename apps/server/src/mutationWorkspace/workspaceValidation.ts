@@ -61,10 +61,14 @@ export const VALIDATION_PROBLEM_PREFIXES = [TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER]
  * would: `initialize` with the assets (or a placeholder photo when there are
  * none, standing in for the thread's attached images) and the chrome's
  * control values; every other request succeeds; notifications are dropped.
+ * A template page counts as booted only once it has published
+ * `window.t3template` and been quiet since: templates run `customScript` right
+ * after that, which on a photo can come well over a second after `initialize`.
  */
 export function validationHostScript(input: {
   readonly assets: ReadonlyArray<ValidationAsset>;
   readonly controls: Readonly<Record<string, unknown>>;
+  readonly template: boolean;
 }): string {
   const config = JSON.stringify({
     assets: input.assets,
@@ -74,11 +78,14 @@ export function validationHostScript(input: {
     composerSize: WORKSPACE_BRIDGE_METHODS.composerSize,
     agentStatus: WORKSPACE_BRIDGE_METHODS.agentStatus,
     quietMs: QUIET_MS,
+    template: input.template,
   }).replace(/</g, "\\u003c");
   return `(function(){
-var C=${config},post=window.postMessage.bind(window),timer,settle;
+var C=${config},post=window.postMessage.bind(window),timer,settle,published=false;
 var settled=new Promise(function(r){settle=r;});
-function arm(){clearTimeout(timer);timer=setTimeout(settle,C.quietMs);}
+function quiet(){if(!C.template||published||window.t3template)return settle();timer=setTimeout(wait,50);}
+function wait(){if(!window.t3template){timer=setTimeout(wait,50);return;}published=true;arm();}
+function arm(){clearTimeout(timer);timer=setTimeout(quiet,C.quietMs);}
 window.addEventListener("load",arm);
 window.__t3WorkspaceValidation={settled:settled};
 function placeholder(){var c=document.createElement("canvas");c.width=1600;c.height=1067;var g=c.getContext("2d"),l=g.createLinearGradient(0,0,1600,1067);l.addColorStop(0,"#3b5b7a");l.addColorStop(0.5,"#c9a26b");l.addColorStop(1,"#2d2a26");g.fillStyle=l;g.fillRect(0,0,1600,1067);

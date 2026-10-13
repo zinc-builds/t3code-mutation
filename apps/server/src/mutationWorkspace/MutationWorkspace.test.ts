@@ -41,6 +41,12 @@ const fixtureKit = makeWorkspaceKit({
       kit: ["develop"],
       options: { look: { type: "string", enum: ["neutral", "moody"], default: "neutral" } },
       examples: [],
+      boltOn: {
+        summary: "options.customScript runs once.",
+        api: ["addPanel(title) -> body."],
+        reservedShortcuts: [],
+        example: "t3template.addPanel('Extra');",
+      },
       html: "<!doctype html><html><head></head><body><script>app()</script></body></html>",
     },
   ],
@@ -561,6 +567,19 @@ describe("MutationWorkspace validation in a browser", () => {
           });
           // Settles a quiet second after boot, well inside the page budget.
           expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(4_000);
+
+          // An image template runs customScript only once its photo is developed, well
+          // after the bridge's first quiet second; validation waits for it.
+          const boltOn = yield* workspace.publish({
+            threadId: thread,
+            title: "Develop",
+            assetPaths: [],
+            template: { id: "photo-develop", options: { customScript: "t3template.nope()" } },
+          });
+          expect(boltOn.validation).toEqual({
+            ok: false,
+            errors: [{ source: "customScript", message: "t3template.nope is not a function" }],
+          });
         }).pipe(Effect.scoped, Effect.provide(layerBrowserWorkspace(executable)));
       }),
     30_000,

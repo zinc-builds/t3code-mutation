@@ -249,6 +249,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
 
   const validate = (input: {
     readonly html: string;
+    readonly template: boolean;
     readonly assetPaths: ReadonlyArray<string>;
     readonly chrome: WorkspaceChrome | undefined;
   }) =>
@@ -257,6 +258,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
       const host = validationHostScript({
         assets,
         controls: input.chrome === undefined ? {} : resolveWorkspaceChromeValues(input.chrome),
+        template: input.template,
       });
       const observation = yield* htmlRender.observe({
         html: injectValidationHost(input.html, host),
@@ -309,7 +311,12 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         fileSystem
           .writeFileString(filePath, html)
           .pipe(Effect.mapError((cause) => new WorkspaceStoreError({ cause }))),
-        validate({ html, assetPaths: input.assetPaths, chrome: chrome?.chrome }),
+        validate({
+          html,
+          template: plan.value.template !== undefined,
+          assetPaths: input.assetPaths,
+          chrome: chrome?.chrome,
+        }),
       ],
       { concurrency: 2 },
     );
