@@ -17,7 +17,7 @@ const photo = workspaceAssetKey(environmentId, {
   mimeType: "image/jpeg",
 });
 const clip = workspaceAssetKey(environmentId, {
-  _tag: "media-file",
+  _tag: "workspace-asset",
   threadId,
   path: "/m/clip.mp4",
 });

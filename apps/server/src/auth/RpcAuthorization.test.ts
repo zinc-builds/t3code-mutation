@@ -398,6 +398,7 @@ it.effect("separates host file URLs from readable attachment URLs", () =>
     for (const resource of [
       { _tag: "workspace-file", threadId: ThreadId.make("thread"), path: "file.txt" },
       { _tag: "media-file", threadId: ThreadId.make("thread"), path: "/repo/image.png" },
+      { _tag: "workspace-asset", threadId: ThreadId.make("thread"), path: "/repo/sales.csv" },
       { _tag: "draft-workspace-file", cwd: "/repo", path: "file.txt" },
     ] as const) {
       expect(

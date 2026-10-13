@@ -8,6 +8,7 @@ import type { ChatAttachment } from "@t3tools/contracts";
 import { imageMimeType } from "@t3tools/shared/image";
 import {
   WORKSPACE_MUTATE_TOOL_NAME,
+  workspaceMutateInputAssetPaths,
   workspaceReferencesEqual,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
@@ -86,16 +87,7 @@ export function runningWorkspaceMutations(
     ) {
       continue;
     }
-    const assets =
-      typeof item.input === "object" && item.input !== null && "assets" in item.input
-        ? item.input.assets
-        : undefined;
-    running.push({
-      itemId: item.id,
-      assetPaths: Array.isArray(assets)
-        ? assets.filter((path): path is string => typeof path === "string" && path.length > 0)
-        : [],
-    });
+    running.push({ itemId: item.id, assetPaths: workspaceMutateInputAssetPaths(item.input) });
   }
   return running;
 }

@@ -82,6 +82,15 @@ export function readWorkspaceReference(value: unknown): WorkspaceReference | und
   };
 }
 
+/** The asset paths a `workspace_mutate` call's input names, as the agent passed them. */
+export function workspaceMutateInputAssetPaths(input: unknown): string[] {
+  const assets =
+    typeof input === "object" && input !== null && "assets" in input ? input.assets : undefined;
+  return Array.isArray(assets)
+    ? assets.filter((path): path is string => typeof path === "string" && path.length > 0)
+    : [];
+}
+
 export function workspaceReferencesEqual(left: WorkspaceReference, right: WorkspaceReference) {
   // Chrome, like the page, is fixed per attachment, so the attachment id covers it.
   return (

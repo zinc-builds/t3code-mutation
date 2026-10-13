@@ -62,7 +62,7 @@ describe("workspaceAssetSources", () => {
         attachmentId: "img-1",
       },
       {
-        resource: { _tag: "media-file", threadId, path: "/work/clip.mp4" },
+        resource: { _tag: "workspace-asset", threadId, path: "/work/clip.mp4" },
         name: "clip.mp4",
         mimeType: null,
         source: "file",

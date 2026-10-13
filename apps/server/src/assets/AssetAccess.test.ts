@@ -293,6 +293,52 @@ describe("AssetAccess", () => {
     }).pipe(Effect.provide(layerTest)),
   );
 
+  it.effect("serves a workspace asset of any type, never as a document", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-workspace-asset-" });
+      for (const [name, contentType, disposition] of [
+        ["sales.csv", "text/csv", "attachment"],
+        ["table.json", "application/json", "attachment"],
+        ["notes", "application/octet-stream", "attachment"],
+        ["page.html", "application/octet-stream", "attachment"],
+        ["clip.mp4", "video/mp4", null],
+      ] as const) {
+        const filePath = path.join(directory, name);
+        yield* fs.writeFileString(filePath, "region,total\nwest,4\n");
+        const result = yield* issueAssetUrl({
+          resource: {
+            _tag: "workspace-asset",
+            threadId: ThreadId.make("thread-1"),
+            path: filePath,
+          },
+        });
+        const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+        const separator = suffix.indexOf("/");
+        const token = suffix.slice(0, separator);
+        const asset = yield* resolveAsset(token, suffix.slice(separator + 1));
+        if (asset?.kind !== "file") throw new Error(`Expected ${name} to resolve to a file`);
+        const response = HttpServerResponse.toWeb(yield* assetFileResponse(asset));
+        expect(response.headers.get("content-type")).toBe(contentType);
+        expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(response.headers.get("content-disposition")?.split(";", 1)[0] ?? null).toBe(
+          disposition,
+        );
+        expect(yield* Effect.promise(() => response.text())).toBe("region,total\nwest,4\n");
+        expect(yield* resolveAsset(token, "other.csv")).toBeNull();
+      }
+      const missing = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-asset",
+          threadId: ThreadId.make("thread-1"),
+          path: path.join(directory, "gone.csv"),
+        },
+      }).pipe(Effect.flip);
+      expect(missing._tag).toBe("AssetWorkspaceAssetNotFoundError");
+    }).pipe(Effect.provide(layerTest)),
+  );
+
   it.effect("reports pixel dimensions from an image header and nothing for other files", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

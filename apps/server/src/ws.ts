@@ -118,6 +118,7 @@ import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ThreadManagementService from "./orchestration-v2/ThreadManagementService.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
+import * as WorkspaceAssets from "./mutationWorkspace/WorkspaceAssets.ts";
 import * as WorkspaceState from "./mutationWorkspace/WorkspaceState.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
@@ -141,7 +142,7 @@ import {
   toShellApplicationEvent,
   type ShellApplicationEvent,
 } from "./orchestration-v2/ShellStream.ts";
-import { ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION } from "./orchestration-v2/ProjectionStore.ts";
+import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import { bufferLiveStream } from "./orchestration-v2/LiveStreamBudget.ts";
 import { coalesceThreadLiveStream } from "./orchestration-v2/ThreadLiveEventCoalescer.ts";
 import {
@@ -969,7 +970,7 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
         const enriched = yield* enrichProjectShells(yield* projects.listShells());
         return {
           snapshot: {
-            schemaVersion: ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
+            schemaVersion: ProjectionStore.ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
             snapshotSequence,
             projects: enriched.projects,
             threads: [],
@@ -1081,7 +1082,7 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
           );
           return shellStreamItemFromEnrichmentRefresh({
             snapshot: {
-              schemaVersion: ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
+              schemaVersion: ProjectionStore.ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
               snapshotSequence,
               projects: changedProjects,
               threads: [],
@@ -1226,6 +1227,7 @@ const layerWsRpc = (
       const providerSessionsV2 = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
       const workspaceState = yield* WorkspaceState.WorkspaceState;
+      const workspaceAssets = yield* WorkspaceAssets.WorkspaceAssets;
       const analytics = yield* AnalyticsService.AnalyticsService;
       // Client-origin attribution (#7774): every thread/turn the connecting
       // client starts is credited to its surface + app version. Best-effort:
@@ -2753,6 +2755,10 @@ const layerWsRpc = (
             ) {
               return yield* issueAssetUrl({ resource: input.resource });
             }
+            if (input.resource._tag === "workspace-asset") {
+              yield* workspaceAssets.authorize(input.resource);
+              return yield* issueAssetUrl({ resource: input.resource });
+            }
             if (input.resource._tag === "draft-workspace-file") {
               // A project draft names its workspace directly; there is no
               // thread to resolve one from.
@@ -3239,6 +3245,7 @@ export const layer = Layer.unwrap(
               Layer.provide(AgentSessionScanner.layer),
               // Stateless over files in the state directory, like the MCP tool that reads it.
               Layer.provide(WorkspaceState.layer),
+              Layer.provide(WorkspaceAssets.layer.pipe(Layer.provide(ProjectionStore.layer))),
               Layer.provide(ProviderMaintenanceRunner.layer),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               // One server-lifetime service means clients share the same PR caches, and a WS

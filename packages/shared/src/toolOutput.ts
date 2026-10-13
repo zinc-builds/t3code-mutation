@@ -15,6 +15,7 @@ import {
   WORKSPACE_MUTATE_TOOL_NAME,
   WORKSPACE_OUTPUT_KEY,
   WORKSPACE_RESTORE_TOOL_NAME,
+  workspaceMutateInputAssetPaths,
   type WorkspaceReference,
 } from "./mutationWorkspace.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
@@ -210,6 +211,32 @@ export function workspaceFromToolItem(item: {
   if (resolveT3McpToolId(item.toolName) !== WORKSPACE_MUTATE_TOOL_NAME) return undefined;
   const output = compactDynamicToolOutput(item.output);
   return output?.isError ? undefined : output?.[WORKSPACE_OUTPUT_KEY];
+}
+
+/**
+ * The host paths a `workspace_mutate` item hands its workspace: the assets a
+ * completed call published, or the paths a call still running names in its
+ * input, which clients load before it finishes. Any other item hands none.
+ */
+export function workspaceToolItemAssetPaths(item: {
+  readonly type: string;
+  readonly status: string;
+  readonly toolName?: string | null | undefined;
+  readonly input?: unknown;
+  readonly output?: unknown;
+}): ReadonlyArray<string> {
+  if (item.type !== "dynamic_tool") return [];
+  if (item.status === "completed") {
+    return (
+      workspaceFromToolItem({ toolName: item.toolName, output: item.output })?.assets.map(
+        (asset) => asset.path,
+      ) ?? []
+    );
+  }
+  if (item.status !== "pending" && item.status !== "running") return [];
+  return resolveT3McpToolId(item.toolName) === WORKSPACE_MUTATE_TOOL_NAME
+    ? workspaceMutateInputAssetPaths(item.input)
+    : [];
 }
 
 /** Whether a completed tool call handed the thread back to chat with `workspace_restore`. */

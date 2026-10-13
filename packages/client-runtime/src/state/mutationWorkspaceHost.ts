@@ -22,7 +22,7 @@ import type { ThreadImage } from "./mutationWorkspaceActive.ts";
 
 export type WorkspaceAssetResource = Extract<
   AssetResource,
-  { readonly _tag: "attachment" | "media-file" }
+  { readonly _tag: "attachment" | "workspace-asset" }
 >;
 
 /**
@@ -53,8 +53,13 @@ export function workspaceAttachmentResource(image: ThreadImage): WorkspaceAssetR
   };
 }
 
+/**
+ * A file the agent handed the workspace. The server serves it whatever its
+ * type (a CSV, a JSON table), but only by a path a `workspace_mutate` call in
+ * the thread declared.
+ */
 export function workspaceFileResource(threadId: ThreadId, path: string): WorkspaceAssetResource {
-  return { _tag: "media-file", threadId, path };
+  return { _tag: "workspace-asset", threadId, path };
 }
 
 /** The thread's images, then the files the agent passed, in the order the page receives them. */

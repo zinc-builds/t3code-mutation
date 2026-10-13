@@ -25,14 +25,14 @@ interface Entry {
 const entries = new Map<string, Entry>();
 let scope: string | null = null;
 
-/** The cache key of a workspace asset; only attachments and media files are cached. */
+/** The cache key of a workspace asset; only attachments and workspace files are cached. */
 export function workspaceAssetKey(
   environmentId: EnvironmentId,
-  resource: Extract<AssetResource, { readonly _tag: "attachment" | "media-file" }>,
+  resource: Extract<AssetResource, { readonly _tag: "attachment" | "workspace-asset" }>,
 ): string {
   return resource._tag === "attachment"
     ? `${environmentId}\0attachment\0${resource.attachmentId}`
-    : `${environmentId}\0media-file\0${resource.threadId}\0${resource.path}`;
+    : `${environmentId}\0workspace-asset\0${resource.threadId}\0${resource.path}`;
 }
 
 /** Forgets everything when the shown thread changes; `key` identifies the thread. */

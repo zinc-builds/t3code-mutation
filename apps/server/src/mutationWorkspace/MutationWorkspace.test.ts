@@ -417,6 +417,61 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
     },
   );
 
+  it.effect("hands the page each asset typed as the asset route serves it to the client", () => {
+    const seen: Array<HtmlRender.ObservePageInput> = [];
+    const htmlRender = observing((input) =>
+      Effect.sync(() => {
+        seen.push(input);
+        return Option.some({ problems: [], omitted: 0, settled: true });
+      }),
+    );
+    return Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+      const table = path.join(directory, "sales.csv");
+      const page = path.join(directory, "page.html");
+      yield* fileSystem.writeFileString(table, "region,total\nwest,4\n");
+      yield* fileSystem.writeFileString(page, "<p>hi</p>");
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      yield* workspace.publish({
+        threadId: thread,
+        html: "<html><head></head><body></body></html>",
+        title: "Data",
+        assetPaths: [table, page],
+      });
+      const input = seen[0]!;
+      assert.strictEqual(input.resources.get("/t3-validation/asset/0")?.contentType, "text/csv");
+      assert.strictEqual(
+        input.resources.get("/t3-validation/asset/1")?.contentType,
+        "application/octet-stream",
+      );
+      assert.include(input.html, '"name":"sales.csv","mimeType":"text/csv"');
+    }).pipe(Effect.scoped, Effect.provide(layerKitWorkspace(htmlRender)));
+  });
+
+  // Windows ignores the mode, and root opens the file regardless.
+  it.effect.skipIf(process.getuid === undefined || process.getuid() === 0)(
+    "refuses an asset the asset route could not open for the client",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+        const locked = path.join(directory, "locked.csv");
+        yield* fileSystem.writeFileString(locked, "region,total\n");
+        // stat still finds a regular file; only opening it fails, as it would for the route.
+        yield* fileSystem.chmod(locked, 0o000);
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        const error = yield* workspace
+          .publish({ threadId: thread, html: "<p></p>", title: "Data", assetPaths: [locked] })
+          .pipe(Effect.flip);
+        assert.instanceOf(error, MutationWorkspace.WorkspaceAssetNotFoundError);
+        assert.deepEqual((error as MutationWorkspace.WorkspaceAssetNotFoundError).paths, [locked]);
+        yield* fileSystem.chmod(locked, 0o600);
+      }).pipe(Effect.scoped, Effect.provide(layerKitWorkspace())),
+  );
+
   it.effect("lists the first errors and counts the rest", () =>
     Effect.gen(function* () {
       const workspace = yield* MutationWorkspace.MutationWorkspace;

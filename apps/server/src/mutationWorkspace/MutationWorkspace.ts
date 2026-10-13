@@ -2,7 +2,6 @@
 import * as NodeCrypto from "node:crypto";
 
 import type { ThreadId } from "@t3tools/contracts";
-import { hostPreviewMimeTypeFromExtension } from "@t3tools/shared/filePreview";
 import {
   injectWorkspaceBridge,
   WORKSPACE_KIT_DOCS_TOOL_NAME,
@@ -30,6 +29,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
+import { readMediaFileHeader } from "../assets/MediaFile.ts";
+import { openWorkspaceAsset } from "../assets/WorkspaceAssetFile.ts";
 import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import { createAttachmentId } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -197,17 +198,26 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
   const config = yield* ServerConfig.ServerConfig;
   const htmlRender = yield* HtmlRender.HtmlRender;
   const ffmpegDryRun = yield* FfmpegDryRun.FfmpegDryRun;
+  const openAsset = (assetPath: string) =>
+    openWorkspaceAsset(assetPath).pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+    );
+
+  // Each asset is opened the way the asset route serves it to the workspace,
+  // so a file the client could not load is refused here.
   const checkAssets = Effect.fn("MutationWorkspace.checkAssets")(function* (
     assetPaths: ReadonlyArray<string>,
   ) {
     const missing: Array<string> = [];
     for (const assetPath of assetPaths) {
-      const info = path.isAbsolute(assetPath)
-        ? yield* fileSystem.stat(assetPath).pipe(Effect.option)
-        : undefined;
-      if (info === undefined || info._tag === "None" || info.value.type !== "File") {
-        missing.push(assetPath);
-      }
+      const readable = yield* openAsset(assetPath).pipe(
+        Effect.map((asset) => asset !== null),
+        Effect.scoped,
+        // A file that fails to open (no read permission) is one the route refuses too.
+        Effect.orElseSucceed(() => false),
+      );
+      if (!readable) missing.push(assetPath);
     }
     if (missing.length > 0) return yield* new WorkspaceAssetNotFoundError({ paths: missing });
   });
@@ -263,20 +273,32 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     const omitted: Array<string> = [];
     let total = 0;
     for (const assetPath of assetPaths) {
-      const size = Number((yield* fileSystem.stat(assetPath)).size);
-      if (size > MAX_VALIDATION_ASSET_BYTES || total + size > MAX_VALIDATION_ASSETS_BYTES) {
+      // Read and typed as the asset route serves it to the client's host.
+      const served = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const asset = yield* openAsset(assetPath);
+          if (asset === null) return yield* new WorkspaceAssetNotFoundError({ paths: [assetPath] });
+          const size = Number(asset.file.info.size);
+          if (size > MAX_VALIDATION_ASSET_BYTES || total + size > MAX_VALIDATION_ASSETS_BYTES) {
+            return null;
+          }
+          total += size;
+          const bytes = yield* readMediaFileHeader(asset.path, asset.file, size);
+          return { mimeType: asset.mimeType, bytes };
+        }),
+      );
+      if (served === null) {
         omitted.push(assetPath);
         continue;
       }
-      total += size;
       const url = validationAssetUrl(assets.length);
-      const mimeType =
-        hostPreviewMimeTypeFromExtension(path.extname(assetPath)) ?? "application/octet-stream";
-      resources.set(
+      resources.set(url, HeadlessChrome.servedResource(served.bytes, served.mimeType));
+      assets.push({
+        name: path.basename(assetPath),
+        mimeType: served.mimeType,
+        path: assetPath,
         url,
-        HeadlessChrome.servedResource(yield* fileSystem.readFile(assetPath), mimeType),
-      );
-      assets.push({ name: path.basename(assetPath), mimeType, path: assetPath, url });
+      });
     }
     return { assets, resources, omitted };
   });
