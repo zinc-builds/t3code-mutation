@@ -13,6 +13,13 @@
  * links.curvesDevelop(curves, develop) -> link   curve edits drive develop's curves (curves.lut() r/g/b with the
  *   master folded in; identity curves switch the pass off). The curve backdrop shows the developed histogram (not
  *   refreshed while the curve itself is being dragged). develop's Reset All resets the curves. sync(): push now.
+ * links.curvesPalette(curves, palette) -> link   the curves editor's rgb curve is the selected palette family's
+ *   lightness curve (x = step position, y = OKLCH L; same monotone spline). Selecting a family, set() and imports
+ *   reload it; curve edits call palette.editFamily (a palette 'change'). Create curves with channels: ['rgb'].
+ * links.chartRange(chart, spantree | null, { onBrush? }) -> link   a chart brush (x in ms) restricts the span tree (when
+ *   given) and calls onBrush({ from, to } | null) on each user brush, so a page can narrow its own views too. sync() pushes back.
+ * links.gridSpans(grid, spantree, { column = 'name', onSpan? }) -> link   grid rows and frames select each other by name;
+ *   column null leaves the grid alone. onSpan(selection | null) runs on every span selection (e.g. to filter a page by trace).
  * links.historyState(history, getValues, setValues, { sources?, idleMs = 300, thumb? }?) -> link
  *   Undo, redo, jump and presets call setValues(state). getValues() -> JSON state; setValues(state) must set() every
  *   primitive the state covers (set() is silent, so links never echo). On link an empty history adopts getValues();
@@ -180,6 +187,33 @@
     return makeLink(offs, push);
   }
 
+  function curvesPalette(curves, palette) {
+    need(curves, ["get", "set", "on", "setChannel"], "curves");
+    need(palette, ["get", "on", "selected", "editFamily"], "palette");
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const family = () => {
+      const { familyId } = palette.selected();
+      return palette.get().families.find((f) => f.id === familyId) ?? null;
+    };
+    // Palette -> curves: silent set, skipped when the curve already matches (so a curve edit never echoes back).
+    const load = () => {
+      const fam = family();
+      if (!fam) return;
+      curves.setChannel("rgb");
+      if (!same(curves.get().rgb, fam.curve)) curves.set({ rgb: fam.curve });
+    };
+    const offs = [
+      palette.on("select", load),
+      palette.on("report", load), // every recompute: user edits, set(), import, fix
+      curves.on("change", (value) => {
+        const fam = family();
+        if (fam && !same(value.rgb, fam.curve)) palette.editFamily(fam.id, { curve: value.rgb });
+      }),
+    ];
+    load();
+    return makeLink(offs, load);
+  }
+
   function historyState(history, getValues, setValues, options = {}) {
     need(history, ["get", "set", "push", "on"], "history");
     if (typeof getValues !== "function" || typeof setValues !== "function") {
@@ -238,5 +272,63 @@
     return makeLink(offs, apply, { commit });
   }
 
-  t3kit.links = { playerTimeline, developHistogram, curvesDevelop, historyState };
+  // A density chart's brush restricts a span tree to that window. The chart's x column is the tree's clock (ms).
+  function chartRange(chart, tree, { onBrush = null } = {}) {
+    need(chart, ["on", "set"], "chart");
+    if (tree !== null) need(tree, ["get", "range", "on"], "spantree");
+    const push = () => {
+      if (tree === null) return;
+      const r = tree.get().range;
+      chart.set({ brush: r ? { min: r.from, max: r.to } : null });
+    };
+    const offs = [
+      chart.on("filter", (f) => {
+        if (tree !== null) tree.range(f ? f.min : null, f ? f.max : null);
+        if (onBrush) onBrush(f ? { from: f.min, to: f.max } : null);
+      }),
+    ];
+    push();
+    return makeLink(offs, push);
+  }
+
+  // Table rows and span-tree frames follow each other by function name (options.column, default 'name').
+  // A grid selection picks each row's widest frame (tree.locate); a frame selection picks the row's grid index.
+  function gridSpans(grid, tree, { column = "name", onSpan = null } = {}) {
+    need(tree, ["on", "locate", "set", "selection"], "spantree");
+    const offs = [];
+    let fromGrid = () => {};
+    if (column !== null) {
+      need(grid, ["on", "row", "view", "select", "selection"], "datagrid");
+      fromGrid = () => {
+        const rows = grid.selection();
+        tree.set({ selected: rows.length ? tree.locate(grid.row(rows[0])[column]) : null });
+      };
+      offs.push(
+        grid.on("select", (rows) => {
+          tree.set({ selected: rows.length ? tree.locate(grid.row(rows[0])[column]) : null });
+        }),
+        tree.on("select", (sel) => {
+          if (!sel) {
+            grid.select([]);
+            return;
+          }
+          const idx = grid.view().find((i) => grid.row(i)[column] === sel.name);
+          grid.select(idx === undefined ? [] : [idx]);
+        }),
+      );
+    }
+    if (onSpan !== null) offs.push(tree.on("select", (sel) => onSpan(sel)));
+    fromGrid();
+    return makeLink(offs, fromGrid);
+  }
+
+  t3kit.links = {
+    playerTimeline,
+    developHistogram,
+    curvesDevelop,
+    curvesPalette,
+    historyState,
+    chartRange,
+    gridSpans,
+  };
 })();

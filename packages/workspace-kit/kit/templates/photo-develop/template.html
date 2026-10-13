@@ -1441,12 +1441,10 @@
               run: () => applyLook(name),
             })),
             ...(history
-              ? history
-                  .get()
-                  .presets.map((p) => ({
-                    label: `Preset: ${p.name}`,
-                    run: () => history.applyPreset(p.name),
-                  }))
+              ? history.get().presets.map((p) => ({
+                  label: `Preset: ${p.name}`,
+                  run: () => history.applyPreset(p.name),
+                }))
               : []),
             { label: "Before / After", hint: "\\", run: () => setMode("split") },
             { label: "Side By Side", hint: "Y", run: () => setMode("side") },

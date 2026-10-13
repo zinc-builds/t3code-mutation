@@ -24,7 +24,7 @@ A template is a complete, pro-grade workspace (photo develop, video edit…) com
     "examples": [{ "title": "Moody edit", "look": "moody" }]
   }
   ```
-  Keep `options` small (≤12 keys), flat where possible, every key with a `default` and a one-line `description`. Values are JSON.
+  Keep `options` small (≤12 keys), flat where possible, every key with a `default` and a one-line `description`. Values are JSON. T3 checks `type` (`string`, `number`, `integer`, `boolean`, `array`, `object`, `null`, or a list such as `["string", "null"]` for a nullable key; a `default` must match it), `enum`, `minimum`/`maximum`, `items`, `properties` and `required`.
 - `"chrome": true | false` in `template.json`: whether the page can project its toolbar (and sidebar) into T3's native chrome. For `true`, T3 opens a chrome session for the workspace (any valid seed manifest; the page replaces its regions on load); for `false`, or when T3 opens none, the page keeps its own toolbar.
 
 ## Runtime
@@ -60,6 +60,7 @@ node tools/serve.mjs                             # http://127.0.0.1:4173/ for th
 
 - `assemble.mjs`: kit list `""` (read `template.json`), comma/space separated, or a JSON array. Assets are looked up as given (absolute or relative to the current directory), then in `kit/media/`; a missing one is an error. `--script` reads `customScript` from a plain JS file. The stub logs every download/attach as `{ name, type, size, width?, height?, text? }`.
 - `assemble.mjs --chrome` makes the stub act as T3 with native chrome: `setChrome` resolves and logs, `window.__t3stub.chrome` holds the last patch, `window.__t3stub.command(id, value?)` sends a command. Without it `setChrome` rejects, as T3 does for a workspace without chrome.
+- `verify.mjs` assembles each case with the pipeline's media (`sonoma.jpg`, `clip.mp4`, `trips.csv`), or with `"verifyAssets": "a.png,b.html"` from `template.json` when the template needs other media (design-review: `landing.png,landing.html`).
 - `verify.mjs` cases: defaults and examples load clean; `bolt-on` runs the example and checks `t3template.export()` against the logged downloads (and `ffmpeg` for EDL); `undo` drags a bolt-on slider (one step, undo/redo, scripted `setValues`) and, for EDL, checks the `addAudioFilter` chain is live and in the export command; `chrome` (for `"chrome": true`) checks the manifest with T3's own validator (`--t3 <repo>`, default `../../wt-r6`), that the page hides its toolbar, and that an `export` command exports.
 - `snap.mjs` steps run in order after the wait: `--wait-for`, `--scroll`, `--click` (CSS selector or `text=Label`), `--wait <ms>`, `--eval <js>` (value printed under `steps`). It exits 1 on any console error or failed step and still writes the screenshot.
 - Every case must be free of console errors (exit 0) and the bolt-on export must log a download. Read the screenshots.

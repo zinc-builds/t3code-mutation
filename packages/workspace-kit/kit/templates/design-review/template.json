@@ -1,0 +1,153 @@
+{
+  "id": "design-review",
+  "title": "Design Review",
+  "summary": "Review a web page by marking it up instead of describing screenshots in chat: pick elements (selector, box, computed styles), drop pins, draw boxes and arrows, keep a numbered change list with notes and priority, propose exact CSS (padding, margin, font size, color, background, radius) as a diff, switch Mobile/Tablet/Desktop, then Send to Agent hands over Markdown plus a JSON change list and one crop per change. Live mode reviews a running site through t3.workspace.preview (pass preview: {url} to workspace_mutate and url here); snapshot mode reviews an attached HTML snapshot (real element picking) and/or a full-page screenshot. Pick it for any UI, landing page or visual QA feedback loop on web work.",
+  "kit": ["annotator", "history", "links", "template-runtime"],
+  "chrome": false,
+  "verifyAssets": "landing.png,landing.html",
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Design Review",
+      "description": "Header title; also names the exported files."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "live", "snapshot"],
+      "default": "auto",
+      "description": "auto = live when url is set and this T3 client has t3.workspace.preview (falls back to the attached snapshot with a visible notice), else snapshot. live = live only (fails without it). snapshot = attached assets only."
+    },
+    "url": {
+      "type": "string",
+      "default": "",
+      "description": "Live mode: the http(s) page to open, on the origin passed as preview: {url} to workspace_mutate (or a preview tab's origin). Empty with mode 'live' opens the declared preview."
+    },
+    "snapshot": {
+      "type": "string",
+      "default": "",
+      "description": "Name of the attached HTML snapshot (self-contained: inline <style>; scripts do not run). Empty = the first .html asset; 'none' = review the screenshot alone. Width-only @media rules reflow with the viewport presets."
+    },
+    "screenshot": {
+      "type": "string",
+      "default": "",
+      "description": "Name of the attached screenshot (PNG/JPEG). Empty = the first image; 'none' = no screenshot. With a snapshot it supplies the crops and must be a full-page capture at the starting viewport width (any pixel ratio); alone it is the review target."
+    },
+    "viewport": {
+      "type": ["string", "object"],
+      "default": "desktop",
+      "description": "Starting viewport: mobile (390 x 844), tablet (834 x 1112), desktop (1440 x 900) or { width, height } in CSS px."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": [],
+      "description": "Changes to start with (first load only): [{ note, priority?: 'high'|'medium'|'low', and selector | x, y | rect: { x, y, width, height } }]. Coordinates are document CSS px (screenshot px for a screenshot alone)."
+    },
+    "tool": {
+      "type": "string",
+      "enum": ["auto", "select", "element", "pin", "rect", "ellipse", "arrow", "freehand"],
+      "default": "auto",
+      "description": "Starting tool; auto = element for pages and live sites, pin for a screenshot."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on review fields, checks, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved review wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    {
+      "title": "Landing Page Pass",
+      "viewport": "desktop",
+      "notes": [
+        {
+          "selector": "section.hero > div > h1",
+          "note": "Headline wraps to 3 lines; keep it to 2 at desktop.",
+          "priority": "high"
+        },
+        {
+          "selector": "p.fineprint",
+          "note": "Fine print is too faint and too small to read.",
+          "priority": "medium"
+        },
+        {
+          "rect": {
+            "x": 64,
+            "y": 712,
+            "width": 1312,
+            "height": 74
+          },
+          "note": "Logo strip needs real logos, not text.",
+          "priority": "low"
+        }
+      ]
+    },
+    {
+      "title": "Mobile Check",
+      "viewport": "mobile",
+      "tool": "pin"
+    },
+    {
+      "title": "Screenshot Only",
+      "snapshot": "none",
+      "mode": "snapshot",
+      "tool": "rect",
+      "notes": [
+        {
+          "x": 1328,
+          "y": 41,
+          "note": "Start free should be the teal brand color.",
+          "priority": "medium"
+        }
+      ]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code) after the page (live capture, HTML snapshot or screenshot) has loaded, saved or initial changes are in place and the panels exist. This is a data template (pipeline 'data'): addImageStage, addShaderStage, EDL hooks and addAudioFilter throw; bolt on review fields (controls), checks that add changes, panels, toolbar buttons and presets. Bolt-on control values travel with the hand-off: they are in the sent and exported JSON as controls and listed under 'Review fields' in the Markdown. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows? (text; rows > 1 = multi-line), panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. Every control edit is one undo step; values persist and ship in the hand-off JSON (controls).",
+      "addChange({ selector | node | x, y | rect: { x, y, width, height }, note = '', priority?: 'high'|'medium'|'low' (default medium), tweaks?: { padding | margin | font-size | color | background-color | border-radius: CSS value } }) -> Promise<id>: one undo step named 'Add N'. selector works on the HTML snapshot and the live page; node is an element of page(); x, y makes a pin and rect a box (document CSS px; screenshot px in screenshot-only reviews). Throws when the selector matches nothing.",
+      "page() -> ShadowRoot | null: the rendered HTML snapshot (query it, getComputedStyle its nodes) in snapshot mode; null for a live site or a screenshot alone. Read it only: tweak previews are applied to it inline (!important).   selectorOf(node) -> the selector addChange and the hand-off use for a node of page().",
+      "getValues() -> { title, mode: 'live'|'page'|'image', source: { kind, url? | snapshot, screenshot }, viewport: { name, width, height }, hideResolved, changes: [{ number, id, kind, status, priority, note, viewport, url?, selector?, found?, element?: { tag, classes, text, styles }, bounds: { x, y, width, height }, points?, proposedCss?: [{ property, from, to }] }], controls }.",
+      "setValues({ viewport?: 'mobile'|'tablet'|'desktop'|{ width, height }, hideResolved?, changes?: [{ id, note?, priority?, status?: 'open'|'resolved', tweaks?: { property: value | '' } }] }, label?) -> Promise<values>: strict (unknown keys, ids or tweak properties throw); one undo step. viewport re-renders the snapshot or resizes the live page; a screenshot alone has one viewport and throws.",
+      "send() -> Promise<{ text, files } | null>: the Send to Agent button (open changes only; null when none are open). export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: the Export button: <title>-review.json, <title>-review.md and change-NN.png crops (crops need a live capture, a screenshot alone, or a snapshot screenshot at its own viewport), attached and downloaded; throws when there are no changes.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element; 'top' = right below Changes (bolt-on panels in creation order), 'bottom' = after Keys.   addToolbarButton(label, onClick(t3template), { shortcut?, title? }) -> button in the header before Export.   addPreset(name, { controls }) / applyPreset(name).   on('change', cb(values)) -> off.   refresh() re-renders the list and inspector.",
+      "instances: { annotator (t3kit.annotator: get, select, setTool, exportChangeList, cropImage; change ids are its annotation ids), history (t3kit.history) }."
+    ],
+    "reservedShortcuts": [
+      "v",
+      "e",
+      "p",
+      "r",
+      "o",
+      "a",
+      "f",
+      "m",
+      "t",
+      "d",
+      "l",
+      "h",
+      "x",
+      "1",
+      "2",
+      "3",
+      "delete",
+      "backspace",
+      "escape",
+      "enter",
+      "mod+z",
+      "mod+shift+z",
+      "mod+y",
+      "mod+enter",
+      "mod+e"
+    ],
+    "example": "t3template.addControl({ id: 'ticket', label: 'Ticket', type: 'text', default: 'WEB-142', placeholder: 'e.g. WEB-142', panel: 'Hand-off' });\nt3template.addControl({ id: 'minText', label: 'Min Text px', type: 'slider', min: 10, max: 18, step: 1, default: 14, panel: 'Type Check' });\n// Adds a low-priority change, with a font-size tweak, for each text smaller than Min Text px (up to 6 per run).\nasync function flagSmallText(t) {\n  const root = t.page();\n  if (!root) throw new Error('Flag Small Text needs an HTML snapshot');\n  const min = t.getValues().controls.minText;\n  const taken = new Set(t.getValues().changes.map((c) => c.selector).filter(Boolean));\n  let added = 0;\n  for (const node of root.querySelectorAll('p, li, a, span, small, cite')) {\n    const px = parseFloat(getComputedStyle(node).fontSize);\n    const selector = t.selectorOf(node);\n    if (px >= min || !node.textContent.trim() || taken.has(selector)) continue;\n    taken.add(selector);\n    await t.addChange({ selector, note: `Text is ${px}px; raise it to at least ${min}px.`, priority: 'low', tweaks: { 'font-size': `${min}px` } });\n    if (++added >= 6) break;\n  }\n  return added;\n}\nt3template.addToolbarButton('Flag Small Text', flagSmallText, { shortcut: 'shift+s', title: 'Add a change for each text smaller than Min Text px' });\n// A fresh snapshot review starts with the type check already run.\nif (t3template.page() && t3template.getValues().changes.length === 0) return flagSmallText(t3template);"
+  }
+}

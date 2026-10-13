@@ -1754,14 +1754,12 @@
             .sort((a, b) => a.start - b.start);
           edl.duration = r3(renderClips.reduce((t, c) => Math.max(t, c.start + played(c)), 0));
           const fx = rt.exportFilters(edl, { phase, info });
-          const overlays = rt
-            .renderOverlays({ phase })
-            .map((o) => ({
-              ...o,
-              file: `${name}-overlay-${o.id}.png`,
-              start: r3(o.start),
-              end: r3(o.end),
-            }));
+          const overlays = rt.renderOverlays({ phase }).map((o) => ({
+            ...o,
+            file: `${name}-overlay-${o.id}.png`,
+            start: r3(o.start),
+            end: r3(o.end),
+          }));
           const command = ffmpegCommand(
             renderClips,
             { w: edl.width, h: edl.height },

@@ -1,0 +1,1810 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Merge</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+      .app {
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-width: 0;
+      }
+
+      /* Top bar */
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        height: 44px;
+        padding: 0 10px 0 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+        color: var(--card-foreground);
+      }
+      .title {
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .fname {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 240px;
+        color: var(--muted-foreground);
+      }
+      .sel {
+        height: 28px;
+        max-width: 240px;
+        padding: 0 6px;
+        background: var(--background);
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 2px);
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .kofn {
+        min-width: 112px;
+        text-align: center;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 11px;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .pill.ok {
+        color: var(--success);
+        border-color: var(--success);
+      }
+      .pill.warn {
+        color: var(--warning);
+        border-color: var(--warning);
+      }
+      .spacer {
+        flex: 1 1 0;
+        min-width: 8px;
+      }
+      .tools {
+        display: flex;
+        gap: 6px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 2px);
+        background: var(--background);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
+        color: var(--foreground);
+      }
+      .btn[aria-pressed="true"] {
+        border-color: var(--ring);
+        color: var(--foreground);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .icon {
+        width: 28px;
+        padding: 0;
+        justify-content: center;
+        font-size: 15px;
+        line-height: 1;
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn-primary:hover:not(:disabled) {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        opacity: 0.9;
+      }
+      .btn-warn {
+        background: var(--warning);
+        color: var(--background);
+        border-color: var(--warning);
+      }
+      .btn-warn:hover:not(:disabled) {
+        background: var(--warning);
+        color: var(--background);
+        opacity: 0.9;
+      }
+      .btn-warn kbd {
+        color: var(--background);
+        border-color: var(--background);
+      }
+      button:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: -2px;
+      }
+
+      /* Work area: files | merge + result | inspector */
+      .work {
+        display: grid;
+        grid-template-columns: 200px minmax(0, 1fr) 320px;
+        min-height: 0;
+        min-width: 0;
+      }
+      .app:not(.multi) .work {
+        grid-template-columns: minmax(0, 1fr) 320px;
+      }
+      .app:not(.multi) .files {
+        display: none;
+      }
+      .files {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-height: 0;
+        overflow: auto;
+        padding: 6px;
+        border-right: 1px solid var(--border);
+      }
+      .file-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: calc(var(--radius) - 4px);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+      .file-btn:hover {
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
+        color: var(--foreground);
+      }
+      .file-btn[aria-current="true"] {
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
+        color: var(--foreground);
+        box-shadow: inset 2px 0 0 var(--ring);
+      }
+      .file-btn .nm {
+        flex: 1 1 0;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .badge {
+        flex: none;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        padding: 0 5px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted-foreground);
+      }
+      .badge.open {
+        color: var(--warning);
+        border-color: var(--warning);
+      }
+      .badge.done {
+        color: var(--success);
+        border-color: var(--success);
+      }
+
+      /* Centre: textdiff merge view over the editable result */
+      .main {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) minmax(120px, 36%);
+        min-width: 0;
+        min-height: 0;
+      }
+      .diff {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .diff .t3k-textdiff-root {
+        border: 0;
+        border-radius: 0;
+      }
+      .empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        color: var(--muted-foreground);
+        line-height: 1.6;
+      }
+      .result {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        border-top: 1px solid var(--border);
+      }
+      .result-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 26px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      #result {
+        flex: 1 1 0;
+        min-height: 0;
+        margin: 0;
+        padding: 8px 12px;
+        border: 0;
+        outline: none;
+        resize: none;
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.5 var(--font-mono);
+        white-space: pre;
+        overflow: auto;
+        tab-size: 2;
+      }
+      .app.wrap #result {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      /* Inspector */
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        border-left: 1px solid var(--border);
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        cursor: pointer;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 12px;
+        list-style: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel-body {
+        padding: 0 12px 12px;
+      }
+      .cinfo {
+        margin: 0 0 8px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .choices {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .chip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        height: 30px;
+        padding: 0 8px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 2px);
+        background: var(--background);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .chip:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
+        color: var(--foreground);
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .chip[aria-pressed="true"] kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+      .chip:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .chip:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: -2px;
+      }
+      .fld {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .fld > span {
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .fld textarea {
+        min-height: 52px;
+        resize: vertical;
+        padding: 6px 8px;
+        background: var(--background);
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 2px);
+      }
+      .clist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .crow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 5px 6px;
+        border: 0;
+        border-radius: calc(var(--radius) - 4px);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .crow:hover {
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
+        color: var(--foreground);
+      }
+      .crow[aria-current="true"] {
+        background: color-mix(in srgb, var(--foreground) 7%, transparent);
+        color: var(--foreground);
+        box-shadow: inset 2px 0 0 var(--ring);
+      }
+      .crow .lines {
+        color: var(--muted-foreground);
+      }
+      .crow .what {
+        margin-left: auto;
+        color: var(--muted-foreground);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        flex: none;
+        border-radius: 999px;
+        border: 1px solid var(--warning);
+      }
+      .dot.done {
+        background: var(--success);
+        border-color: var(--success);
+      }
+      .dot.edit {
+        background: var(--info);
+        border-color: var(--info);
+      }
+      .history-body {
+        padding: 0 4px 8px;
+      }
+      .composer {
+        flex: 1 0 auto;
+        min-height: 0;
+        padding: 0 12px 12px;
+      }
+
+      /* Status line */
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        height: 26px;
+        padding: 0 12px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      #status-main {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .hints {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .sel {
+        display: none;
+      }
+      @media (max-width: 860px) {
+        .app .work,
+        .app:not(.multi) .work {
+          grid-template-columns: minmax(0, 1fr) 260px;
+        }
+        .app .files {
+          display: none;
+        }
+        .sel {
+          display: block;
+        }
+        .fname,
+        .hints {
+          display: none;
+        }
+      }
+      @media (max-width: 600px) {
+        .app .work,
+        .app:not(.multi) .work {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
+        }
+        .inspector {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .bar {
+          flex-wrap: wrap;
+          height: auto;
+          gap: 4px;
+          padding: 6px;
+        }
+        .bar .spacer {
+          display: none;
+        }
+        .title,
+        .bar kbd,
+        #wrap,
+        .kofn {
+          display: none;
+        }
+        .sel {
+          max-width: 110px;
+        }
+        .btn {
+          padding: 0 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app" data-layout="3-pane">
+      <header class="bar">
+        <span class="title" id="title">Merge</span>
+        <span class="fname" id="fname"></span>
+        <select class="sel" id="file-select" aria-label="Conflicted file" hidden></select>
+        <div class="nav" role="group" aria-label="Conflict navigation">
+          <button
+            class="btn icon"
+            id="prev"
+            type="button"
+            title="Previous conflict (P)"
+            aria-label="Previous conflict"
+          >
+            ‹
+          </button>
+          <span class="kofn" id="kofn">No files</span>
+          <button
+            class="btn icon"
+            id="next"
+            type="button"
+            title="Next conflict (N)"
+            aria-label="Next conflict"
+          >
+            ›
+          </button>
+        </div>
+        <span class="pill" id="unres">0 unresolved</span>
+        <span class="pill warn" id="flag" hidden></span>
+        <span class="spacer"></span>
+        <div class="tools" id="extra-tools"></div>
+        <button
+          class="btn"
+          id="wrap"
+          type="button"
+          aria-pressed="false"
+          title="Wrap long lines in the merge view and the result"
+        >
+          Wrap
+        </button>
+        <button
+          class="btn"
+          id="export"
+          type="button"
+          title="Download the resolved files and resolution.json (Shift+E)"
+        >
+          Export <kbd>⇧E</kbd>
+        </button>
+        <button
+          class="btn btn-primary"
+          id="send"
+          type="button"
+          title="Attach the resolved files and resolution.json to the chat (Cmd+Enter)"
+        >
+          <span id="send-label">Send to Agent</span> <kbd>⌘↵</kbd>
+        </button>
+      </header>
+      <div class="work" id="work">
+        <nav class="files" id="files" aria-label="Conflicted files"></nav>
+        <section class="main" aria-label="Merge view and result">
+          <div class="diff" id="diff"></div>
+          <div class="empty" id="empty" hidden>
+            Attach one or more text files with conflict markers (&lt;&lt;&lt;&lt;&lt;&lt;&lt;), or
+            three assets named *.base, *.ours and *.theirs.
+          </div>
+          <div class="result">
+            <div class="result-head"><span>Result</span><span id="rstat"></span></div>
+            <textarea
+              id="result"
+              spellcheck="false"
+              aria-label="Merged result"
+              placeholder="The merged result appears here once files are attached."
+              readonly
+            ></textarea>
+          </div>
+        </section>
+        <aside class="inspector" id="inspector" aria-label="Inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="choice" open>
+              <summary>Conflict</summary>
+              <div class="panel-body">
+                <p class="cinfo" id="cinfo"></p>
+                <div class="choices" role="group" aria-label="Choices for the selected conflict">
+                  <button class="chip" type="button" data-choice="ours">Ours <kbd>1</kbd></button>
+                  <button class="chip" type="button" data-choice="theirs">
+                    Theirs <kbd>2</kbd>
+                  </button>
+                  <button class="chip" type="button" data-choice="both">Both <kbd>3</kbd></button>
+                  <button class="chip" type="button" data-choice="both-theirs">
+                    Theirs first <kbd>⇧3</kbd>
+                  </button>
+                  <button class="chip" type="button" data-choice="base">Base <kbd>4</kbd></button>
+                  <button class="chip" type="button" id="edit-btn" data-action="edit">
+                    Edit by hand <kbd>E</kbd>
+                  </button>
+                </div>
+                <label class="fld">
+                  <span>Note (saved in resolution.json)</span>
+                  <textarea id="note" rows="3" placeholder="Why this side"></textarea>
+                </label>
+              </div>
+            </details>
+            <details class="panel" data-panel="list" open>
+              <summary>Conflicts</summary>
+              <div class="panel-body">
+                <ol class="clist" id="clist" aria-label="Conflicts in this file"></ol>
+              </div>
+            </details>
+            <details class="panel" data-panel="history" open>
+              <summary>History</summary>
+              <div class="history-body"><div id="history"></div></div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+      <footer class="status">
+        <span id="status-main" role="status">Loading</span>
+        <span class="hints">
+          <span><kbd>N</kbd><kbd>P</kbd> conflict</span>
+          <span><kbd>1</kbd> ours</span>
+          <span><kbd>2</kbd> theirs</span>
+          <span><kbd>3</kbd> both</span>
+          <span><kbd>⇧3</kbd> theirs first</span>
+          <span><kbd>4</kbd> base</span>
+          <span><kbd>E</kbd> edit</span>
+        </span>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+        const STATE_KEY = "merge-resolve";
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const CHOICES = ["ours", "theirs", "both", "both-theirs", "base", "edited"];
+        const DEFAULT_CHOICES = ["ours", "theirs", "both", "both-theirs", "base"];
+        const CHOICE_LABEL = {
+          ours: "Ours",
+          theirs: "Theirs",
+          both: "Both",
+          "both-theirs": "Theirs first",
+          base: "Base",
+          edited: "Edited",
+        };
+        const OPEN_RE = /^<{7}(?:\s|$)/;
+        const BASE_RE = /^\|{7}(?:\s|$)/;
+        const SEP_RE = /^={7}$/;
+        const CLOSE_RE = /^>{7}(?:\s|$)/;
+        const isMarker = (line) =>
+          OPEN_RE.test(line) || BASE_RE.test(line) || SEP_RE.test(line) || CLOSE_RE.test(line);
+        const labelOf = (line) => line.replace(/^\S+\s*/, "").trim();
+        const EMPTY = {
+          text: "",
+          spans: [],
+          open: 0,
+          markerLines: [],
+          unresolved: 0,
+          lines: 0,
+          conflictTotal: 0,
+        };
+
+        // ---- Options ------------------------------------------------------------------
+        // layout: '3-pane' = ours | base | theirs columns, '2-pane' = ours | theirs (base still takes 4).
+        const SPEC = {
+          title: { default: "Merge", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          layout: { default: "3-pane", ok: (v) => v === "3-pane" || v === "2-pane" },
+          wrap: { default: false, ok: (v) => typeof v === "boolean" },
+          ignoreWhitespace: { default: false, ok: (v) => typeof v === "boolean" },
+          defaultChoice: { default: null, ok: (v) => v === null || DEFAULT_CHOICES.includes(v) },
+          file: { default: null, ok: (v) => v === null || typeof v === "string" },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("merge-resolve: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = JSON.parse(JSON.stringify(spec.default));
+            else if (spec.ok(v)) out[key] = JSON.parse(JSON.stringify(v));
+            else {
+              console.warn(`merge-resolve: option "${key}" is invalid; using the default.`);
+              out[key] = JSON.parse(JSON.stringify(spec.default));
+            }
+          }
+          return out;
+        }
+        const OPTS = readOptions();
+
+        // ---- Text helpers --------------------------------------------------------------
+        // A line list from text; a final newline does not add a line.
+        function splitLines(text) {
+          const parts = text.split("\n");
+          if (parts[parts.length - 1] === "") parts.pop();
+          return parts;
+        }
+        // The text of lines, each terminated by a newline (the textdiff convention).
+        const linesText = (lines) => lines.map((l) => l + "\n").join("");
+        // Edited text always ends with a newline so the next change keeps its own line.
+        const normText = (t) => (t === "" || t.endsWith("\n") ? t : t + "\n");
+        const markerLine = (prefix, label) => (label ? `${prefix} ${label}` : prefix);
+
+        // ---- Model -----------------------------------------------------------------------
+        // A file is a list of segments: auto (text git merged cleanly) and conflict (ours, base, theirs).
+        // Ids match textdiff's (a1.. and c1..), so the merge view and this model address the same chunks.
+        // decisions[id] = { choice?, text? (edited only), note? }; an entry without choice and note is absent.
+        let files = [];
+        let cur = -1;
+        let sel = null;
+        let booted = false;
+        let loading = false;
+        let loadSeq = 0;
+        let lastText = "";
+        let lastSpans = [];
+        let td = null;
+        let history = null;
+        let link = null;
+        let persistTimer = 0;
+        let commitTimer = 0;
+        let commitLabel = "";
+        let exporting = false;
+        let armedUntil = 0;
+        const rt = t3kit.templateRuntime.create({
+          id: "merge-resolve",
+          pipeline: "data",
+          // 'top': before History (after the Change and Conflicts readouts). 'bottom': after History.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            const panels = $("panels");
+            if (position === "top")
+              panels.insertBefore(section, panels.querySelector('[data-panel="history"]'));
+            else panels.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => valuesOut(),
+          setValues(partial, label) {
+            const plan = planValues(partial);
+            setModelState(plan.state);
+            armedUntil = 0;
+            if (plan.fileIndex !== null && plan.fileIndex !== cur)
+              showFile(plan.fileIndex).catch(showError);
+            else if (!loading) syncView();
+            renderAll();
+            commitNow(label || "Set values");
+            return valuesOut();
+          },
+          addPreset: (name, values) =>
+            history.savePreset(name, planValues({ decisions: values.decisions ?? {} }).state),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => exportFiles(),
+          reservedKeys: [
+            "n",
+            "p",
+            "1",
+            "2",
+            "3",
+            "4",
+            "e",
+            "shift+3",
+            "shift+e",
+            "mod+enter",
+            "mod+z",
+            "mod+shift+z",
+          ],
+          onBoltOnChange() {
+            persist();
+          },
+        });
+
+        // Parses a conflicted text into segments. Throws on an unterminated conflict (the file is not usable).
+        function parseSegments(text) {
+          const lines = splitLines(text);
+          const segs = [];
+          let auto = [];
+          let autoNo = 0;
+          let conflictNo = 0;
+          const flushAuto = () => {
+            if (!auto.length) return;
+            segs.push({ kind: "auto", id: "a" + ++autoNo, text: linesText(auto) });
+            auto = [];
+          };
+          for (let i = 0; i < lines.length; i++) {
+            if (!OPEN_RE.test(lines[i])) {
+              auto.push(lines[i]);
+              continue;
+            }
+            flushAuto();
+            const seg = {
+              kind: "conflict",
+              id: "c" + ++conflictNo,
+              startLine: i + 1,
+              endLine: 0,
+              oursLabel: labelOf(lines[i]),
+              baseLabel: "",
+              theirsLabel: "",
+              hasBase: false,
+              ours: [],
+              base: [],
+              theirs: [],
+            };
+            let section = "ours";
+            let closed = false;
+            for (i = i + 1; i < lines.length; i++) {
+              const l = lines[i];
+              if (section === "ours" && BASE_RE.test(l)) {
+                section = "base";
+                seg.hasBase = true;
+                seg.baseLabel = labelOf(l);
+              } else if (section !== "theirs" && SEP_RE.test(l)) {
+                section = "theirs";
+              } else if (section === "theirs" && CLOSE_RE.test(l)) {
+                closed = true;
+                seg.theirsLabel = labelOf(l);
+                seg.endLine = i + 1;
+                break;
+              } else seg[section].push(l);
+            }
+            if (!closed)
+              throw new Error(
+                `no >>>>>>> marker closes the conflict that starts at line ${seg.startLine}`,
+              );
+            segs.push(seg);
+          }
+          flushAuto();
+          return segs;
+        }
+
+        function makeFile(name, text) {
+          return { name, text, segs: parseSegments(text), decisions: {} };
+        }
+
+        // Three assets (*.base, *.ours, *.theirs) become one diff3-style conflicted text, then parse like any file.
+        function conflictedFromSides(base, ours, theirs) {
+          let out = "";
+          for (const s of t3kit.textdiff.diff3(base, ours, theirs, {
+            ignoreWhitespace: OPTS.ignoreWhitespace,
+          })) {
+            if (s.kind === "auto") out += linesText(s.lines);
+            else
+              out +=
+                "<<<<<<< ours\n" +
+                linesText(s.ours) +
+                "||||||| base\n" +
+                linesText(s.base) +
+                "=======\n" +
+                linesText(s.theirs) +
+                ">>>>>>> theirs\n";
+          }
+          return out;
+        }
+
+        async function readText(file) {
+          const text = await file.text();
+          return text.includes("\u0000") ? null : text;
+        }
+        const hasMarkers = (text) => splitLines(text).some((l) => OPEN_RE.test(l));
+
+        // Reads the workspace assets. Files are detected by content (markers), never by MIME type.
+        async function loadFiles(assets) {
+          const order = [];
+          const groups = new Map();
+          const ignored = [];
+          for (const a of assets) {
+            const side = /\.(base|ours|theirs)$/.exec(a.name);
+            const text = await readText(a.file);
+            if (side) {
+              const stem = a.name.slice(0, -side[0].length);
+              if (!groups.has(stem)) {
+                groups.set(stem, {});
+                order.push({ stem });
+              }
+              groups.get(stem)[side[1]] = text;
+            } else if (text !== null && hasMarkers(text)) order.push({ name: a.name, text });
+            else ignored.push(a.name);
+          }
+          const out = [];
+          for (const item of order) {
+            if (item.stem === undefined) {
+              out.push(makeFile(item.name, item.text));
+              continue;
+            }
+            const g = groups.get(item.stem);
+            if (
+              typeof g.base !== "string" ||
+              typeof g.ours !== "string" ||
+              typeof g.theirs !== "string"
+            ) {
+              ignored.push(`${item.stem} (needs .base, .ours and .theirs as text)`);
+              continue;
+            }
+            out.push(makeFile(item.stem, conflictedFromSides(g.base, g.ours, g.theirs)));
+          }
+          return { files: out, ignored };
+        }
+
+        const current = () => (cur >= 0 ? files[cur] : null);
+        const selectedSeg = () => {
+          const f = current();
+          if (!f || sel === null) return null;
+          return f.segs.find((s) => s.id === sel) ?? null;
+        };
+        const hasChoice = (f, id) => Boolean(f.decisions[id] && f.decisions[id].choice);
+        const isOpen = (f, seg) => seg.kind === "conflict" && !hasChoice(f, seg.id);
+
+        function choiceText(seg, choice, text) {
+          switch (choice) {
+            case "ours":
+              return linesText(seg.ours);
+            case "theirs":
+              return linesText(seg.theirs);
+            case "both":
+              return linesText(seg.ours) + linesText(seg.theirs);
+            case "both-theirs":
+              return linesText(seg.theirs) + linesText(seg.ours);
+            case "base":
+              return linesText(seg.base);
+            case "edited":
+              return text;
+            default:
+              throw new Error(`unknown choice "${choice}"`);
+          }
+        }
+
+        function markerText(seg) {
+          return (
+            markerLine("<<<<<<<", seg.oursLabel) +
+            "\n" +
+            linesText(seg.ours) +
+            (seg.hasBase ? markerLine("|||||||", seg.baseLabel) + "\n" + linesText(seg.base) : "") +
+            "=======\n" +
+            linesText(seg.theirs) +
+            markerLine(">>>>>>>", seg.theirsLabel) +
+            "\n"
+          );
+        }
+
+        function segmentText(f, seg) {
+          const d = f.decisions[seg.id];
+          if (seg.kind === "auto") return d && d.choice === "edited" ? d.text : seg.text;
+          if (!d || !d.choice) return markerText(seg);
+          return choiceText(seg, d.choice, d.text);
+        }
+
+        // The result text, the span of each segment inside it, and what is still open or marked.
+        function compose(f) {
+          let text = "";
+          const spans = [];
+          const markerLines = [];
+          let open = 0;
+          let line = 1;
+          for (const seg of f.segs) {
+            const piece = segmentText(f, seg);
+            const isNotDone = isOpen(f, seg);
+            if (isNotDone) open += 1;
+            else
+              splitLines(piece).forEach((l, k) => {
+                if (isMarker(l)) markerLines.push(line + k);
+              });
+            spans.push({
+              id: seg.id,
+              start: text.length,
+              end: text.length + piece.length,
+              open: isNotDone,
+            });
+            text += piece;
+            line += piece.split("\n").length - 1;
+          }
+          return {
+            text,
+            spans,
+            open,
+            markerLines,
+            unresolved: open + markerLines.length,
+            lines: text.split("\n").length - 1,
+            conflictTotal: f.segs.filter((s) => s.kind === "conflict").length,
+          };
+        }
+
+        function entryOf(choice, text, note) {
+          const e = {};
+          if (choice) e.choice = choice;
+          if (choice === "edited") e.text = text;
+          if (note) e.note = note;
+          return Object.keys(e).length ? e : undefined;
+        }
+
+        // Writes one chunk's decision. Omitted note keeps the existing note.
+        function writeEntry(f, id, { choice = null, text, note }) {
+          const prev = f.decisions[id] || {};
+          const keep = note === undefined ? prev.note : note;
+          const entry = entryOf(choice, choice === "edited" ? normText(text) : undefined, keep);
+          if (entry) f.decisions[id] = entry;
+          else delete f.decisions[id];
+        }
+
+        function getState() {
+          const decisions = {};
+          for (const f of files) {
+            decisions[f.name] = {};
+            for (const seg of f.segs)
+              if (f.decisions[seg.id])
+                decisions[f.name][seg.id] = JSON.parse(JSON.stringify(f.decisions[seg.id]));
+          }
+          return { decisions };
+        }
+
+        // Replaces every file's decisions from a state (history steps, presets, setValues). Model only.
+        function setModelState(state) {
+          for (const f of files) {
+            const incoming = (state.decisions && state.decisions[f.name]) || {};
+            f.decisions = {};
+            for (const seg of f.segs) {
+              const e = incoming[seg.id];
+              if (!e) continue;
+              const entry = entryOf(e.choice ?? null, e.text, e.note);
+              if (entry) f.decisions[seg.id] = entry;
+            }
+          }
+        }
+
+        function applyDefaults() {
+          if (!OPTS.defaultChoice) return;
+          for (const f of files)
+            for (const seg of f.segs) {
+              if (seg.kind !== "conflict") continue;
+              if (OPTS.defaultChoice === "base" && !seg.hasBase) continue;
+              writeEntry(f, seg.id, { choice: OPTS.defaultChoice });
+            }
+        }
+
+        // Validates a setValues patch against the model and returns the next full state (nothing is changed yet).
+        function planValues(partial) {
+          if (!isPlain(partial))
+            throw new TypeError("setValues: pass an object such as { file, decisions }");
+          for (const key of Object.keys(partial))
+            if (key !== "file" && key !== "decisions")
+              throw new Error(
+                `setValues: unknown key "${key}" (use file or decisions; files is read-only)`,
+              );
+          const state = getState();
+          if (partial.decisions !== undefined) mergeDecisions(state, partial.decisions);
+          let fileIndex = null;
+          if (partial.file !== undefined) {
+            fileIndex = files.findIndex((f) => f.name === partial.file);
+            if (fileIndex < 0)
+              throw new Error(`setValues: no attached file named "${partial.file}"`);
+          }
+          return { state, fileIndex };
+        }
+
+        function mergeDecisions(state, decisions) {
+          if (!isPlain(decisions))
+            throw new TypeError(
+              "setValues: decisions must be { fileName: { chunkId: { choice, text?, note? } } }",
+            );
+          for (const [name, byId] of Object.entries(decisions)) {
+            const f = files.find((x) => x.name === name);
+            if (!f) throw new Error(`setValues: no attached file named "${name}"`);
+            if (!isPlain(byId))
+              throw new TypeError(`setValues: decisions for "${name}" must be keyed by chunk id`);
+            for (const [id, patch] of Object.entries(byId)) {
+              const seg = f.segs.find((s) => s.id === id);
+              if (!seg) throw new Error(`setValues: "${name}" has no chunk "${id}"`);
+              if (!isPlain(patch))
+                throw new TypeError(`setValues: the decision for ${id} must be an object`);
+              for (const key of Object.keys(patch))
+                if (!["choice", "text", "note"].includes(key))
+                  throw new Error(`setValues: unknown key "${key}" for ${id}`);
+              const prev = state.decisions[name][id] || {};
+              const choice = "choice" in patch ? patch.choice : (prev.choice ?? null);
+              if (choice !== null && !CHOICES.includes(choice))
+                throw new Error(
+                  `setValues: the choice for ${id} must be one of ${CHOICES.join(", ")}, or null`,
+                );
+              if (choice === "base" && seg.kind === "conflict" && !seg.hasBase)
+                throw new Error(`setValues: ${id} has no base section (merge-style markers)`);
+              if (seg.kind === "auto" && choice !== null && choice !== "edited")
+                throw new Error(`setValues: ${id} is auto-merged; only "edited" or null applies`);
+              const text = "text" in patch ? patch.text : prev.text;
+              if (choice === "edited" && typeof text !== "string")
+                throw new Error(`setValues: "edited" needs text for ${id}`);
+              if ("note" in patch && patch.note !== null && typeof patch.note !== "string")
+                throw new TypeError(`setValues: the note for ${id} must be a string`);
+              const note = "note" in patch ? patch.note || undefined : prev.note;
+              const entry = entryOf(choice, choice === "edited" ? normText(text) : undefined, note);
+              if (entry) state.decisions[name][id] = entry;
+              else delete state.decisions[name][id];
+            }
+          }
+        }
+
+        function valuesOut() {
+          return {
+            file: current() ? current().name : null,
+            files: files.map((f) => ({
+              name: f.name,
+              unresolved: compose(f).unresolved,
+              conflicts: f.segs.filter((s) => s.kind === "conflict").map((s) => s.id),
+            })),
+            decisions: getState().decisions,
+          };
+        }
+
+        // ---- The merge view -------------------------------------------------------------
+        function viewOf(f, seg) {
+          const d = f.decisions[seg.id];
+          const choice = d && d.choice ? d.choice : null;
+          return choice === "edited"
+            ? { id: seg.id, choice, text: d.text }
+            : { id: seg.id, choice };
+        }
+
+        function syncView() {
+          const f = current();
+          if (!f || loading) return;
+          td.set({ chunks: f.segs.map((seg) => viewOf(f, seg)) });
+        }
+
+        function defaultSel(f) {
+          const open = f.segs.find((s) => isOpen(f, s));
+          if (open) return open.id;
+          const first = f.segs.find((s) => s.kind === "conflict");
+          return first ? first.id : null;
+        }
+
+        function showFile(index) {
+          const my = ++loadSeq;
+          loading = true;
+          cur = index;
+          const f = files[index];
+          return td.load({ conflicted: f.text }).then(() => {
+            if (my !== loadSeq) return;
+            const chunks = td.get().chunks;
+            const same =
+              chunks.length === f.segs.length &&
+              chunks.every((c, i) => c.id === f.segs[i].id && c.kind === f.segs[i].kind);
+            if (!same)
+              throw new Error(
+                `${f.name}: the merge view split the conflicts differently from the marker parser`,
+              );
+            loading = false;
+            const first = f.segs.find((s) => s.kind === "conflict");
+            td.set({
+              labels: {
+                ours: first && first.oursLabel ? `Ours · ${first.oursLabel}` : "Ours",
+                base: "Base",
+                theirs: first && first.theirsLabel ? `Theirs · ${first.theirsLabel}` : "Theirs",
+              },
+            });
+            syncView();
+            sel = defaultSel(f);
+            if (sel !== null) td.focus(sel);
+            renderAll();
+            if (sel !== null) revealInResult(sel);
+          });
+        }
+
+        function selectChunk(id) {
+          sel = id;
+          if (td && !loading && current()) td.focus(id);
+          renderAll();
+          revealInResult(id);
+        }
+
+        // Scrolls the result pane so the selected chunk's text sits near the top (not while the user types there).
+        function revealInResult(id) {
+          const ta = $("result");
+          const span = lastSpans.find((sp) => sp.id === id);
+          if (!span || document.activeElement === ta) return;
+          const line = lastText.slice(0, span.start).split("\n").length - 1;
+          const lineH = parseFloat(getComputedStyle(ta).lineHeight);
+          ta.scrollTop = Math.max(0, line * lineH - 2 * lineH);
+        }
+
+        // Textdiff reports user choices (its own buttons and edit box); mirror them into the model.
+        function onViewChange() {
+          const f = current();
+          if (!f || loading) return;
+          let last = null;
+          for (const c of td.get().chunks) {
+            const before = f.decisions[c.id] || {};
+            const choice = c.choice ?? null;
+            const beforeChoice = before.choice ?? null;
+            const text = choice === "edited" ? normText(c.text) : undefined;
+            const same = choice === beforeChoice && (choice !== "edited" || text === before.text);
+            if (same) continue;
+            writeEntry(f, c.id, { choice, text, note: before.note });
+            last = { id: c.id, choice };
+          }
+          if (!last) return;
+          armedUntil = 0;
+          sel = last.id;
+          renderAll();
+          commitNow(`${CHOICE_LABEL[last.choice] ?? "Clear"} ${last.id}`);
+        }
+
+        // ---- Actions -------------------------------------------------------------------
+        function say(text) {
+          $("status-main").textContent = text;
+        }
+
+        function unresolvedHere() {
+          return current() ? compose(current()).unresolved : 0;
+        }
+
+        function afterEdit(label) {
+          armedUntil = 0;
+          syncView();
+          renderAll();
+          commitNow(label);
+          const left = unresolvedHere();
+          say(
+            `${label}. ${left ? `${left} unresolved in ${current().name}` : `${current().name} is resolved`}.`,
+          );
+        }
+
+        function choose(choice) {
+          const f = current();
+          const seg = selectedSeg();
+          if (!f || !seg) return say("Pick a change first: N or P, or click one in the list");
+          if (seg.kind !== "conflict")
+            return say(`${seg.id} is auto-merged; press E to edit it by hand`);
+          if (choice === "base" && !seg.hasBase)
+            return say(`${seg.id} has no base section (merge-style markers)`);
+          writeEntry(f, seg.id, { choice });
+          afterEdit(`${CHOICE_LABEL[choice]} ${seg.id}`);
+        }
+
+        // E: the chunk becomes edited (seeded from ours while open), and the result pane takes the caret over it.
+        function startEdit(seg) {
+          const f = current();
+          const seed = isOpen(f, seg) ? linesText(seg.ours) : segmentText(f, seg);
+          writeEntry(f, seg.id, { choice: "edited", text: seed });
+          afterEdit(`Edit ${seg.id}`);
+          const span = lastSpans.find((sp) => sp.id === seg.id);
+          const ta = $("result");
+          ta.focus();
+          if (span) ta.setSelectionRange(span.start, span.end);
+          say(`${seg.id} is edited by hand; type in the result below`);
+        }
+
+        function editSelected() {
+          const seg = selectedSeg();
+          if (!current() || !seg)
+            return say("Pick a change first: N or P, or click one in the list");
+          startEdit(seg);
+        }
+
+        function step(dir) {
+          const f = current();
+          if (!f) return;
+          const at = sel === null ? -1 : f.segs.findIndex((s) => s.id === sel);
+          let target = null;
+          if (dir > 0) {
+            target = f.segs.find((s, i) => s.kind === "conflict" && i > at) ?? null;
+          } else {
+            f.segs.forEach((s, i) => {
+              if (s.kind === "conflict" && i < (at < 0 ? Infinity : at)) target = s;
+            });
+          }
+          if (!target)
+            return say(dir > 0 ? "Last conflict in this file" : "First conflict in this file");
+          selectChunk(target.id);
+        }
+
+        // Typing in the result pane edits the chunk the change touched. A change that crosses chunks is reverted.
+        function onResultInput() {
+          const f = current();
+          const ta = $("result");
+          if (!f || loading) {
+            ta.value = lastText;
+            return;
+          }
+          const next = ta.value;
+          const old = lastText;
+          if (next === old) return;
+          const min = Math.min(old.length, next.length);
+          let p = 0;
+          while (p < min && old.charCodeAt(p) === next.charCodeAt(p)) p += 1;
+          let s = 0;
+          while (
+            s < min - p &&
+            old.charCodeAt(old.length - 1 - s) === next.charCodeAt(next.length - 1 - s)
+          )
+            s += 1;
+          const oldStart = p;
+          const oldEnd = old.length - s;
+          const delta = next.length - old.length;
+          const span =
+            lastSpans.find((sp) => sp.start <= oldStart && oldEnd <= sp.end && oldStart < sp.end) ??
+            lastSpans.find((sp) => sp.start <= oldStart && oldEnd <= sp.end);
+          if (!span) {
+            ta.value = old;
+            ta.setSelectionRange(oldStart, oldStart);
+            return say("Edit one change at a time: pick it with N or P, then press E");
+          }
+          const seg = f.segs.find((x) => x.id === span.id);
+          const text = next.slice(span.start, span.end + delta);
+          const caret = span.start + text.length;
+          if (seg.kind === "auto" && text === seg.text) writeEntry(f, seg.id, { choice: null });
+          else writeEntry(f, seg.id, { choice: "edited", text });
+          armedUntil = 0;
+          syncView();
+          selectChunk(seg.id);
+          ta.setSelectionRange(caret, caret);
+          scheduleCommit(`Edit ${seg.id}`);
+          say(`${seg.id} edited by hand`);
+        }
+
+        function onNoteInput() {
+          const f = current();
+          const seg = selectedSeg();
+          if (!f || !seg || seg.kind !== "conflict") return;
+          const d = f.decisions[seg.id] || {};
+          const note = $("note").value;
+          writeEntry(f, seg.id, { choice: d.choice ?? null, text: d.text, note });
+          renderAll();
+          scheduleCommit(`Note ${seg.id}`);
+        }
+
+        // ---- History commits: a typing burst becomes one step ---------------------------
+        function scheduleCommit(label) {
+          if (!booted) return;
+          commitLabel = label;
+          clearTimeout(commitTimer);
+          commitTimer = setTimeout(() => {
+            commitTimer = 0;
+            link.commit(commitLabel);
+          }, 400);
+        }
+        function commitNow(label) {
+          if (!booted) return;
+          clearTimeout(commitTimer);
+          commitTimer = 0;
+          link.commit(label);
+        }
+        function applyState(state) {
+          setModelState(state);
+          syncView();
+          renderAll();
+        }
+
+        // ---- Output: resolved files plus resolution.json --------------------------------
+        function resolutionOf(f) {
+          const c = compose(f);
+          return {
+            name: f.name,
+            unresolved: c.unresolved,
+            conflicts: f.segs
+              .filter((s) => s.kind === "conflict")
+              .map((seg) => {
+                const d = f.decisions[seg.id] || {};
+                const row = {
+                  id: seg.id,
+                  lines: [seg.startLine, seg.endLine],
+                  choice: d.choice ?? null,
+                };
+                if (d.note) row.note = d.note;
+                return row;
+              }),
+          };
+        }
+
+        function outputFiles() {
+          const out = files.map((f) => new File([compose(f).text], f.name, { type: "text/plain" }));
+          const resolution = { files: files.map(resolutionOf) };
+          out.push(
+            new File([JSON.stringify(resolution, null, 2) + "\n"], "resolution.json", {
+              type: "application/json",
+            }),
+          );
+          return out;
+        }
+
+        // Export downloads the files; the bolt-on export() returns the same list.
+        async function exportFiles() {
+          if (!files.length) throw new Error("merge-resolve: no conflicted files are attached");
+          if (exporting) throw new Error("merge-resolve: an export is already running");
+          exporting = true;
+          try {
+            const out = outputFiles();
+            for (const f of out) await ws.download(f, f.name);
+            say(`Exported ${out.length} files`);
+            return out;
+          } finally {
+            exporting = false;
+          }
+        }
+
+        // Send attaches the same files to the chat. With unresolved changes it asks once more (click twice).
+        async function sendToAgent() {
+          if (!files.length) throw new Error("merge-resolve: no conflicted files are attached");
+          const n = files.reduce((sum, f) => sum + compose(f).unresolved, 0);
+          if (n > 0 && Date.now() > armedUntil) {
+            armedUntil = Date.now() + 5000;
+            renderSend();
+            setTimeout(renderSend, 5100);
+            return say(`${n} unresolved. Click Send again within 5 seconds to attach them anyway`);
+          }
+          armedUntil = 0;
+          const out = outputFiles();
+          for (const f of out) await ws.attach(f);
+          renderSend();
+          say(
+            `Attached ${files.length} file(s) and resolution.json${n ? ` with ${n} unresolved` : ""}`,
+          );
+        }
+
+        // ---- Rendering -------------------------------------------------------------------
+        function renderAll() {
+          const f = current();
+          $("app").classList.toggle("multi", files.length > 1);
+          const comp = f ? compose(f) : EMPTY;
+          lastText = comp.text;
+          lastSpans = comp.spans;
+          const ta = $("result");
+          if (ta.value !== comp.text) ta.value = comp.text;
+          ta.readOnly = !f;
+          renderHeader(comp);
+          renderFiles();
+          renderChange();
+          renderList(f);
+          renderSend();
+          persist();
+        }
+
+        function renderHeader(comp) {
+          const f = current();
+          const all = files.reduce((sum, x) => sum + compose(x).unresolved, 0);
+          const fname = $("fname");
+          const select = $("file-select");
+          select.hidden = files.length < 2;
+          fname.textContent = f ? f.name : "";
+          const idx =
+            f && sel !== null
+              ? f.segs.filter((s) => s.kind === "conflict").findIndex((s) => s.id === sel)
+              : -1;
+          $("kofn").textContent = !f
+            ? "No files"
+            : comp.conflictTotal === 0
+              ? "No conflicts"
+              : idx >= 0
+                ? `Conflict ${idx + 1} of ${comp.conflictTotal}`
+                : `${comp.conflictTotal} conflicts`;
+          $("prev").disabled = !comp.conflictTotal;
+          $("next").disabled = !comp.conflictTotal;
+          const pill = $("unres");
+          pill.hidden = !f;
+          if (comp.unresolved) pill.textContent = `${comp.unresolved} unresolved`;
+          else pill.textContent = "Resolved";
+          if (files.length > 1) pill.textContent += ` · ${all} in all`;
+          pill.className = "pill " + (all ? "warn" : "ok");
+          const flag = $("flag");
+          flag.hidden = comp.markerLines.length === 0;
+          if (!flag.hidden) {
+            const extra = comp.markerLines.length - 1;
+            flag.textContent = `Marker at line ${comp.markerLines[0]}${extra > 0 ? ` +${extra}` : ""} in the result`;
+          }
+          $("rstat").textContent = f
+            ? `${comp.lines} lines · ${comp.conflictTotal - comp.open}/${comp.conflictTotal} conflicts resolved`
+            : "";
+          select.replaceChildren(...files.map((x, i) => new Option(x.name, String(i))));
+          select.value = String(cur);
+        }
+
+        function renderFiles() {
+          const list = $("files");
+          list.replaceChildren();
+          files.forEach((f, i) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "file-btn";
+            b.setAttribute("aria-current", String(i === cur));
+            const nm = document.createElement("span");
+            nm.className = "nm";
+            nm.textContent = f.name;
+            b.append(nm);
+            if (files.length > 1) {
+              const u = compose(f).unresolved;
+              const badge = document.createElement("span");
+              badge.className = "badge " + (u ? "open" : "done");
+              badge.textContent = u ? String(u) : "done";
+              b.append(badge);
+            }
+            b.addEventListener("click", () => {
+              if (i !== cur) showFile(i).catch(showError);
+            });
+            list.append(b);
+          });
+        }
+
+        function renderChange() {
+          const f = current();
+          const seg = selectedSeg();
+          const d = f && seg ? f.decisions[seg.id] || {} : {};
+          const info = $("cinfo");
+          if (!f) info.textContent = "";
+          else if (!seg)
+            info.textContent = "No change selected. Press N or P, or pick one in the list.";
+          else if (seg.kind === "auto")
+            info.textContent = `${seg.id} · auto-merged (dimmed). Press E to edit it by hand.`;
+          else {
+            const state = d.choice ? `resolved: ${CHOICE_LABEL[d.choice]}` : "open";
+            info.textContent = `${seg.id} · lines ${seg.startLine}–${seg.endLine} · ${state}`;
+          }
+          for (const b of document.querySelectorAll("[data-choice]")) {
+            const c = b.dataset.choice;
+            b.setAttribute("aria-pressed", String(Boolean(d.choice) && d.choice === c));
+            b.disabled = !seg || seg.kind !== "conflict" || (c === "base" && !seg.hasBase);
+          }
+          const edit = $("edit-btn");
+          edit.setAttribute("aria-pressed", String(Boolean(d.choice) && d.choice === "edited"));
+          edit.disabled = !seg;
+          const note = $("note");
+          const conflict = Boolean(seg && seg.kind === "conflict");
+          note.disabled = !conflict;
+          if (document.activeElement !== note) note.value = conflict ? d.note || "" : "";
+        }
+
+        function renderList(f) {
+          const list = $("clist");
+          list.replaceChildren();
+          if (!f) return;
+          for (const seg of f.segs) {
+            if (seg.kind !== "conflict") continue;
+            const d = f.decisions[seg.id] || {};
+            const li = document.createElement("li");
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "crow";
+            b.setAttribute("aria-current", String(seg.id === sel));
+            const dot = document.createElement("span");
+            dot.className = "dot" + (d.choice === "edited" ? " edit" : d.choice ? " done" : "");
+            const id = document.createElement("span");
+            id.textContent = seg.id;
+            const lines = document.createElement("span");
+            lines.className = "lines";
+            lines.textContent = `${seg.startLine}–${seg.endLine}`;
+            const what = document.createElement("span");
+            what.className = "what";
+            what.textContent = d.choice ? CHOICE_LABEL[d.choice].toLowerCase() : "open";
+            b.append(dot, id, lines, what);
+            b.addEventListener("click", () => selectChunk(seg.id));
+            li.append(b);
+            list.append(li);
+          }
+        }
+
+        function renderSend() {
+          const n = files.reduce((sum, f) => sum + compose(f).unresolved, 0);
+          const btn = $("send");
+          btn.disabled = files.length === 0;
+          btn.classList.toggle("btn-warn", n > 0);
+          btn.classList.toggle("btn-primary", n === 0);
+          const armed = Date.now() < armedUntil;
+          $("send-label").textContent =
+            n === 0
+              ? "Send to Agent"
+              : armed
+                ? `Click again to send ${n} unresolved`
+                : `Send with ${n} unresolved`;
+          $("export").disabled = files.length === 0;
+        }
+
+        // ---- Persistence (per workspace, through T3) ------------------------------------
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(
+            () =>
+              ws.setState({
+                v: 1,
+                key: STATE_KEY,
+                file: current() ? current().name : null,
+                state: getState(),
+                history: history.get(),
+                controls: rt.state(),
+              }),
+            300,
+          );
+        }
+
+        function restoreFrom(saved) {
+          if (!isPlain(saved) || saved.v !== 1 || saved.key !== STATE_KEY) return null;
+          if (!isPlain(saved.state) || !isPlain(saved.state.decisions) || !isPlain(saved.history))
+            return null;
+          const known = Object.keys(saved.state.decisions).every((n) =>
+            files.some((f) => f.name === n),
+          );
+          return known ? saved : null;
+        }
+
+        function pickStartFile(restored) {
+          const named = (name) => files.findIndex((f) => f.name === name);
+          if (OPTS.file !== null) {
+            const i = named(OPTS.file);
+            if (i >= 0) return i;
+            console.warn(
+              `merge-resolve: no attached file named "${OPTS.file}"; opening the first file.`,
+            );
+            return 0;
+          }
+          const i = restored && restored.file ? named(restored.file) : -1;
+          return i >= 0 ? i : 0;
+        }
+
+        // ---- Keys: captured on the window, so the merge view never sees a key this template handles ----
+        function isTyping(target) {
+          return Boolean(
+            target &&
+            target.closest &&
+            target.closest('input, textarea, select, [contenteditable="true"]'),
+          );
+        }
+        function onKey(e) {
+          if (!booted) return;
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            sendToAgent().catch(showError);
+            return;
+          }
+          if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+          const code = e.code || "";
+          const key = (e.key || "").toLowerCase();
+          let act = null;
+          if (code === "Digit3" && e.shiftKey) act = () => choose("both-theirs");
+          else if (code === "Digit3") act = () => choose("both");
+          else if (code === "Digit1" && !e.shiftKey) act = () => choose("ours");
+          else if (code === "Digit2" && !e.shiftKey) act = () => choose("theirs");
+          else if (code === "Digit4" && !e.shiftKey) act = () => choose("base");
+          else if (key === "n" && !e.shiftKey) act = () => step(1);
+          else if (key === "p" && !e.shiftKey) act = () => step(-1);
+          else if (key === "e" && e.shiftKey) act = () => exportFiles().catch(showError);
+          else if (key === "e") act = () => editSelected();
+          if (!act) return;
+          e.preventDefault();
+          e.stopPropagation();
+          act();
+        }
+
+        function showError(err) {
+          rt.reportError(err, "merge");
+          say(`Stopped: ${err && err.message ? err.message : err}`);
+        }
+
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const loaded = await loadFiles(ready.assets ?? []);
+          files = loaded.files;
+          const restored = restoreFrom(saved);
+          if (restored) setModelState(restored.state);
+          else applyDefaults();
+          td = t3kit.textdiff.create($("diff"), {
+            mode: "merge",
+            wrap: OPTS.wrap,
+            ignoreWhitespace: OPTS.ignoreWhitespace,
+            lineNumbers: true,
+            toolbar: false,
+            mergeLayout: OPTS.layout === "2-pane" ? "columns-no-base" : "columns",
+          });
+          td.on("change", onViewChange);
+          td.on("select", (id) => {
+            if (loading) return;
+            sel = id;
+            renderAll();
+            revealInResult(id);
+          });
+          if (files.length) await showFile(pickStartFile(restored));
+          else {
+            $("diff").hidden = true;
+            $("empty").hidden = false;
+          }
+          history = t3kit.history.create($("history"), {
+            title: "Steps",
+            label: "Open",
+            state: getState(),
+            presetPlaceholder: "Name this resolution",
+          });
+          if (restored) history.set(restored.history);
+          link = rt.linkHistory(history, getState, applyState);
+          history.on("change", () => {
+            renderAll();
+            rt.emitChange();
+          });
+          rt.publish({
+            instances: { textdiff: td, history },
+            saved: restored ? restored.controls : undefined,
+          });
+          booted = true;
+          renderAll();
+          if (files.length) {
+            const skipped = loaded.ignored.length ? ` Ignored: ${loaded.ignored.join(", ")}.` : "";
+            say(
+              `${files.length} conflicted file(s). N/P move, 1 ours, 2 theirs, 3 both, 4 base, E edit.${skipped}`,
+            );
+          } else
+            say(
+              `Nothing to resolve yet.${loaded.ignored.length ? ` Ignored: ${loaded.ignored.join(", ")}.` : ""}`,
+            );
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        $("app").dataset.layout = OPTS.layout;
+        let wrapOn = OPTS.wrap;
+        function setWrap(on) {
+          wrapOn = on;
+          $("app").classList.toggle("wrap", on);
+          $("wrap").setAttribute("aria-pressed", String(on));
+          if (td) td.set({ wrap: on });
+        }
+        setWrap(wrapOn);
+        $("wrap").addEventListener("click", () => setWrap(!wrapOn));
+        $("prev").addEventListener("click", () => step(-1));
+        $("next").addEventListener("click", () => step(1));
+        $("file-select").addEventListener("change", () =>
+          showFile(Number($("file-select").value)).catch(showError),
+        );
+        $("export").addEventListener("click", () => exportFiles().catch(showError));
+        $("send").addEventListener("click", () => sendToAgent().catch(showError));
+        $("note").addEventListener("input", onNoteInput);
+        $("result").addEventListener("input", onResultInput);
+        $("edit-btn").addEventListener("click", editSelected);
+        for (const b of document.querySelectorAll("[data-choice]"))
+          b.addEventListener("click", () => choose(b.dataset.choice));
+        window.addEventListener("keydown", onKey, true);
+        const mod = MAC ? "⌘" : "Ctrl+";
+        document.querySelector("#send kbd").textContent = MAC ? "⌘↵" : `${mod}↵`;
+        say("Loading conflicted files");
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

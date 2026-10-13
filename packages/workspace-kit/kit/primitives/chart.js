@@ -9,7 +9,8 @@
  *   series     column: one line or bar group per distinct value;   color  column: colour per value (with series)
  *   aggregate  'count' | 'sum' | 'mean' | 'min' | 'max' | 'none'. Default count without y, else bar and histogram
  *              sum, line and area mean. 'none' draws raw line points, decimated per pixel. Not for scatter
- *   bins       integer 1..200, or 'hour' | 'day' | 'week' | 'month' | 'year' for a time x. Default: histogram
+ *   bins       integer 1..200, or 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' for a time x,
+ *              or 'auto' (time x: the finest unit that keeps the span at about 100 bins). Default: histogram
  *              Sturges; bar, line, area use distinct x values up to 40 (bar) or 240, else that many bins
  *   stacked    boolean: stack bar, histogram and area groups. Default true for histogram, else false
  *   legend, axes, tooltips   booleans, default true;   hidden: legend labels to hide (see get().groups)
@@ -36,14 +37,24 @@
  *   const c = t3kit.chart.create(el, { type: 'bar', x: 'city', y: 'fare_usd', aggregate: 'mean', series: 'member' });
  *   await c.setData(csvFile);                                      // File/Blob from t3.workspace.assets()
  *   c.on('filter', (f) => console.log(f ? `${f.count} rows` : 'cleared'));
- *   const png = await c.exportBlob({ type: 'image/png' });
  */
 (function () {
   const t3kit = (window.t3kit = window.t3kit || {});
 
   const TYPES = ["line", "area", "bar", "scatter", "histogram"];
   const AGGREGATES = ["count", "sum", "mean", "min", "max", "none"];
-  const UNITS = ["hour", "day", "week", "month", "year"];
+  const UNITS = ["second", "minute", "hour", "day", "week", "month", "year"];
+  const AUTO_BINS = "auto";
+  const AUTO_TARGET = 100;
+  const UNIT_MS = {
+    second: 1e3,
+    minute: 6e4,
+    hour: 36e5,
+    day: 864e5,
+    week: 6048e5,
+    month: 2629800e3,
+    year: 31557600e3,
+  };
   const STACKABLE = ["bar", "histogram", "area"];
   const DEFAULTS = {
     type: "line",
@@ -104,6 +115,8 @@
     year: dtf({ year: "numeric" }),
   };
   const BIN_FMT = {
+    second: dtf({ hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    minute: dtf({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
     hour: dtf({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
     day: FULL_DATE,
     week: FULL_DATE,
@@ -681,7 +694,9 @@
 
   function floorUnit(t, unit) {
     const d = new Date(t);
-    if (unit === "hour") d.setMinutes(0, 0, 0);
+    if (unit === "second") d.setMilliseconds(0);
+    else if (unit === "minute") d.setSeconds(0, 0);
+    else if (unit === "hour") d.setMinutes(0, 0, 0);
     else {
       d.setHours(0, 0, 0, 0);
       if (unit === "week") d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -693,7 +708,9 @@
 
   function nextUnit(t, unit) {
     const d = new Date(t);
-    if (unit === "hour") d.setHours(d.getHours() + 1);
+    if (unit === "second") d.setSeconds(d.getSeconds() + 1);
+    else if (unit === "minute") d.setMinutes(d.getMinutes() + 1);
+    else if (unit === "hour") d.setHours(d.getHours() + 1);
     else if (unit === "day") d.setDate(d.getDate() + 1);
     else if (unit === "week") d.setDate(d.getDate() + 7);
     else if (unit === "month") d.setMonth(d.getMonth() + 1);
@@ -740,8 +757,17 @@
     };
   }
 
+  // The finest unit whose bin count over the column's span stays at or under AUTO_TARGET.
+  function autoUnit(col) {
+    const span = Math.max(0, col.max - col.min);
+    for (const unit of UNITS) if (span / UNIT_MS[unit] <= AUTO_TARGET) return unit;
+    return "year";
+  }
+
   function binsFor(col, cfg) {
     if (col.kind === "category") return categoryBins(col);
+    if (cfg.bins === AUTO_BINS)
+      return unitBins(col, col.kind === "time" ? autoUnit(col) : AUTO_BINS);
     if (typeof cfg.bins === "string") return unitBins(col, cfg.bins);
     if (cfg.type === "histogram")
       return widthBins(
@@ -784,10 +810,13 @@
       fail(`aggregate must be one of ${AGGREGATES.join(", ")}`);
     if (
       c.bins !== null &&
+      c.bins !== AUTO_BINS &&
       !UNITS.includes(c.bins) &&
       !(Number.isInteger(c.bins) && c.bins >= 1 && c.bins <= 200)
     ) {
-      fail(`bins must be an integer from 1 to 200, one of ${UNITS.join(", ")}, or null`);
+      fail(
+        `bins must be an integer from 1 to 200, one of ${UNITS.join(", ")}, ${AUTO_BINS}, or null`,
+      );
     }
     for (const key of ["legend", "axes", "tooltips"]) {
       if (typeof c[key] !== "boolean") fail(`${key} must be true or false`);
@@ -1077,6 +1106,8 @@
     } else if (model.bins && UNITS.includes(model.bins.mode) && model.bins.count <= plotW / 56) {
       const b = model.bins;
       const fmt = {
+        second: BIN_FMT.second,
+        minute: TICK_FMT.time,
         hour: TICK_FMT.time,
         day: TICK_FMT.day,
         week: TICK_FMT.day,

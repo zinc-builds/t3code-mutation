@@ -1,0 +1,136 @@
+{
+  "id": "component-playground",
+  "title": "Component Props Playground",
+  "summary": "Design-side companion to design-review: the user sets exact prop values on one component instead of describing changes. Input: a JS asset that sets window.t3component = { name, props, css?, mount(el, props) -> { update, destroy }, usage?(props) } (bundle React or Vue plus an adapter to an IIFE with esbuild first); optional CSS, font and image assets; an image named ref-*, reference.*, overlay.* or mock.* becomes the onion skin. Props form generated from the schema (changed dots, per-field reset, arrow keys step numbers); Single cell with width presets, canvas/card/checker backgrounds and forced states; Matrix of two prop axes plus an optional state axis, a Pin on every cell; Compare two pins side by side; usage snippet; measure readouts; history. Send attaches props.json, usage.jsx or usage.html and matrix.png to the chat; Export downloads them.",
+  "kit": ["stage", "propsform", "history", "links", "template-runtime"],
+  "chrome": false,
+  "verifyAssets": "button.component.js",
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Component Props Playground",
+      "description": "Header title."
+    },
+    "props": {
+      "type": "object",
+      "default": {},
+      "description": "Starting prop values, { key: value }, over the component's own defaults. Unknown names and invalid values are ignored with a warning."
+    },
+    "matrix": {
+      "type": "object",
+      "default": {
+        "rows": null,
+        "cols": null,
+        "states": []
+      },
+      "description": "Matrix axes: rows and cols are prop names (enum, boolean or number props; numbers use min, default, max); states lists forced states from default, hover, focus, active, disabled. Any axis set opens the Matrix tab. At most 64 cells."
+    },
+    "width": {
+      "type": "integer",
+      "enum": [320, 375, 768, 1024, 1440],
+      "default": 375,
+      "description": "Starting width preset in px."
+    },
+    "background": {
+      "type": "string",
+      "enum": ["canvas", "card", "checker"],
+      "default": "canvas",
+      "description": "Starting stage background."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["default", "hover", "focus", "active", "disabled"],
+      "default": "default",
+      "description": "Starting forced state for the Single cell and for matrix cells without a states axis."
+    },
+    "snippet": {
+      "type": "string",
+      "enum": ["jsx", "html"],
+      "default": "jsx",
+      "description": "Usage snippet format; Send and Export attach usage.jsx or usage.html to match."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["shadow", "frame"],
+      "default": "shadow",
+      "description": "shadow: cells share the page (media queries follow the page). frame: each cell is a sandboxed iframe (media queries see the cell width; component code never runs in the page)."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Ghost Hover Small",
+      "props": {
+        "variant": "ghost",
+        "size": "sm",
+        "icon": "plus"
+      },
+      "state": "hover",
+      "width": 320,
+      "background": "card"
+    },
+    {
+      "title": "Variant by Size Matrix",
+      "matrix": {
+        "rows": "variant",
+        "cols": "size",
+        "states": ["default", "hover"]
+      },
+      "width": 375
+    },
+    {
+      "title": "Disabled Danger in Frame",
+      "props": {
+        "variant": "danger",
+        "icon": "arrow"
+      },
+      "state": "disabled",
+      "mode": "frame",
+      "snippet": "html",
+      "width": 768,
+      "background": "checker"
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code) after the component has loaded, the propsform, stage and history exist and the panels are in place. This is a data template (pipeline 'data'): no image stages, EDL hooks or audio. Bolt on through controls, panels, toolbar buttons and presets, and read or drive the playground through t3template.instances. Every control edit is one undo step. Errors log '[t3template] customScript error: ...' and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values persist and reach every hook as controls. No panel = 'Extras'.",
+      "addPanel(title | { title, open = true, position = 'top' | 'bottom' }) -> body element. Inspector order: Pinned Combinations, Usage Snippet, Measure, History. 'top' puts the panel first (before Pinned Combinations, in creation order); 'bottom' puts it after History. The same title returns the same panel.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?, title? }) -> button, also in the command bar. A shortcut must not be in reservedShortcuts.",
+      "addPreset(name, { props?, width?, state? }) / applyPreset(name): a preset is a view. props merge over the current values; applying one is one undo step.",
+      "getValues() -> { props, width, state, controls }.   setValues({ props?, width?, state? }, label?) -> values: strict (an unknown prop name, width or state throws); one undo step.",
+      "instances: { propsform (t3kit.propsform: get, set, reset, validate), stage (t3kit.stage: get, set, setCells, measure, usage, exportPng), history (t3kit.history), pins: { list(), add({ label?, props?, state?, width? }) -> pin, remove(id) } }. propsform and stage set() are silent: call t3template.refresh() after them.",
+      "refresh() re-renders the stage and saves the state after silent changes to instances.*.",
+      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: props.json ({ component, props, state, width, pinned: [{ props, state, width }] } for the selected cell), usage.jsx or usage.html, and matrix.png (every cell in the current view) when stage.exportPng succeeds, else a visible note says why it was skipped. Downloads them, same as the Export button (Send to Chat attaches the same files); it throws on failure."
+    ],
+    "reservedShortcuts": [
+      "m",
+      "s",
+      "c",
+      "p",
+      "b",
+      "o",
+      "e",
+      "w",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "[",
+      "]",
+      "mod+z",
+      "mod+shift+z"
+    ],
+    "example": "t3template.addControl({ id: 'note', label: 'Review note', type: 'text', placeholder: 'What to change', default: '', panel: 'Review' });\nt3template.addPreset('Danger Hover', { props: { variant: 'danger' }, state: 'hover' });\nt3template.addToolbarButton('Pin States', (t) => {\n  const note = t.getValues().controls.note.trim();\n  for (const state of ['default', 'hover', 'focus', 'active', 'disabled']) {\n    t.instances.pins.add({ state, label: note ? note + ': ' + state : state });\n  }\n}, { shortcut: 'shift+p', title: 'Pin the current props in all five forced states' });"
+  }
+}

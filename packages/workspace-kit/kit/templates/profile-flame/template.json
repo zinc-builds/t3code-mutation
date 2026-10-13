@@ -1,0 +1,134 @@
+{
+  "id": "profile-flame",
+  "title": "Profile Flame",
+  "summary": "Profile flame explorer for a CPU profile (V8 .cpuprofile, Chrome trace JSON or speedscope JSON; convert pprof to speedscope first): a flame chart by time, merged flame graph, icicle and inverted view on one zoomable canvas; a CPU-busy strip whose brush restricts the tree to a window; a top-functions table (file:line, self, total, samples) linked both ways with the canvas; callers, callees and a zoom path; search with share of time; and a second profile compared by delta. Send to Chat attaches hotpath.json and collapsed.txt for the agent to grep. Pick it for where CPU time goes, or what changed between two runs.",
+  "kit": ["spantree", "datagrid", "chart", "history", "links", "template-runtime"],
+  "chrome": false,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Profile Flame",
+      "description": "Header title."
+    },
+    "view": {
+      "type": "string",
+      "enum": ["flamechart", "flamegraph", "icicle", "inverted"],
+      "default": "flamechart",
+      "description": "Starting view: flamechart (time order), flamegraph (merged stacks), icicle (merged, top down) or inverted (callers of the leaves)."
+    },
+    "metric": {
+      "type": "string",
+      "enum": ["total", "self"],
+      "default": "total",
+      "description": "Frame width and table sort: total (time under the frame) or self (time spent in the frame itself)."
+    },
+    "focus": {
+      "type": "string",
+      "default": "",
+      "description": "Function name to zoom to on load, exact as in the profile (the widest frame of that name). Empty = fit the whole profile."
+    },
+    "search": {
+      "type": "string",
+      "default": "",
+      "description": "Starting search, matched as a case-insensitive substring of function names. The header shows its share of total time."
+    },
+    "timeRange": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 0,
+      "maxItems": 2,
+      "default": [],
+      "description": "Restrict the tree and table to a window, [fromMs, toMs] on the profile clock (first sample = 0). Empty = the whole profile. The density strip shows the brush."
+    },
+    "compare": {
+      "type": "string",
+      "enum": ["auto", "off"],
+      "default": "auto",
+      "description": "auto: with two profiles attached, profile B is compared against profile A and frames are coloured by delta (B minus A). off: never compare."
+    },
+    "minPx": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.5,
+      "description": "Hide frames narrower than this many pixels (0 to 20). Raise it to declutter a large profile."
+    },
+    "colorBy": {
+      "type": "string",
+      "enum": ["name", "service", "module", "delta"],
+      "default": "name",
+      "description": "Frame colour: name (a stable hue per function), service, module, or delta (set automatically when comparing)."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Hot Path",
+      "view": "flamechart",
+      "metric": "total",
+      "focus": "escapeHtml"
+    },
+    {
+      "title": "Self Time Icicle",
+      "view": "icicle",
+      "metric": "self"
+    },
+    {
+      "title": "Compare Two Runs",
+      "view": "flamegraph",
+      "metric": "self",
+      "compare": "auto",
+      "colorBy": "delta"
+    },
+    {
+      "title": "Parser Window",
+      "view": "flamechart",
+      "search": "parse",
+      "timeRange": [1000, 2500]
+    },
+    {
+      "title": "Who Calls JSON",
+      "view": "inverted",
+      "metric": "self",
+      "search": "json"
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code) after the profile has loaded and the canvas, density strip, table and history exist. Read and drive the view through t3template.instances: spantree (t3kit.spantree: get, set, range, zoomTo, locate, top, selection, collapsed, density), density (t3kit.chart, the CPU-busy strip), grid (t3kit.datagrid, the top-functions table) and history. spantree.set and grid.set are silent: call t3template.refresh() after them so the header, Frame, Called By, Calls, Zoom Path and table update. Brush a window with setValues({ range: [fromMs, toMs] }), which also moves the strip's brush; instances.spantree.range() changes the tree only. Every control edit is one undo step. Errors log '[t3template] customScript error: ...' and show in a dismissible banner. This is a data template (pipeline 'data'): addImageStage, addShaderStage, EDL hooks and addAudioFilter throw; bolt on through controls, panels, toolbar buttons, presets and the instances.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. User edits run every hook and re-render; onChange runs on user edits only, not on load. Every control edit is one undo step.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes; the same title returns the same panel). 'top' = after Zoom Path and before History; 'bottom' = after History.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'shift+s' (any key not in reservedShortcuts), title? }) -> button in the header tools.   refresh() re-renders the header, Frame, Zoom Path and table after silent spantree or grid changes.",
+      "export() -> Promise<{ files: [{ name, type, size, width, height }] }>: the canvas as a PNG at 2x (the Export button), sent to t3.workspace.attach and downloaded. Send to Chat (S) is not part of export(); it attaches hotpath.json {profile, view, selectedPath, selfMs, totalMs, topSelf, range?, compare?} and collapsed.txt (folded stacks of the selected subtree, weights in microseconds). Throws on failure.",
+      "getValues() -> { view, metric, search, zoom: [function names, outermost first], range: [fromMs, toMs] | null, controls }.   setValues({ view?, metric?, search?, zoom?, range? }, label?) -> Promise<values>: strict (unknown keys throw). zoom takes function names and zooms to each frame in turn (the widest frame of that name); [] fits. range [fromMs, toMs] or null brushes the tree. One undo step.",
+      "addPreset(name, { view?, metric?, search?, zoom?, range? }) / applyPreset(name): a preset is a view, as setValues takes it. Presets and history steps also hold the zoom path and the brush.   on('change', cb(values)) -> off.",
+      "instances: { spantree (t3kit.spantree: the canvas; top() rows carry file, line and samples), density (t3kit.chart: the CPU-busy strip, rows { ms, 'busy ms' }, 200 bins, (idle) and (program) excluded), grid (t3kit.datagrid: the top functions; columns function, file:line, self ms, total ms, samples (spans for evented traces) and, when comparing, delta ms), history (t3kit.history) }. A click on a frame zooms into it (one 'Zoom to X' step)."
+    ],
+    "reservedShortcuts": [
+      "/",
+      "e",
+      "s",
+      "m",
+      "v",
+      "f",
+      "backspace",
+      "escape",
+      "enter",
+      "mod+z",
+      "mod+shift+z"
+    ],
+    "example": "const panel = t3template.addPanel({ title: 'Hot Spots', position: 'top' });\nt3template.addControl({ id: 'hot', label: 'Self At Least (ms)', type: 'slider', min: 0, max: 200, step: 5, default: 0, panel, onChange(v, t) { t.instances.grid.set({ filters: v > 0 ? { 'self ms': '>=' + v } : {} }); t.refresh(); } });\nt3template.addPreset('Self Icicle', { metric: 'self', view: 'icicle', zoom: [] });\nt3template.addToolbarButton('Self Only', (t) => t.setValues({ metric: 'self' }, 'Self Only'), { shortcut: 'shift+s' });"
+  },
+  "verifyAssets": "profile.cpuprofile"
+}

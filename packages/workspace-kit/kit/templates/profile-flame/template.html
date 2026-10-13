@@ -1,0 +1,1387 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Profile Flame</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 0 3px;
+        color: var(--muted-foreground);
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .app {
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .title {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0 6px 0 0;
+        white-space: nowrap;
+      }
+      .prof {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--muted-foreground);
+      }
+      .sel {
+        height: 26px;
+        max-width: 170px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 6px;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .seg button {
+        height: 26px;
+        padding: 0 9px;
+        border: 0;
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+      }
+      .seg button + button {
+        border-left: 1px solid var(--input);
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .search {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .search input {
+        height: 26px;
+        width: 190px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 8px;
+      }
+      .share {
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .tools {
+        display: inline-flex;
+        gap: 6px;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 9px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn-primary kbd {
+        color: inherit;
+        border-color: currentColor;
+        opacity: 0.75;
+      }
+      .btn:disabled,
+      .sel:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .work {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      .main {
+        display: grid;
+        grid-template-rows: 108px minmax(200px, 1fr) 300px;
+        min-width: 0;
+        min-height: 0;
+        border-right: 1px solid var(--border);
+      }
+      .strip {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        padding: 4px 10px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .strip-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      #density {
+        flex: 1;
+        min-height: 0;
+      }
+      .canvas-host {
+        cursor: zoom-in;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .canvas-host .t3k-spantree-root {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .canvas-host .t3k-spantree-bar {
+        display: none;
+      }
+      .canvas-host .t3k-spantree-stage {
+        flex: 1;
+        min-height: 0;
+      }
+      .grid-host {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-top: 1px solid var(--border);
+      }
+      .grid-head {
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #grid-root {
+        flex: 1;
+        min-height: 0;
+      }
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .panels {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        padding: 6px 10px;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground);
+      }
+      .panel-body {
+        padding: 0 10px 10px;
+      }
+      .history-body #history {
+        min-height: 260px;
+      }
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        margin: 2px 0 8px;
+      }
+      .tile {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        padding: 5px 7px;
+        min-width: 0;
+      }
+      .tile b {
+        display: block;
+        font: 600 13px/1.3 var(--font-mono);
+        color: var(--card-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tile span {
+        font-size: 10px;
+        color: var(--muted-foreground);
+      }
+      .fname {
+        font: 600 13px/1.3 var(--font-mono);
+        margin: 0 0 6px;
+        overflow-wrap: anywhere;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 3px 10px;
+        margin: 0;
+      }
+      .kv dt {
+        color: var(--muted-foreground);
+      }
+      .kv dd {
+        margin: 0;
+        font-family: var(--font-mono);
+        overflow-wrap: anywhere;
+      }
+      .muted {
+        color: var(--muted-foreground);
+      }
+      .list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .list li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 8px;
+        padding: 2px 0;
+      }
+      .list button {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: left;
+        border: 0;
+        background: none;
+        padding: 0;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        color: var(--foreground);
+      }
+      .list .ms {
+        font-family: var(--font-mono);
+        color: var(--muted-foreground);
+      }
+      .list .mini {
+        grid-column: 1 / -1;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--chart-1);
+      }
+      .crumbs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px;
+      }
+      .crumbs button {
+        border: 0;
+        background: none;
+        padding: 1px 4px;
+        border-radius: 3px;
+        cursor: pointer;
+        color: var(--muted-foreground);
+      }
+      .crumbs button:hover:not([aria-current]) {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .crumbs button[aria-current="location"] {
+        color: var(--foreground);
+        font-weight: 600;
+        cursor: default;
+      }
+      .composer {
+        min-width: 320px;
+        min-height: 0;
+        border-top: 1px solid var(--border);
+      }
+      .status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        justify-content: space-between;
+        padding: 4px 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .hints span {
+        margin-right: 8px;
+      }
+      @media (max-width: 760px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          min-height: 100%;
+        }
+        .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .main {
+          grid-template-rows: 116px 360px 260px;
+          border-right: 0;
+        }
+        .composer {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">Profile Flame</h1>
+        <label class="prof"
+          ><span>A</span
+          ><select class="sel" id="prof-a" aria-label="Profile A" disabled></select
+        ></label>
+        <label class="prof" id="prof-b-wrap" hidden
+          ><span>B</span
+          ><select class="sel" id="prof-b" aria-label="Profile B, compared with A"></select
+        ></label>
+        <div class="seg" role="group" aria-label="View" id="views">
+          <button type="button" data-view="flamechart">Flame Chart</button>
+          <button type="button" data-view="flamegraph">Flame Graph</button>
+          <button type="button" data-view="icicle">Icicle</button>
+          <button type="button" data-view="inverted">Inverted</button>
+        </div>
+        <div class="seg" role="group" aria-label="Metric" id="metrics">
+          <button type="button" data-metric="total">Total</button>
+          <button type="button" data-metric="self">Self</button>
+        </div>
+        <div class="search">
+          <input
+            id="search"
+            type="search"
+            placeholder="Search functions (/)"
+            aria-label="Search functions"
+          />
+          <span class="share" id="share"></span>
+        </div>
+        <span class="spacer"></span>
+        <div class="tools" id="extra-tools"></div>
+        <button
+          class="btn"
+          id="send"
+          type="button"
+          disabled
+          title="Attach hotpath.json and collapsed.txt for the agent"
+        >
+          Send to Chat <kbd>S</kbd>
+        </button>
+        <button class="btn btn-primary" id="export" type="button" disabled>
+          Export PNG <kbd>E</kbd>
+        </button>
+      </header>
+
+      <div class="work">
+        <section class="main" aria-label="Flame canvas, density strip and top functions">
+          <div class="strip">
+            <div class="strip-head">
+              <span>CPU busy over time, idle excluded · drag to brush a window</span>
+              <span id="window">Full profile</span>
+            </div>
+            <div id="density"></div>
+          </div>
+          <div class="canvas-host" id="canvas"></div>
+          <div class="grid-host">
+            <div class="grid-head" id="grid-head">Top Functions</div>
+            <div id="grid-root"></div>
+          </div>
+        </section>
+
+        <aside class="inspector" aria-label="Inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="frame" open>
+              <summary>Frame</summary>
+              <div class="panel-body" id="frame"></div>
+            </details>
+            <details class="panel" data-panel="callers" open>
+              <summary>Called By</summary>
+              <div class="panel-body"><ul class="list" id="callers"></ul></div>
+            </details>
+            <details class="panel" data-panel="callees" open>
+              <summary>Calls</summary>
+              <div class="panel-body"><ul class="list" id="callees"></ul></div>
+            </details>
+            <details class="panel" data-panel="path" open>
+              <summary>Zoom Path</summary>
+              <div class="panel-body">
+                <nav class="crumbs" id="crumbs" aria-label="Zoom path"></nav>
+              </div>
+            </details>
+            <details class="panel" data-panel="history" open>
+              <summary>History</summary>
+              <div class="panel-body history-body"><div id="history"></div></div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+
+      <footer class="status" role="status">
+        <span id="status-main">Opening profile</span>
+        <span class="hints">
+          <span><kbd>/</kbd> search</span>
+          <span><kbd>V</kbd> view</span>
+          <span><kbd>M</kbd> metric</span>
+          <span><kbd>Click</kbd> zoom</span>
+          <span><kbd>Backspace</kbd> out</span>
+          <span><kbd>Arrows</kbd> move</span>
+          <span><kbd>E</kbd> export</span>
+          <span><kbd>S</kbd> send</span>
+        </span>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const NF = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+        const VIEWS = ["flamechart", "flamegraph", "icicle", "inverted"];
+        const VIEW_LABEL = {
+          flamechart: "Flame Chart",
+          flamegraph: "Flame Graph",
+          icicle: "Icicle",
+          inverted: "Inverted",
+        };
+        const METRICS = ["total", "self"];
+        const COLOR_BY = ["name", "service", "module", "delta"];
+        const COMPARE = ["auto", "off"];
+        const VALUE_KEYS = ["view", "metric", "search", "zoom", "range"];
+        const PROFILE_RE = /\.(cpuprofile|json)$/i;
+        const BINS = 200;
+        const IDLE_FRAMES = ["(idle)", "(program)"];
+        const TOP_JSON = 25;
+        const SEARCH_IDLE_MS = 500;
+        const REFRESH_MS = 40;
+        const PERSIST_MS = 300;
+
+        // ---- Options ----------------------------------------------------------------
+        const SPEC = {
+          title: { default: "Profile Flame", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          view: { default: "flamechart", ok: (v) => VIEWS.includes(v) },
+          metric: { default: "total", ok: (v) => METRICS.includes(v) },
+          focus: { default: "", ok: (v) => typeof v === "string" },
+          search: { default: "", ok: (v) => typeof v === "string" },
+          timeRange: {
+            default: [],
+            ok: (v) =>
+              Array.isArray(v) &&
+              (v.length === 0 || (v.length === 2 && v.every(Number.isFinite) && v[1] > v[0])),
+          },
+          compare: { default: "auto", ok: (v) => COMPARE.includes(v) },
+          minPx: { default: 0.5, ok: (v) => Number.isFinite(v) && v >= 0 && v <= 20 },
+          colorBy: { default: "name", ok: (v) => COLOR_BY.includes(v) },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("profile-flame: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(
+                `profile-flame: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          return out;
+        }
+        const OPTS = readOptions();
+        // A saved edit restores only when it was made with the same starting options.
+        const STATE_KEY = JSON.stringify({
+          view: OPTS.view,
+          metric: OPTS.metric,
+          compare: OPTS.compare,
+          minPx: OPTS.minPx,
+          colorBy: OPTS.colorBy,
+        });
+
+        // ---- Small helpers ----------------------------------------------------------
+        const round = (x, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
+        const fmtMs = (v) => (v >= 1000 ? `${NF.format(v / 1000)} s` : `${NF.format(v)} ms`);
+        const pct = (v) => `${NF.format(v * 100)}%`;
+        const safeName = (s) => String(s).replace(/[^\w.-]+/g, "_");
+        // file:line for a frame: the last two path segments of its script. A sampled frame with no script is a
+        // built-in ("native"); a trace span with no file shows a dash.
+        const where = (r, sampled = r.samples !== undefined) => {
+          if (!r.file) return sampled ? "native" : "—";
+          const parts = String(r.file)
+            .replace(/^[a-z]+:\/\/\/?/i, "")
+            .split(/[\\/]/)
+            .filter(Boolean);
+          const short = parts.slice(-2).join("/") || String(r.file);
+          return r.line ? `${short}:${r.line}` : short;
+        };
+        const isTyping = (el) =>
+          Boolean(el) && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+        const isProfileAsset = (a) => PROFILE_RE.test(a.name ?? "");
+        const showError = (err) => rt.reportError(err);
+        const el = (tag, props = {}, ...kids) => {
+          const node = Object.assign(document.createElement(tag), props);
+          node.append(...kids);
+          return node;
+        };
+
+        // ---- Session state ----------------------------------------------------------
+        let profiles = []; // { name, stem, file }
+        let aIndex = -1; // the profile in the canvas
+        let bIndex = -1; // the compare baseline, or -1
+        let compareOn = false;
+        let windowEnd = 0; // profile length in ms
+        let loadSeq = 0; // bumps on every successful open; keys the caches
+        let openSeq = 0; // the newest open wins
+        let booted = false;
+        let applying = false; // true while a history step or setValues writes the view
+        let prev = null; // last state seen, to name the next history step
+        let gridKey = "";
+        let gridMetric = "";
+        let gridLoaded = ""; // the gridKey whose rows the grid holds; selection syncs wait for it
+        let stacks = null;
+        let stacksKey = "";
+        let exporting = false;
+        let refreshTimer = 0;
+        let persistTimer = 0;
+        let searchTimer = 0;
+        let tree = null;
+        let density = null;
+        let grid = null;
+        let history = null;
+        let historyLink = null;
+        let restored = null;
+
+        const hasProfile = () => aIndex >= 0;
+        const canvasEl = () => document.querySelector("#canvas canvas");
+
+        // ---- View state (what history, presets and setValues hold) -----------------
+        function getState() {
+          const t = tree.get();
+          return {
+            view: t.view,
+            metric: t.metric,
+            search: t.search,
+            zoom: t.zoomPath.map((z) => z.name),
+            range: t.range ? [t.range.from, t.range.to] : null,
+          };
+        }
+        function checkValues(v) {
+          if (!isPlain(v)) throw new TypeError("profile-flame: values must be an object");
+          for (const k of Object.keys(v))
+            if (!VALUE_KEYS.includes(k))
+              throw new Error(`profile-flame: unknown value "${k}" (use ${VALUE_KEYS.join(", ")})`);
+          if (v.view !== undefined && !VIEWS.includes(v.view))
+            throw new Error(`profile-flame: view must be one of ${VIEWS.join(", ")}`);
+          if (v.metric !== undefined && !METRICS.includes(v.metric))
+            throw new Error(`profile-flame: metric must be total or self`);
+          if (v.search !== undefined && typeof v.search !== "string")
+            throw new Error("profile-flame: search must be a string");
+          if (
+            v.zoom !== undefined &&
+            !(Array.isArray(v.zoom) && v.zoom.every((x) => typeof x === "string"))
+          )
+            throw new Error("profile-flame: zoom must be an array of function names");
+          if (
+            v.range !== undefined &&
+            v.range !== null &&
+            !(
+              Array.isArray(v.range) &&
+              v.range.length === 2 &&
+              v.range.every(Number.isFinite) &&
+              v.range[1] > v.range[0]
+            )
+          )
+            throw new Error("profile-flame: range must be [fromMs, toMs] or null");
+          return v;
+        }
+        function applyState(s) {
+          applying = true;
+          try {
+            tree.set({ view: s.view, metric: s.metric, search: s.search });
+            tree.range(s.range ? s.range[0] : null, s.range ? s.range[1] : null);
+            syncBrush();
+            tree.zoomTo(null);
+            for (const name of s.zoom) {
+              const id = tree.locate(name);
+              if (id !== null) tree.zoomTo(id);
+            }
+          } finally {
+            applying = false;
+          }
+          prev = getState();
+          syncHeader();
+          scheduleRefresh();
+        }
+
+        // A user change, from the header, the canvas, the brush or the zoom path. Names one history step.
+        function noteChange() {
+          if (!booted || applying) return;
+          const next = getState();
+          const before = prev;
+          prev = next;
+          scheduleRefresh();
+          persist();
+          if (!before) return;
+          if (before.view !== next.view) commitLabel(`View ${VIEW_LABEL[next.view]}`);
+          else if (before.metric !== next.metric)
+            commitLabel(`Metric ${next.metric === "self" ? "Self" : "Total"}`);
+          else if (JSON.stringify(before.zoom) !== JSON.stringify(next.zoom))
+            commitLabel(
+              next.zoom.length ? `Zoom to ${next.zoom[next.zoom.length - 1]}` : "Fit View",
+            );
+          else if (JSON.stringify(before.range) !== JSON.stringify(next.range))
+            commitLabel(
+              next.range
+                ? `Window ${fmtMs(next.range[0])} to ${fmtMs(next.range[1])}`
+                : "Clear Window",
+            );
+          else if (before.search !== next.search) {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(
+              () => commitLabel(next.search ? `Search ${next.search}` : "Clear Search"),
+              SEARCH_IDLE_MS,
+            );
+          }
+        }
+        function commitLabel(label) {
+          clearTimeout(searchTimer);
+          historyLink.commit(label);
+        }
+
+        // ---- Chart brush ------------------------------------------------------------
+        function syncBrush() {
+          if (!hasProfile()) return;
+          const r = tree.get().range;
+          density.set({ brush: r ? { min: r.from, max: r.to } : null });
+        }
+        const densityRows = () =>
+          tree
+            .density(BINS, { exclude: IDLE_FRAMES })
+            .map((b) => ({ ms: round(b.from, 1), "busy ms": round(b.ms, 3) }));
+
+        // ---- Opening profiles -------------------------------------------------------
+        // Opens profile a in the canvas and, with compare on and b set, compares profile b against it.
+        async function openPair(a, b) {
+          const seq = ++openSeq;
+          try {
+            const info = await tree.load(profiles[a].file);
+            if (seq !== openSeq) return;
+            tree.set({ colorBy: OPTS.colorBy });
+            let compared = false;
+            if (OPTS.compare === "auto" && b >= 0 && b !== a) {
+              await tree.compare(profiles[b].file);
+              if (seq !== openSeq) return;
+              compared = true;
+            }
+            aIndex = a;
+            bIndex = b;
+            compareOn = compared;
+            windowEnd = info.end;
+            loadSeq += 1;
+            stacksKey = "";
+            gridKey = "";
+            await density.setData(densityRows());
+            if (seq !== openSeq) return;
+            syncBrush();
+            if (booted) {
+              prev = getState();
+              commitLabel(`Open ${profiles[a].name}`);
+            }
+            syncPickers();
+            syncControlsEnabled();
+            refreshAll();
+            persist();
+          } catch (err) {
+            if (seq !== openSeq) return;
+            throw err;
+          }
+        }
+        function syncPickers() {
+          $("prof-a").value = String(aIndex);
+          $("prof-b").value = String(bIndex);
+          $("prof-b-wrap").hidden = profiles.length < 2;
+        }
+        function syncControlsEnabled() {
+          const on = hasProfile();
+          $("export").disabled = !on;
+          $("send").disabled = !on;
+          $("prof-a").disabled = profiles.length === 0;
+          $("prof-b").disabled = profiles.length < 2;
+        }
+
+        // ---- Header -----------------------------------------------------------------
+        function syncHeader() {
+          if (!tree) return;
+          const t = tree.get();
+          for (const b of $("views").querySelectorAll("button"))
+            b.setAttribute("aria-pressed", String(b.dataset.view === t.view));
+          for (const b of $("metrics").querySelectorAll("button"))
+            b.setAttribute("aria-pressed", String(b.dataset.metric === t.metric));
+          const s = $("search");
+          if (s.value !== t.search) s.value = t.search;
+        }
+
+        // ---- Refresh the readouts ---------------------------------------------------
+        function scheduleRefresh() {
+          clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(refreshAll, REFRESH_MS);
+        }
+        function refreshAll() {
+          refreshTimer = 0;
+          syncHeader();
+          if (!hasProfile()) {
+            setStatus("Attach a V8 .cpuprofile, Chrome trace JSON or speedscope JSON to start");
+            return;
+          }
+          const t = tree.get();
+          const all = tree.top({ by: "self", limit: Infinity });
+          const windowSelf = all.reduce((s, r) => s + r.selfMs, 0);
+          renderWindow(t);
+          renderGrid(all, t.metric);
+          renderFrame(t, windowSelf, all);
+          renderCrumbs(t);
+          renderShare(t);
+          const parts = [`${all.length} function${all.length === 1 ? "" : "s"}`];
+          if (t.search) parts.push(`${t.matches} matching frame${t.matches === 1 ? "" : "s"}`);
+          if (t.range) parts.push("window brushed");
+          if (compareOn) parts.push(`compared with ${profiles[bIndex].name}`);
+          setStatus(parts.join(" · "));
+        }
+        function setStatus(text) {
+          $("status-main").textContent = text;
+        }
+        function renderWindow(t) {
+          $("window").textContent = t.range
+            ? `${fmtMs(t.range.from)} to ${fmtMs(t.range.to)} of ${fmtMs(windowEnd)}`
+            : `Full profile, ${fmtMs(windowEnd)}`;
+        }
+
+        // Top functions: rebuilt only when the data it reads changes, so keyboard moves never reload it.
+        function renderGrid(all, metric) {
+          const key = `${loadSeq}|${JSON.stringify(tree.get().range)}|${metric}|${compareOn}`;
+          if (key === gridKey) {
+            syncGridSelection();
+            return;
+          }
+          const metricChanged = metric !== gridMetric;
+          gridKey = key;
+          gridMetric = metric;
+          const rows = all
+            .slice()
+            .sort((a, b) => (metric === "self" ? b.selfMs - a.selfMs : b.totalMs - a.totalMs))
+            .map((r) => {
+              const row = {
+                function: r.name,
+                "file:line": where(r),
+                "self ms": round(r.selfMs),
+                "total ms": round(r.totalMs),
+                samples: r.samples ?? r.count,
+              };
+              if (compareOn) row["delta ms"] = round(r.deltaMs ?? 0);
+              return row;
+            });
+          grid
+            .load(rows)
+            .then((res) => {
+              if (!res) return;
+              gridLoaded = key;
+              if (metricChanged)
+                grid.set({ sort: { id: metric === "self" ? "self ms" : "total ms", dir: "desc" } });
+              syncGridSelection();
+            })
+            .catch(showError);
+        }
+        // The grid row for the frame selected on the canvas (or nothing). Silent, so it never echoes.
+        function syncGridSelection() {
+          if (gridLoaded !== gridKey) return;
+          const sel = tree.selection();
+          const idx = sel ? grid.view().find((i) => grid.row(i).function === sel.name) : undefined;
+          grid.select(idx === undefined ? [] : [idx]);
+        }
+
+        // Stacks in the current window, parsed from the collapsed text, with their self-time weights (ms).
+        function stackData(t) {
+          const key = `${loadSeq}|${JSON.stringify(t.range)}`;
+          if (key !== stacksKey) {
+            const text = tree.collapsed();
+            const lines = [];
+            let total = 0;
+            for (const line of text ? text.split("\n") : []) {
+              const cut = line.lastIndexOf(" ");
+              const w = Number(line.slice(cut + 1)) / 1000;
+              lines.push({ frames: line.slice(0, cut).split(";"), w });
+              total += w;
+            }
+            stacks = { lines, total };
+            stacksKey = key;
+          }
+          return stacks;
+        }
+        // Callers and callees of one function name, by the time spent through each neighbour.
+        function neighbours(name, lines) {
+          const key = name.replace(/[;\n]/g, ":");
+          const callers = new Map();
+          const callees = new Map();
+          for (const { frames, w } of lines) {
+            const i = frames.indexOf(key);
+            if (i < 0) continue;
+            if (i > 0) callers.set(frames[i - 1], (callers.get(frames[i - 1]) ?? 0) + w);
+            if (i + 1 < frames.length)
+              callees.set(frames[i + 1], (callees.get(frames[i + 1]) ?? 0) + w);
+          }
+          const ranked = (m) => [...m].sort((a, b) => b[1] - a[1]).slice(0, 12);
+          return { callers: ranked(callers), callees: ranked(callees) };
+        }
+        function renderFrame(t, windowSelf, all) {
+          const box = $("frame");
+          box.replaceChildren();
+          const sel = tree.selection();
+          if (!sel) {
+            box.append(
+              el("p", {
+                className: "muted",
+                textContent:
+                  "Click a frame to zoom into it, or pick a row in Top Functions. Backspace or the zoom path zooms out.",
+              }),
+            );
+            for (const id of ["callers", "callees"])
+              $(id).replaceChildren(
+                el("li", { className: "muted", textContent: "Select a frame first" }),
+              );
+            return;
+          }
+          const share = (v) => (windowSelf > 0 ? pct(v / windowSelf) : "0%");
+          // Time views show one span; the function's own totals (all its frames in the window) sit beside it.
+          const fn = all.find((r) => r.name === sel.name);
+          const tile = (value, label) =>
+            el(
+              "div",
+              { className: "tile" },
+              el("b", { textContent: value, title: value }),
+              el("span", { textContent: label }),
+            );
+          box.append(
+            el("p", { className: "fname", textContent: sel.name }),
+            el(
+              "div",
+              { className: "tiles" },
+              tile(fmtMs(fn ? fn.selfMs : sel.selfMs), "Self"),
+              tile(fmtMs(fn ? fn.totalMs : sel.totalMs), "Total"),
+              tile(fn ? share(fn.totalMs) : "0%", "Of Window"),
+              tile(
+                String(fn ? (fn.samples ?? fn.count) : sel.count),
+                fn && fn.samples !== undefined ? "Samples" : "Spans",
+              ),
+            ),
+            el(
+              "dl",
+              { className: "kv" },
+              el("dt", { textContent: "Location" }),
+              el("dd", { textContent: where(sel, fn ? fn.samples !== undefined : false) }),
+              el("dt", { textContent: "This frame" }),
+              el("dd", { textContent: `self ${fmtMs(sel.selfMs)} · total ${fmtMs(sel.totalMs)}` }),
+              el("dt", { textContent: "Path" }),
+              el("dd", { textContent: sel.path.join(" › ") }),
+            ),
+          );
+          const nb = neighbours(sel.name, stackData(t).lines);
+          fillList($("callers"), nb.callers);
+          fillList($("callees"), nb.callees);
+        }
+        function fillList(ul, pairs) {
+          ul.replaceChildren();
+          if (!pairs.length) {
+            ul.append(el("li", { className: "muted", textContent: "None in this window" }));
+            return;
+          }
+          const top = pairs[0][1] || 1;
+          for (const [name, w] of pairs) {
+            const li = el(
+              "li",
+              {},
+              el("button", { type: "button", textContent: name, title: name }),
+              el("span", { className: "ms", textContent: fmtMs(w) }),
+              el("div", { className: "mini" }),
+            );
+            li.querySelector("button").addEventListener("click", () => selectByName(name));
+            li.querySelector(".mini").style.width = `${Math.max(3, (w / top) * 100)}%`;
+            ul.append(li);
+          }
+        }
+        function selectByName(name) {
+          const id = tree.locate(name);
+          if (id === null) return;
+          tree.set({ selected: id });
+          syncGridSelection();
+          scheduleRefresh();
+        }
+        function renderCrumbs(t) {
+          const nav = $("crumbs");
+          nav.replaceChildren();
+          const items = [{ id: null, name: "All" }, ...t.zoomPath];
+          items.forEach((it, i) => {
+            const last = i === items.length - 1;
+            const b = el("button", {
+              type: "button",
+              textContent: it.name,
+              title: last ? "Current zoom" : `Zoom out to ${it.name}`,
+            });
+            if (last) b.setAttribute("aria-current", "location");
+            else b.addEventListener("click", () => tree.zoomTo(it.id));
+            nav.append(b);
+            if (!last) nav.append(el("span", { className: "muted", textContent: "›" }));
+          });
+        }
+        function renderShare(t) {
+          const q = t.search.trim().toLowerCase();
+          if (!q) {
+            $("share").textContent = "";
+            return;
+          }
+          const st = stackData(t);
+          let hit = 0;
+          for (const l of st.lines)
+            if (l.frames.some((f) => f.toLowerCase().includes(q))) hit += l.w;
+          const share = st.total > 0 ? pct(hit / st.total) : "0%";
+          $("share").textContent =
+            `${t.matches} match${t.matches === 1 ? "" : "es"} · ${share} of time`;
+        }
+
+        // ---- Export and send --------------------------------------------------------
+        // Export: the canvas as a PNG, attached to the chat and downloaded.
+        async function exportAll() {
+          if (!hasProfile())
+            throw new Error("profile-flame: no profile is open, so there is nothing to export");
+          if (exporting) throw new Error("profile-flame: an export is already running");
+          exporting = true;
+          try {
+            const blob = await tree.exportPng({ scale: 2 });
+            const file = new File(
+              [blob],
+              `${safeName(profiles[aIndex].stem)}-${tree.get().view}.png`,
+              { type: "image/png" },
+            );
+            await ws.attach(file);
+            await ws.download(file, file.name);
+            return [file];
+          } finally {
+            exporting = false;
+          }
+        }
+        // Send: hotpath.json (the selected frame, the top functions, the compare) and collapsed.txt
+        // (folded stacks of the selected subtree) go to the chat for the agent to read and grep.
+        async function sendToChat() {
+          if (!hasProfile())
+            throw new Error("profile-flame: no profile is open, so there is nothing to send");
+          const t = tree.get();
+          const sel = tree.selection();
+          const all = tree.top({ by: "self", limit: Infinity });
+          const windowSelf = all.reduce((s, r) => s + r.selfMs, 0);
+          const hot = {
+            profile: profiles[aIndex].name,
+            view: t.view,
+            selectedPath: sel ? sel.path : [],
+            selfMs: round(sel ? sel.selfMs : windowSelf),
+            totalMs: round(sel ? sel.totalMs : windowSelf),
+            topSelf: all
+              .slice()
+              .sort((a, b) => b.selfMs - a.selfMs)
+              .slice(0, TOP_JSON)
+              .map((r) => ({
+                name: r.name,
+                file: r.file ? where(r) : null,
+                selfMs: round(r.selfMs),
+              })),
+          };
+          if (t.range) hot.range = [round(t.range.from), round(t.range.to)];
+          if (compareOn)
+            hot.compare = all
+              .slice()
+              .sort((a, b) => Math.abs(b.deltaMs ?? 0) - Math.abs(a.deltaMs ?? 0))
+              .slice(0, TOP_JSON)
+              .map((r) => ({ name: r.name, deltaMs: round(r.deltaMs ?? 0) }));
+          const hotFile = new File([JSON.stringify(hot, null, 2)], "hotpath.json", {
+            type: "application/json",
+          });
+          const collFile = new File([tree.collapsed(sel ? sel.id : null)], "collapsed.txt", {
+            type: "text/plain",
+          });
+          await ws.attach(hotFile);
+          await ws.attach(collFile);
+          return [hotFile, collFile];
+        }
+
+        // ---- Persist ----------------------------------------------------------------
+        function persistState() {
+          return {
+            v: 1,
+            key: STATE_KEY,
+            a: hasProfile() ? profiles[aIndex].name : null,
+            b: bIndex >= 0 ? profiles[bIndex].name : null,
+            history: history.get(),
+            controls: rt.state(),
+          };
+        }
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => ws.setState(persistState()), PERSIST_MS);
+        }
+
+        // ---- Runtime (window.t3template) --------------------------------------------
+        const rt = t3kit.templateRuntime.create({
+          id: "profile-flame",
+          pipeline: "data",
+          // 'top': before History. 'bottom': after History.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            const panels = $("panels");
+            if (position === "top")
+              panels.insertBefore(section, panels.querySelector('[data-panel="history"]'));
+            else panels.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getState(),
+          setValues(partial, label) {
+            applyState({ ...getState(), ...checkValues(partial) });
+            commitLabel(label ?? "Set View");
+            return getState();
+          },
+          addPreset: (name, values) =>
+            history.savePreset(name, { ...getState(), ...checkValues(values) }),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => exportAll(),
+          reservedKeys: [
+            "/",
+            "e",
+            "s",
+            "m",
+            "v",
+            "f",
+            "backspace",
+            "escape",
+            "enter",
+            "mod+z",
+            "mod+shift+z",
+          ],
+          onBoltOnChange() {
+            scheduleRefresh();
+            persist();
+          },
+        });
+
+        // ---- Build the page ---------------------------------------------------------
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+
+        tree = t3kit.spantree.create($("canvas"), {
+          view: OPTS.view,
+          metric: OPTS.metric,
+          colorBy: OPTS.colorBy,
+          minPx: OPTS.minPx,
+        });
+        density = t3kit.chart.create($("density"), {
+          type: "area",
+          x: "ms",
+          y: "busy ms",
+          aggregate: "none",
+          legend: false,
+          axes: true,
+          tooltips: true,
+        });
+        grid = t3kit.datagrid.create($("grid-root"), {
+          rowHeight: 24,
+          selection: "multi",
+          toolbar: false,
+          stats: false,
+        });
+        tree.on("change", noteChange);
+        tree.on("select", scheduleRefresh);
+        // The link (created at boot) applies the brush to the tree first; this step then names it.
+        density.on("filter", () => queueMicrotask(noteChange));
+        grid.on("select", scheduleRefresh);
+
+        for (const b of $("views").querySelectorAll("button"))
+          b.addEventListener("click", () => {
+            if (!booted) return;
+            tree.set({ view: b.dataset.view });
+            noteChange();
+            syncHeader();
+          });
+        for (const b of $("metrics").querySelectorAll("button"))
+          b.addEventListener("click", () => {
+            if (!booted) return;
+            tree.set({ metric: b.dataset.metric });
+            noteChange();
+            syncHeader();
+          });
+        $("search").addEventListener("input", () => {
+          if (!booted) return;
+          tree.set({ search: $("search").value });
+          noteChange();
+        });
+        $("prof-a").addEventListener("change", () => {
+          openPair(Number($("prof-a").value), bIndex).catch(showError);
+        });
+        $("prof-b").addEventListener("change", () => {
+          openPair(aIndex, Number($("prof-b").value)).catch(showError);
+        });
+        $("export").addEventListener("click", () => exportAll().catch(showError));
+        $("send").addEventListener("click", () => sendToChat().catch(showError));
+
+        // A click on a frame zooms into it. The canvas selects on pointer up first; a press that moved is a pan.
+        let press = null;
+        $("canvas").addEventListener("pointerdown", (e) => {
+          press = e.target === canvasEl() ? { x: e.clientX, y: e.clientY } : null;
+        });
+        $("canvas").addEventListener("pointerup", (e) => {
+          const p = press;
+          press = null;
+          if (!p || !booted || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 3) return;
+          const sel = tree.selection();
+          if (sel && tree.get().zoom.id !== sel.id) tree.zoomTo(sel.id);
+        });
+
+        // v cycles the four profile views everywhere (the canvas alone would also cycle into the trace waterfall).
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (
+              e.key !== "v" ||
+              !booted ||
+              isTyping(e.target) ||
+              e.metaKey ||
+              e.ctrlKey ||
+              e.altKey
+            )
+              return;
+            if (
+              e.target instanceof Element &&
+              e.target.closest("#grid-root, #history, [data-t3-composer]")
+            )
+              return;
+            e.preventDefault();
+            e.stopPropagation();
+            tree.set({ view: VIEWS[(VIEWS.indexOf(tree.get().view) + 1) % VIEWS.length] });
+            noteChange();
+            syncHeader();
+          },
+          true,
+        );
+
+        // Keys the canvas does not own. The canvas handles arrows, Enter, Backspace, / and f itself.
+        document.addEventListener("keydown", (e) => {
+          if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+          // The grid, history and composer keep their own keys.
+          if (
+            e.target instanceof Element &&
+            e.target.closest("#grid-root, #history, [data-t3-composer]")
+          )
+            return;
+          const onCanvas = e.target === canvasEl();
+          const k = e.key;
+          if (k === "/") {
+            e.preventDefault();
+            $("search").focus();
+            $("search").select();
+          } else if (k === "e") {
+            e.preventDefault();
+            exportAll().catch(showError);
+          } else if (k === "s") {
+            e.preventDefault();
+            sendToChat().catch(showError);
+          } else if (k === "m" && booted) {
+            e.preventDefault();
+            tree.set({ metric: tree.get().metric === "self" ? "total" : "self" });
+            noteChange();
+            syncHeader();
+          } else if (!onCanvas && (k === "Backspace" || k === "Escape") && booted) {
+            e.preventDefault();
+            const z = tree.get().zoomPath;
+            tree.zoomTo(z.length >= 2 ? z[z.length - 2].id : null);
+          } else if (!onCanvas && k === "f" && booted) {
+            e.preventDefault();
+            tree.zoomTo(null);
+          }
+        });
+
+        // ---- Boot -------------------------------------------------------------------
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          restored =
+            isPlain(saved) && saved.v === 1 && saved.key === STATE_KEY && isPlain(saved.history)
+              ? saved
+              : null;
+          profiles = (ready.assets ?? []).filter(isProfileAsset).map((a) => ({
+            name: a.name,
+            stem: a.name.replace(/\.(speedscope\.)?(cpuprofile|json)$/i, ""),
+            file: a.file,
+          }));
+
+          const picker = (sel, withNone) => {
+            sel.replaceChildren();
+            if (withNone) sel.append(new Option("Compare off", "-1"));
+            profiles.forEach((p, i) => sel.append(new Option(p.name, String(i))));
+          };
+          picker($("prof-a"), false);
+          picker($("prof-b"), true);
+
+          if (profiles.length) {
+            let a = restored ? profiles.findIndex((p) => p.name === restored.a) : -1;
+            if (a < 0) a = 0;
+            let b = -1;
+            if (profiles.length > 1) {
+              b = restored && restored.b ? profiles.findIndex((p) => p.name === restored.b) : -1;
+              if (b < 0 || b === a) b = a === 0 ? 1 : 0;
+            }
+            await openPair(a, b);
+          } else {
+            $("grid-head").textContent = "Top functions · attach a profile";
+          }
+          syncPickers();
+          syncControlsEnabled();
+
+          // Starting options, applied before the history records its first step.
+          let focusId = null;
+          if (hasProfile()) {
+            tree.set({ search: OPTS.search });
+            if (OPTS.timeRange.length) tree.range(OPTS.timeRange[0], OPTS.timeRange[1]);
+            if (OPTS.focus) {
+              const id = tree.locate(OPTS.focus);
+              if (id === null) setStatus(`No frame named ${OPTS.focus} in this profile`);
+              else {
+                tree.zoomTo(id);
+                focusId = id;
+              }
+            }
+            syncBrush();
+          }
+
+          history = t3kit.history.create($("history"), {
+            title: "Steps",
+            label: "Open",
+            state: getState(),
+            presetPlaceholder: "Name this view",
+          });
+          if (restored) history.set(restored.history);
+          historyLink = rt.linkHistory(history, getState, applyState, { idleMs: 300 });
+          prev = getState();
+          history.on("change", () => {
+            persist();
+            rt.emitChange();
+            scheduleRefresh();
+          });
+
+          if (hasProfile()) {
+            t3kit.links.chartRange(density, tree);
+            t3kit.links.gridSpans(grid, tree, { column: "function" });
+            // The link starts from the (empty) grid selection, so the focus frame is selected after it.
+            // The grid row follows once the table has loaded (renderGrid).
+            if (focusId !== null) tree.set({ selected: focusId });
+          }
+
+          rt.publish({
+            instances: { spantree: tree, density, grid, history },
+            saved: restored ? restored.controls : undefined,
+          });
+          booted = true;
+          persist();
+          refreshAll();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

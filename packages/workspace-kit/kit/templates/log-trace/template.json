@@ -1,0 +1,125 @@
+{
+  "id": "log-trace",
+  "title": "Log Trace",
+  "summary": "Log and trace explorer for JSON lines, logfmt or timestamp-prefixed logs (.jsonl, .ndjson, .log, .txt) merged on time, with span records or trace .json files feeding a waterfall: a query bar (text, field:value, -field:value, /regex/, latency_ms:>=200) with a live count, facets that include on click and exclude on Alt-click, an event-rate histogram stacked by level whose brush narrows everything, a virtualized event table with a detail drawer, the focused event's trace waterfall with its critical path, message patterns, pins and history. Send attaches findings.json and window.jsonl; Export also downloads trace-summary.json. Pick it for any question about what happened in a log window and which trace it belongs to.",
+  "kit": ["datagrid", "chart", "spantree", "history", "links", "template-runtime"],
+  "chrome": false,
+  "verifyAssets": "service.jsonl",
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Log Trace",
+      "description": "Header title."
+    },
+    "query": {
+      "type": "string",
+      "default": "",
+      "description": "Starting query: free text, field:value, -field:value, /regex/ (case-insensitive unless flagged), quoted \"phrases\", and numeric field:>=N, field:<N or field:N..M."
+    },
+    "timeRange": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "Starting brush, { from, to } as ISO times. Null = all time. Brush the histogram to change it."
+    },
+    "facets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8,
+      "default": ["level", "service", "route", "status"],
+      "description": "Columns for the left facet rail (up to 8), top values with counts. Click includes, Alt-click excludes; a column missing from the logs logs a warning."
+    },
+    "timeField": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Time column. Null = auto-detect ts, time, timestamp or @timestamp. A name that is not a column fails the load."
+    },
+    "traceField": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Trace id column. Null = auto-detect trace_id, traceId or trace."
+    },
+    "levelField": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Level column. Null = auto-detect level, severity, lvl or loglevel. Levels are compared in lower case."
+    },
+    "bins": {
+      "type": "string",
+      "enum": ["auto", "second", "minute", "hour"],
+      "default": "auto",
+      "description": "Histogram bucket unit: auto is the finest of second, minute, hour or day that keeps about 100 buckets over the data; second, minute or hour are exact."
+    },
+    "groupBy": {
+      "type": "string",
+      "default": "pattern",
+      "description": "What the Patterns panel groups by: 'pattern' (messages folded into templates: ids, hex and numbers become placeholders) or any column, such as service or route."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Incident 14:21",
+      "timeRange": {
+        "from": "2026-10-13T14:21:00.000Z",
+        "to": "2026-10-13T14:24:30.000Z"
+      },
+      "query": "status:504",
+      "bins": "minute"
+    },
+    {
+      "title": "Slow Pool Waits",
+      "query": "/exhausted|timeout/",
+      "groupBy": "service",
+      "facets": ["service", "level", "route"]
+    },
+    {
+      "title": "Checkout Trace",
+      "query": "trace_id:7f3a0000000000000000000000000001"
+    },
+    {
+      "title": "Warnings by Second",
+      "query": "-level:debug -level:info",
+      "bins": "second",
+      "groupBy": "route",
+      "facets": ["level", "service", "status"]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code) after the logs have loaded, the histogram and grid exist and the first view has rendered. Drive the view with setValues({ query, timeRange, include, exclude, pins, columnFilters }), a strict object (one undo step per call, labelled by the second argument). Add controls, panels, toolbar buttons and presets; every control edit is one undo step and re-runs its hooks, and undo, redo and presets restore controls with the view. The query language is the same as the query bar, so a bolt-on writes query text (for example latency_ms:>=200) rather than hooking rows. This is a data template (pipeline 'data'): image, EDL and audio hooks throw. Errors log '[t3template] customScript error: ...' and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. onChange runs on user edits only, not on load. Every control edit is one undo step.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes; the same title returns the same panel). 'top' = first in the inspector below the trace waterfall, above Patterns; 'bottom' = after History, above the composer slot.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'shift+r' (any key not in reservedShortcuts), title? }) -> button in the header, left of Send.   refresh() re-renders the view after silent changes to instances.",
+      "export() -> Promise<{ files: [{ name, type, size }] }>: the Export button. findings.json { query, timeRange, include, exclude, matchCount, totalCount, topPatterns: [{ pattern, count, firstTs, lastTs }] (top 20), pinned: [{ ts, raw }], window: { lines, total, truncated, cap: 5000 }, columnFilters?, trace?: { traceId, durationMs, criticalPath: [{ service, name, durMs }] } }, window.jsonl (the exact raw lines of the view in time order, at most 5,000) and trace-summary.json (traceId null when no trace is loaded); each is attached to the chat and downloaded. Throws on failure. Send (s) attaches findings.json and window.jsonl only.",
+      "getValues() -> { query, timeRange: { from, to } | null (ISO), include: { column: [values] }, exclude: { column: [values] }, pins: [{ ts, raw }], columnFilters: { column: text } (the grid header filters), controls }.   setValues({ query?, timeRange?, include?, exclude?, pins?, columnFilters? }, label?) -> Promise<values>: strict, so unknown keys throw; each key replaces. One undo step.",
+      "addPreset(name, { query?, timeRange?, include?, exclude?, pins?, columnFilters?, controls? }) / applyPreset(name): a preset is a whole view plus the bolt-on control values.   on('change', cb(values)) -> off.",
+      "instances: { grid (t3kit.datagrid holding every event: grid.raw(i) is the exact line, grid.view() the rows in view), histogram (t3kit.chart, histogram of ts stacked by level), spantree (t3kit.spantree: the focused event's trace), history (t3kit.history) }. Set the view through setValues, not grid.restrict or histogram.set, which the next refresh overwrites."
+    ],
+    "reservedShortcuts": [
+      "/",
+      "[",
+      "]",
+      "j",
+      "k",
+      "p",
+      "t",
+      "e",
+      "s",
+      "escape",
+      "mod+z",
+      "mod+shift+z"
+    ],
+    "example": "t3template.addControl({ id: 'minMs', label: 'Min latency', type: 'slider', min: 0, max: 1000, step: 50, default: 0, panel: 'Latency', onChange(v, t) { const q = t.getValues().query.replace(/\\s*latency_ms:>=\\d+/g, '').trim(); t.setValues({ query: v > 0 ? `${q} latency_ms:>=${v}`.trim() : q }, `Min latency ${v} ms`); } });\nt3template.addToolbarButton('Slow Requests', (t) => t.setValues({ query: 'latency_ms:>=1000' }, 'Slow Requests'), { shortcut: 'shift+r' });\nt3template.addPreset('Incident 14:21', { timeRange: { from: '2026-10-13T14:21:00.000Z', to: '2026-10-13T14:24:30.000Z' }, query: 'status:504' });\nt3template.applyPreset('Incident 14:21');"
+  }
+}

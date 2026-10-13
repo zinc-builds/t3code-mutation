@@ -4,16 +4,18 @@
  * create(container, options?) -> instance
  *   options.rowHeight  integer 20..48, default 28        options.selection  'multi' | 'single' | 'none' (default multi)
  *   options.toolbar    status, add-column field, Columns menu (default true)    options.stats  stats footer (default true)
- * instance.load(source) -> Promise<{ rows, columns, dropped } | null>   null when a newer load() superseded it
- *   source: Blob | File | 'blob:'/'data:' URL | CSV or JSON text | object[]. Clears the selection. Keeps layout, sort,
- *   filters and computed columns that still resolve; dropped = computed ids that no longer do.
+ * instance.load(source, { format = 'auto', mergeOn = null }?) -> Promise<{ rows, columns, dropped } | null>
+ *   null when superseded. source: Blob | File | blob:/data: URL | CSV, JSON or log text | object[] | list (merged, sorted by mergeOn).
+ *   format: auto | csv | json | jsonl | logfmt | lines. Log lines: jsonl object per line; logfmt key=value; lines = [ts] [LEVEL] msg.
+ *   Log text parses in 20k-line chunks. Clears selection and restriction; keeps layout, sort, filters.
+ * instance.raw(index) -> string | null (log rows; null for CSV/JSON)   instance.column(id) -> string[] source cell text
+ * instance.restrict(rows | null)   limit the view to these source rows (ascending); null lifts it. No event.
  * instance.get() -> { sort, filters, columns }
  *   sort:    { id, dir: 'asc' | 'desc' } | null   strings sort locale- and digit-aware; blanks always last
  *   filters: { [id]: text }  number/date: '5', '>5', '<=5', '!=0', '2..9', '..9'; dates take ISO year, month or day
  *            ('2026-05', '2026-01..2026-06-15'). string: 'ber' (contains, any case), '=Berlin' exact, '!=Berlin'.
  *   columns: [{ id, type, width, hidden, expr? }] in display order. type is read-only; expr marks a computed column.
- * instance.set(partial)  keys sort, filters, columns; each replaces. No events. Bad input throws.
- *   Columns left out of the list are appended visible.
+ * instance.set(partial)  keys sort, filters, columns; each replaces. No events. Bad input throws. Omitted columns append.
  * instance.addColumn({ id, expr, width?, after? }) -> type    computed column, inserted after column `after` or last
  * instance.removeColumn(id)                                    computed columns only. Neither emits events.
  *   expr: column ids (bare when word-like, else [any name]), numbers, 'text', true/false, + - * / % < <= > >= == !=
@@ -24,11 +26,10 @@
  *   source rows (ascending) that filter object keeps, the grid unchanged (e.g. every filter but one, for linked charts)
  * instance.stats() -> { rows, total, columns: { [id]: stats } }   over filtered rows. number {count, empty, min, max,
  *   sum, mean}; date {count, empty, min, max} (ms); string {count, empty, distinct, top}
- * instance.on(event, cb) -> unsubscribe
+ * instance.on(event, cb) -> unsubscribe   instance.destroy()
  *   'change'  user changed sort, filters or columns; payload get()
  *   'filter'  user changed filters; payload { filters, rows } (rows = matching count)
  *   'select'  user changed the selection; payload number[] (source row indices)
- * instance.destroy()
  * Keys: arrows, PageUp/Down, Home/End move; Space toggles; Shift extends; Ctrl/Cmd+A selects all; Esc clears.
  *   Header: Enter sorts, Alt+Left/Right moves the column. Drag a header to reorder, its right edge to resize.
  * Example:
@@ -36,7 +37,6 @@
  *   await g.load(csvBlob);                                     // Blob from t3.workspace.assets()
  *   g.addColumn({ id: 'kmh', expr: 'distance_km / duration_min * 60' });
  *   g.set({ sort: { id: 'kmh', dir: 'desc' }, filters: { city: 'ber', started_at: '2026-06..2026-08' } });
- *   g.on('select', (rows) => console.log(rows.map((i) => g.row(i))));
  */
 (function () {
   const t3kit = (window.t3kit = window.t3kit || {});
@@ -249,21 +249,254 @@
     return { names, rows };
   }
 
-  async function readTable(source) {
-    if (Array.isArray(source)) return tableFromJSON(source);
-    let text;
-    if (source instanceof Blob) text = await source.text();
-    else if (typeof source === "string" && /^(blob|data):/.test(source))
-      text = await (await fetch(source)).text();
-    else if (typeof source === "string") text = source;
-    else
+  // ---- Log formats: JSON lines, logfmt and timestamp-prefixed lines, parsed in chunks ------------------------
+  const LOG_CHUNK = 20000;
+  const SNIFF_BYTES = 65536;
+  const FORMATS = ["auto", "csv", "json", "jsonl", "logfmt", "lines"];
+  const LOG_TS_RE =
+    /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)\s+/;
+  const LOG_LEVEL_RE =
+    /^[[(]?(TRACE|DEBUG|INFO|NOTICE|WARN(?:ING)?|ERROR|ERR|FATAL|CRITICAL|CRIT)[\])]?(?=[\s:|]|$)/i;
+  const LEVEL_ALIAS = { WARNING: "WARN", ERR: "ERROR", CRITICAL: "FATAL", CRIT: "FATAL" };
+  const PAIR_SRC = '([A-Za-z_][\\w.@-]*)=("(?:[^"\\\\]|\\\\.)*"|[^\\s"]*)';
+  const yieldNow = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  function flatRecord(obj) {
+    const out = {};
+    for (const key of Object.keys(obj)) {
+      const v = obj[key];
+      out[key] =
+        v === undefined || v === null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    }
+    return out;
+  }
+
+  function parseJsonlLine(line, lineNo) {
+    let obj;
+    try {
+      obj = JSON.parse(line);
+    } catch (err) {
+      throw new SyntaxError(`datagrid: jsonl line ${lineNo} is not valid JSON (${err.message})`);
+    }
+    if (obj === null || typeof obj !== "object" || Array.isArray(obj))
+      throw new TypeError(`datagrid: jsonl line ${lineNo} is not a JSON object`);
+    return flatRecord(obj);
+  }
+
+  function parseLogfmtLine(line) {
+    const rec = {};
+    for (const m of line.matchAll(new RegExp(PAIR_SRC, "g"))) {
+      const v = m[2];
+      rec[m[1]] = v.length >= 2 && v[0] === '"' ? v.slice(1, -1).replace(/\\(.)/g, "$1") : v;
+    }
+    return rec;
+  }
+
+  // ts, level, msg first, then key=value pairs found in the message (they never overwrite those three).
+  function parseLineRecord(line) {
+    let rest = line;
+    let ts = "";
+    const tm = LOG_TS_RE.exec(line);
+    if (tm) {
+      ts = tm[1];
+      rest = line.slice(tm[0].length);
+    }
+    let level = "";
+    const lm = LOG_LEVEL_RE.exec(rest);
+    if (lm) {
+      const word = lm[1].toUpperCase();
+      level = LEVEL_ALIAS[word] ?? word;
+      rest = rest.slice(lm[0].length);
+    }
+    const msg = rest.replace(/^[\s:|-]+/, "").trim();
+    const rec = { ts, level, msg };
+    for (const m of msg.matchAll(new RegExp(PAIR_SRC, "g"))) {
+      if (!(m[1] in rec))
+        rec[m[1]] = m[2].length >= 2 && m[2][0] === '"' ? m[2].slice(1, -1) : m[2];
+    }
+    return rec;
+  }
+
+  function countPairs(line) {
+    let n = 0;
+    for (const _ of line.matchAll(new RegExp(PAIR_SRC, "g"))) n++;
+    return n;
+  }
+
+  // Decides the format from the first lines of a source. Plain text only; CSV is the fallback.
+  function sniffFormat(head) {
+    const lines = head
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .slice(0, 50);
+    if (lines.length === 0) return "csv";
+    const first = lines[0];
+    if (first.startsWith("[")) return "json";
+    if (first.startsWith("{")) {
+      try {
+        JSON.parse(first);
+        return "jsonl";
+      } catch (err) {
+        return "json";
+      }
+    }
+    const pairs = lines.filter((l) => countPairs(l) >= 2).length;
+    if (pairs >= lines.length * 0.8) return "logfmt";
+    const stamped = lines.filter((l) => LOG_TS_RE.test(l)).length;
+    const bare = lines.filter((l) => !l.includes(",")).length;
+    if (stamped >= lines.length * 0.8 || bare >= lines.length * 0.8) return "lines";
+    return "csv";
+  }
+
+  // Blob text in complete-line blocks, read as a stream so a large log never exists whole as one string.
+  async function* lineBlocks(blob) {
+    const reader = blob.stream().getReader();
+    const decoder = new TextDecoder();
+    let carry = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      carry += decoder.decode(value, { stream: true });
+      const cut = carry.lastIndexOf("\n");
+      if (cut >= 0) {
+        yield carry.slice(0, cut);
+        carry = carry.slice(cut + 1);
+      }
+    }
+    carry += decoder.decode();
+    if (carry) yield carry;
+  }
+
+  async function parseLogBlocks(blocks, kind) {
+    const records = [];
+    const raw = [];
+    let lineNo = 0;
+    for await (const block of blocks) {
+      for (const piece of block.split("\n")) {
+        lineNo++;
+        const line = piece.replace(/\r$/, "").trim();
+        if (line === "") continue;
+        raw.push(line);
+        records.push(
+          kind === "jsonl"
+            ? parseJsonlLine(line, lineNo)
+            : kind === "logfmt"
+              ? parseLogfmtLine(line)
+              : parseLineRecord(line),
+        );
+        if (records.length % LOG_CHUNK === 0) await yieldNow();
+      }
+    }
+    const names = [];
+    const seen = new Set();
+    for (const rec of records) {
+      for (const key of Object.keys(rec)) {
+        if (!seen.has(key)) {
+          seen.add(key);
+          names.push(key);
+        }
+      }
+    }
+    const rows = records.map((rec) => names.map((key) => rec[key] ?? ""));
+    return { names, rows, raw };
+  }
+
+  async function blobOf(source) {
+    if (source instanceof Blob) return source;
+    if (typeof source === "string" && /^(blob|data):/.test(source))
+      return (await fetch(source)).blob();
+    return null;
+  }
+
+  // One source to a table: { names, rows, raw }. raw is the array of exact lines for log formats, else null.
+  async function parseSource(source, format) {
+    if (Array.isArray(source)) return { ...tableFromJSON(source), raw: null };
+    const blob = await blobOf(source);
+    if (blob === null && typeof source !== "string")
       throw new TypeError(
-        "datagrid: load() takes a Blob, a blob:/data: URL, CSV or JSON text, or an array of objects",
+        "datagrid: load() takes a Blob, a blob:/data: URL, CSV, JSON or log text, an array of objects, or a list of those",
       );
-    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-    return /^\s*[[{]/.test(text.slice(0, 256))
-      ? tableFromJSON(JSON.parse(text))
-      : tableFromCSV(text);
+    let text = blob === null ? source : null;
+    if (text !== null && text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    let kind = format;
+    if (kind === "auto") {
+      const headText =
+        blob === null ? source.slice(0, SNIFF_BYTES) : await blob.slice(0, SNIFF_BYTES).text();
+      kind = sniffFormat(headText.charCodeAt(0) === 0xfeff ? headText.slice(1) : headText);
+    }
+    if (kind === "csv") {
+      const body = blob === null ? text : await blob.text();
+      return { ...tableFromCSV(body.replace(/^\uFEFF/, "")), raw: null };
+    }
+    if (kind === "json") {
+      const body = blob === null ? text : await blob.text();
+      return { ...tableFromJSON(JSON.parse(body.replace(/^﻿/, ""))), raw: null };
+    }
+    const blocks =
+      blob === null
+        ? (async function* () {
+            yield text;
+          })()
+        : lineBlocks(blob);
+    return parseLogBlocks(blocks, kind);
+  }
+
+  // Several sources become one table: the union of their columns, rows in source order, or sorted by mergeOn.
+  async function mergeTables(tables, mergeOn) {
+    const names = [];
+    const seen = new Set();
+    for (const t of tables)
+      for (const name of t.names)
+        if (!seen.has(name)) {
+          seen.add(name);
+          names.push(name);
+        }
+    if (mergeOn !== null && !names.includes(mergeOn))
+      throw new Error(`datagrid: merge column "${mergeOn}" is in none of the sources`);
+    const rows = [];
+    const raw = tables.every((t) => t.raw) ? [] : null;
+    const key = [];
+    const mergeAt = mergeOn === null ? -1 : names.indexOf(mergeOn);
+    for (const t of tables) {
+      const at = t.names.map((name) => names.indexOf(name));
+      // A row with no merge key (a stack-trace continuation line) keeps the key of the row before it in its source.
+      let carry = Infinity;
+      for (let r = 0; r < t.rows.length; r++) {
+        const row = new Array(names.length).fill("");
+        for (let c = 0; c < at.length; c++) row[at[c]] = t.rows[r][c];
+        rows.push(row);
+        if (raw) raw.push(t.raw[r]);
+        if (mergeAt >= 0) {
+          const v = row[mergeAt];
+          const k = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : parseDate(v);
+          if (k === k && v !== "") carry = k;
+          key.push(carry);
+        }
+      }
+    }
+    if (mergeOn === null) return { names, rows, raw };
+    const order = rows.map((_, i) => i).sort((a, b) => key[a] - key[b] || a - b);
+    return {
+      names,
+      rows: order.map((i) => rows[i]),
+      raw: raw ? order.map((i) => raw[i]) : null,
+    };
+  }
+
+  async function readTable(source, { format, mergeOn }) {
+    if (
+      Array.isArray(source) &&
+      source.length > 0 &&
+      source.every((s) => s instanceof Blob || typeof s === "string")
+    ) {
+      const tables = [];
+      for (const item of source) tables.push(await parseSource(item, format));
+      return mergeTables(tables, mergeOn);
+    }
+    const table = await parseSource(source, format);
+    if (mergeOn === null) return table;
+    return mergeTables([table], mergeOn);
   }
 
   // ---- Typed source -----------------------------------------------------------------------------------------
@@ -322,7 +555,7 @@
       byId.set(id, col);
       return col;
     });
-    return { rows: n, cols, byId };
+    return { rows: n, cols, byId, raw: null };
   }
 
   // ---- Expression language (computed columns) --------------------------------------------------------------
@@ -919,6 +1152,7 @@
         rowRaf: 0,
         filterTimer: 0,
         loadToken: 0,
+        restrict: null,
         resize: null,
         reorder: null,
         skipClick: false,
@@ -958,7 +1192,7 @@
       // ---- View pipeline -----------------------------------------------------------------------------------
 
       // Source rows that pass every filter, ascending; ids whose text does not parse go into `invalid` (then none pass).
-      function matchRows(filters, invalid) {
+      function matchRows(filters, invalid, restricted = true) {
         const tests = [];
         for (const [id, text] of Object.entries(filters)) {
           const test = predicate(colOf(id), text);
@@ -968,6 +1202,7 @@
         const order = [];
         if (invalid.size === 0) {
           for (let r = 0; r < S.src.rows; r++) {
+            if (restricted && S.restrict !== null && S.restrict[r] === 0) continue;
             let ok = true;
             for (let t = 0; t < tests.length; t++) {
               if (!tests[t](r)) {
@@ -1560,18 +1795,25 @@
       // ---- Instance ----------------------------------------------------------------------------------------
 
       const instance = {
-        async load(source) {
+        async load(source, options = {}) {
+          const format = options.format ?? "auto";
+          const mergeOn = options.mergeOn ?? null;
+          if (!FORMATS.includes(format))
+            throw new RangeError(`datagrid: format must be one of ${FORMATS.join(", ")}`);
+          if (mergeOn !== null && typeof mergeOn !== "string")
+            throw new TypeError("datagrid: mergeOn must be a column id or null");
           const token = ++S.loadToken;
           status.textContent = "Loading…";
           let table;
           try {
-            table = await readTable(source);
+            table = await readTable(source, { format, mergeOn });
           } catch (err) {
             if (token === S.loadToken) renderStatus();
             throw err;
           }
           if (token !== S.loadToken || S.destroyed) return null;
           const src = buildSource(table);
+          src.raw = table.raw ?? null;
           const prev = S.spec;
           const { kept, dropped } = keepResolvable(prev.columns, src);
           const ids = new Set(kept.map((c) => c.id));
@@ -1583,6 +1825,7 @@
           };
           checkValue(next);
           S.src = src;
+          S.restrict = null;
           S.computed = r.computed;
           S.spec = next;
           S.sel = new Set();
@@ -1693,6 +1936,37 @@
           return S.view.slice();
         },
 
+        column(id) {
+          requireData();
+          const col = S.src.byId.get(id);
+          if (!col) throw new Error(`datagrid: no source column "${id}"`);
+          return col.str.slice();
+        },
+
+        raw(index) {
+          requireData();
+          if (!Number.isInteger(index) || index < 0 || index >= S.src.rows)
+            throw new RangeError(`datagrid: raw() row ${index} is out of range`);
+          return S.src.raw ? S.src.raw[index] : null;
+        },
+
+        restrict(rows) {
+          requireData();
+          if (rows === null) S.restrict = null;
+          else {
+            if (!Array.isArray(rows) && !(rows instanceof Uint32Array))
+              throw new TypeError("datagrid: restrict() takes row indices or null");
+            const mask = new Uint8Array(S.src.rows);
+            for (const r of rows) {
+              if (!Number.isInteger(r) || r < 0 || r >= S.src.rows)
+                throw new RangeError(`datagrid: restrict() row ${r} is out of range`);
+              mask[r] = 1;
+            }
+            S.restrict = mask;
+          }
+          refresh({ view: true });
+        },
+
         match(filters) {
           requireData();
           if (!filters || typeof filters !== "object" || Array.isArray(filters))
@@ -1703,7 +1977,7 @@
             if (typeof text !== "string")
               throw new TypeError(`datagrid: match() filter "${id}" must be text`);
           }
-          return matchRows(filters, new Set());
+          return matchRows(filters, new Set(), false);
         },
 
         stats() {
