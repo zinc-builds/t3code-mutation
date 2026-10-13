@@ -13,6 +13,8 @@ const PAGE = `<!doctype html><body style="margin:0">
 <ul><li>One</li><li>Two</li></ul>
 <div style="height:2000px"></div>
 <footer data-testid="footer" style="height:100px">Bye</footer>
+<div class="actions"><a class="btn primary">Start</a><a class="btn">Tour</a></div>
+<div class="plan"><a class="btn primary">Buy</a></div>
 </body>`;
 
 it.effect.skipIf(executable === undefined)(
@@ -48,6 +50,12 @@ it.effect.skipIf(executable === undefined)(
         const shot = yield* review.screenshot({ fullPage: false, maxHeight: 8_000 });
         assert.strictEqual(shot.scrollY, 0);
         assert.deepStrictEqual(Array.from(shot.png.slice(1, 4)), [80, 78, 71]);
+
+        // Class names first; a position only among siblings the classes do not tell apart.
+        const start = yield* review.inspect(".actions .primary");
+        assert.strictEqual(start?.selector, "div.actions > a.btn.primary");
+        const tour = yield* review.inspect(".actions a:last-child");
+        assert.strictEqual(tour?.selector, "a.btn:nth-of-type(2)");
 
         const second = yield* review.inspect("li:nth-of-type(2)");
         assert.strictEqual(second?.text, "Two");

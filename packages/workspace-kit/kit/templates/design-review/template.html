@@ -1027,6 +1027,8 @@
           shot: null, // { bitmap, url, width, height, scale }
           seq: 0,
           timer: 0,
+          closed: false,
+          agentWorking: false,
           pick: false,
           point: null,
           client: null,
@@ -1797,6 +1799,22 @@
           );
           renderAll();
         }
+        // A pick whose selector broke (e.g. the agent renamed a class) is found again by position among the same
+        // parent's children of its tag, kept only when its text is unchanged.
+        async function refindLive(element) {
+          if (!element.text) return null;
+          const parts = element.selector.split(" > ");
+          const tag = /^[a-z][a-z0-9-]*/i.exec(parts[parts.length - 1]);
+          if (!tag) return null;
+          const prefix = parts.length > 1 ? `${parts.slice(0, -1).join(" > ")} > ` : "";
+          for (let k = 1; k <= 12; k++) {
+            const selector = `${prefix}${tag[0]}:nth-of-type(${k})`;
+            const found = await ws.preview.inspect(selector);
+            if (!found) return null;
+            if ((found.text || "").slice(0, 140) === element.text) return found;
+          }
+          return null;
+        }
         // Live picks follow their element: re-inspect each selector after a capture.
         async function reanchorLive() {
           const anns = annotations();
@@ -1805,11 +1823,19 @@
             anns.map(async (a) => {
               const m = meta[a.id];
               if (!m || !m.element || (m.url && m.url !== live.session.url)) return;
-              const found = await ws.preview.inspect(m.element.selector);
+              const found =
+                (await ws.preview.inspect(m.element.selector)) ?? (await refindLive(m.element));
               m.found = !!found;
               if (!found) return;
               const el = liveElement(found);
-              m.element = { ...m.element, box: el.box, styles: el.styles, text: el.text };
+              m.element = {
+                ...m.element,
+                selector: el.selector,
+                classes: el.classes,
+                box: el.box,
+                styles: el.styles,
+                text: el.text,
+              };
               if (JSON.stringify(a.rect) !== JSON.stringify(el.box)) {
                 a.rect = { ...el.box };
                 moved = true;
@@ -1821,6 +1847,27 @@
             lastAnnotations = annotations();
             if (selectedId) annotator.select(selectedId);
           }
+        }
+        // Refresh: loads the site again (its source may have changed, e.g. after the agent's edit) and captures it.
+        // A preview T3 closed opens again.
+        async function reloadLive() {
+          clearTimeout(live.timer);
+          if (live.closed) {
+            setStatus("Opening the live page again");
+            const r = await openLive();
+            if (r.error) {
+              throw new Error(
+                `Live preview of ${OPTS.url || "the declared page"} failed: ${r.error}.`,
+              );
+            }
+            live.session = r.session;
+            live.closed = false;
+          } else {
+            setStatus("Reloading the live page");
+            await ws.preview.reload();
+          }
+          clearTimeout(live.timer);
+          await liveCapture();
         }
         function queueLiveCapture() {
           clearTimeout(live.timer);
@@ -2499,7 +2546,7 @@
         );
         $("refresh").addEventListener(
           "click",
-          guard(() => liveCapture()),
+          guard(() => reloadLive()),
         );
         $("export").addEventListener(
           "click",
@@ -2573,7 +2620,7 @@
           ) {
             action = () =>
               setViewport(Object.keys(VIEWPORTS).find((k) => VIEWPORTS[k].key === key));
-          } else if (key === "l" && mode === "live") action = () => liveCapture();
+          } else if (key === "l" && mode === "live") action = () => reloadLive();
           else if (key === "h")
             action = () => {
               hideResolved = !hideResolved;
@@ -2693,10 +2740,21 @@
               if (change.reason === "closed") {
                 setStatus("The live page closed; Refresh (L) opens it again");
                 live.shot = null;
+                live.closed = true;
                 return;
               }
               queueLiveCapture();
               renderChrome();
+            });
+            // A finished agent turn may have changed the site: show the result without a manual Refresh.
+            ws.on("agent-status", (status) => {
+              if (status === "working") {
+                live.agentWorking = true;
+                return;
+              }
+              if (status !== "idle" || !live.agentWorking || !booted) return;
+              live.agentWorking = false;
+              reloadLive().catch(showError);
             });
             await liveCapture();
           } else if (mode === "page") {

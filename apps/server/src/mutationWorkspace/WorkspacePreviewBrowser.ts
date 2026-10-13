@@ -147,11 +147,14 @@ const REVIEW_SCRIPT = `(call) => {
         parts.unshift("#" + escape(node.id));
         return parts.join(" > ");
       }
-      let part = node.localName;
+      // Class names keep the selector readable for the agent and stable when siblings move.
+      let part = node.localName + Array.from(node.classList).slice(0, 3).map((name) => "." + escape(name)).join("");
       const parent = node.parentElement;
       if (parent) {
         const same = Array.from(parent.children).filter((child) => child.localName === node.localName);
-        if (same.length > 1) part += ":nth-of-type(" + (same.indexOf(node) + 1) + ")";
+        if (same.filter((child) => child.matches(part)).length > 1) {
+          part += ":nth-of-type(" + (same.indexOf(node) + 1) + ")";
+        }
       }
       parts.unshift(part);
       if (unique(parts.join(" > "))) return parts.join(" > ");

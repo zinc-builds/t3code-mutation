@@ -158,7 +158,8 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
     <iframe
       ref={frameRef}
       src={src}
-      title={title}
+      // aria-label, not title: Chromium shows an iframe's title as a tooltip over the whole workspace.
+      aria-label={title}
       // Never allow-same-origin: the opaque origin keeps the page out of the
       // app's session. Downloads go through the bridge.
       sandbox="allow-scripts allow-forms"
