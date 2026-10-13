@@ -27,7 +27,10 @@ export interface WorkspacePagePlan {
   readonly template?: {
     readonly id: string;
     readonly options: Readonly<Record<string, unknown>>;
-    /** The template's own chrome manifest, unchecked; absent when it declares none. */
+    /**
+     * The template's seed chrome manifest, unchecked (`{}` for `chrome: true`);
+     * absent when it declares none.
+     */
     readonly chrome?: Readonly<Record<string, unknown>>;
   };
 }
@@ -39,6 +42,15 @@ export interface KitDocs {
 
 // Named here rather than imported: the kit has no dependency on the server's tool names.
 const KIT_DOCS_TOOL = "workspace_kit_docs";
+
+/**
+ * The manifest a template's chrome session opens with: `true` seeds an empty
+ * one the page fills through `setChrome`, an object seeds itself.
+ */
+const templateSeedChrome = (
+  chrome: KitTemplateManifest["chrome"],
+): Readonly<Record<string, unknown>> | undefined =>
+  chrome === true ? {} : chrome === false || chrome === undefined ? undefined : chrome;
 
 const listOr = (names: ReadonlyArray<string>, none: string) =>
   names.length === 0 ? none : names.join(", ");
@@ -193,13 +205,14 @@ export function makeWorkspaceKit(source: KitSource) {
     }
     const primitives = resolvePrimitives([...template.value.kit, ...requestedKit]);
     if (!primitives.ok) return primitives;
+    const chrome = templateSeedChrome(template.value.chrome);
     return ok({
       html: template.value.html,
       primitives: primitives.value,
       template: {
         id: template.value.id,
         options,
-        ...(template.value.chrome === undefined ? {} : { chrome: template.value.chrome }),
+        ...(chrome === undefined ? {} : { chrome }),
       },
     });
   };

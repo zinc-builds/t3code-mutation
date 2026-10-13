@@ -123,6 +123,20 @@ describe("kit pages", () => {
     assert.isFalse("chrome" in plan({ template: { id: "photo-develop" } }).template!);
   });
 
+  it("seeds an empty chrome manifest for chrome: true and none for chrome: false", () => {
+    const planWith = (chrome: boolean) => {
+      const result = makeWorkspaceKit({
+        core: null,
+        primitives: [primitive("develop"), primitive("histogram")],
+        templates: [{ ...template, chrome }],
+      }).planPage({ template: { id: "photo-develop" } });
+      assert.isTrue(result.ok);
+      return result.ok ? result.value.template! : undefined;
+    };
+    assert.deepEqual(planWith(true)?.chrome, {});
+    assert.isFalse("chrome" in planWith(false)!);
+  });
+
   it("injects empty options for a template called without them", () => {
     const page = plan({ template: { id: "photo-develop" } });
     assert.include(
@@ -237,8 +251,10 @@ describe("kit docs", () => {
 
   it("keeps the shipped catalog compact, with every template and primitive", () => {
     // It rides in every workspace_mutate description: one line per template (with its own
-    // bolt-on calls), one bolt-on line, one line per primitive.
-    assert.isAtMost(workspaceKit.catalog.length, 2_500);
+    // bolt-on calls), one bolt-on line, one line per primitive. The budget is per entry, so
+    // the catalog grows with the kit but no entry grows into prose.
+    const entries = workspaceKit.templateIds.length + workspaceKit.primitiveNames.length;
+    assert.isAtMost(workspaceKit.catalog.length, 170 * entries);
     for (const name of [...workspaceKit.templateIds, ...workspaceKit.primitiveNames])
       assert.include(workspaceKit.catalog, `- ${name}: `);
   });
