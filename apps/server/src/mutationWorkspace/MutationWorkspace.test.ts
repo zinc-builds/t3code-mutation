@@ -14,6 +14,7 @@ import * as ServerConfig from "../config.ts";
 import * as HeadlessChrome from "../htmlRender/headlessChrome.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
 import * as PreviewBrowser from "../preview/PreviewBrowser.ts";
+import * as FfmpegDryRun from "./FfmpegDryRun.ts";
 import * as MutationWorkspace from "./MutationWorkspace.ts";
 import { workspaceMutateAdvice } from "./workspaceValidation.ts";
 
@@ -26,6 +27,11 @@ const htmlRenderWith = (overrides: Partial<HtmlRender.HtmlRender["Service"]> = {
     ...overrides,
   } as unknown as HtmlRender.HtmlRender["Service"]);
 const htmlRenderStub = htmlRenderWith();
+
+// No export in these tests reaches ffmpeg unless one gives a dry run.
+const ffmpegWith = (dryRun: FfmpegDryRun.FfmpegDryRun["Service"]["dryRun"]) =>
+  Layer.succeed(FfmpegDryRun.FfmpegDryRun, FfmpegDryRun.FfmpegDryRun.of({ dryRun }));
+const ffmpegUnused = ffmpegWith(() => Effect.die("This test runs no ffmpeg."));
 
 const fixtureKit = makeWorkspaceKit({
   core: null,
@@ -130,9 +136,12 @@ const readStored = Effect.fn("readStored")(function* (attachmentId: string) {
   return yield* fileSystem.readFileString(path.join(config.attachmentsDir, `${attachmentId}.html`));
 });
 
-const layerKitWorkspace = (htmlRender = htmlRenderStub) =>
+const layerKitWorkspace = (htmlRender = htmlRenderStub, ffmpeg = ffmpegUnused) =>
   Layer.provideMerge(
-    MutationWorkspace.layerWithKit(fixtureKit).pipe(Layer.provide(htmlRender)),
+    MutationWorkspace.layerWithKit(fixtureKit).pipe(
+      Layer.provide(htmlRender),
+      Layer.provide(ffmpeg),
+    ),
     Layer.fresh(ServerConfig.layerTest(process.cwd(), { prefix: "t3code-mutation-kit-test-" })),
   );
 
@@ -257,6 +266,7 @@ it.layer(NodeServices.layer)("MutationWorkspace shipped templates", (it) => {
             /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
           assert.deepEqual(JSON.parse(tag?.[1] ?? "null"), options, where);
           assert.deepEqual(validation, {
+            level: "boot",
             ok: true,
             errors: [],
             skipped: "T3's preview browser is not installed on this machine.",
@@ -369,6 +379,7 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
         });
 
         assert.deepEqual(validation, {
+          level: "boot",
           ok: false,
           errors: [
             { source: "customScript", message: "addPanel(title) needs a non-empty string" },
@@ -447,6 +458,7 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
         assetPaths: [],
       });
       assert.deepEqual(validation, {
+        level: "boot",
         ok: true,
         errors: [],
         skipped: "Headless Chrome could not render the page: the browser exited unexpectedly.",
@@ -467,6 +479,461 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
       ),
     ),
   );
+});
+
+// A page that booted cleanly and whose report probe returned `report`.
+const reporting = (
+  report: unknown,
+  extra: Partial<HtmlRender.PageObservation> = {},
+  seen: Array<HtmlRender.ObservePageInput> = [],
+) =>
+  observing((input) =>
+    Effect.sync(() => {
+      seen.push(input);
+      return Option.some({
+        problems: [],
+        omitted: 0,
+        settled: true,
+        probe: { problemsBefore: 0, value: Option.some(report) },
+        ...extra,
+      });
+    }),
+  );
+
+const boltOnTemplate = {
+  id: "photo-develop",
+  options: { customScript: "t3template.addPanel('Extra')" },
+} as const;
+
+it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
+  it.effect("runs the export for a template with a bolt-on, and only boots anything else", () => {
+    const seen: Array<HtmlRender.ObservePageInput> = [];
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const publish = (input: Partial<MutationWorkspace.WorkspacePublishInput>) =>
+        workspace.publish({ threadId: thread, title: "x", assetPaths: [], ...input });
+      const bolted = yield* publish({ template: boltOnTemplate });
+      const plain = yield* publish({ template: { id: "photo-develop" } });
+      const page = yield* publish({ html: "<p>page</p>" });
+      const asked = yield* publish({ html: "<p>page</p>", validation: "full" });
+      const skipped = yield* publish({ template: boltOnTemplate, validation: "boot" });
+      assert.deepEqual(
+        [bolted, plain, page, asked, skipped].map(({ validation }) => validation.level),
+        ["full", "boot", "boot", "full", "boot"],
+      );
+      assert.deepEqual(
+        seen.map((input) => input.probe?.expression),
+        [
+          'window.__t3WorkspaceValidation.report({"export":true})',
+          'window.__t3WorkspaceValidation.report({"export":false})',
+          'window.__t3WorkspaceValidation.report({"export":false})',
+          'window.__t3WorkspaceValidation.report({"export":true})',
+          'window.__t3WorkspaceValidation.report({"export":false})',
+        ],
+      );
+      assert.deepEqual(asked.validation.export, {
+        skipped: "the page has no window.t3template.export()",
+        files: [],
+      });
+      assert.isUndefined(page.validation.export);
+    }).pipe(
+      Effect.provide(
+        layerKitWorkspace(reporting({ chromePatches: [], export: { available: false } }, {}, seen)),
+      ),
+    );
+  });
+
+  it.effect(
+    "reports the export's files and dry-runs its ffmpeg commands on the real assets",
+    () => {
+      const dryRuns: Array<FfmpegDryRun.FfmpegDryRunInput> = [];
+      const report = {
+        chromePatches: [],
+        export: {
+          available: true,
+          ok: true,
+          files: [
+            { name: "cut.edl.json", type: "application/json", size: 120 },
+            {
+              name: "cut-overlay-title.png",
+              type: "image/png",
+              size: 4,
+              width: 1920,
+              height: 1080,
+              base64: Buffer.from("png!").toString("base64"),
+            },
+          ],
+          ffmpeg: [
+            "ffmpeg -i clip.mp4 -i cut-overlay-title.png -filter_complex '[0:v][1:v]overlay' cut.mp4",
+            "ffmpeg -i clip.mp4 -vf 'nope=1' still.png",
+          ],
+          problems: [],
+        },
+      };
+      return Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+        const clip = path.join(directory, "clip.mp4");
+        yield* fileSystem.writeFileString(clip, "mp4");
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        const { validation } = yield* workspace.publish({
+          threadId: thread,
+          title: "Cut",
+          assetPaths: [clip],
+          template: boltOnTemplate,
+        });
+        assert.deepEqual(validation, {
+          level: "full",
+          ok: false,
+          errors: [
+            {
+              source: "ffmpeg",
+              message:
+                "ffmpeg command 2 failed its dry run:\n[AVFilterGraph] No such filter: 'nope'",
+            },
+          ],
+          export: {
+            files: [
+              { name: "cut.edl.json", type: "application/json", size: 120 },
+              {
+                name: "cut-overlay-title.png",
+                type: "image/png",
+                size: 4,
+                width: 1920,
+                height: 1080,
+              },
+            ],
+            ffmpeg: [
+              { command: 1, status: "ok" },
+              { command: 2, status: "failed" },
+            ],
+          },
+        });
+        assert.include(workspaceMutateAdvice(validation), "fix them with another workspace_mutate");
+        const [dryRun] = dryRuns;
+        assert.deepEqual(dryRun?.commands, report.export.ffmpeg);
+        assert.deepEqual(dryRun?.assetPaths, [clip]);
+        assert.deepEqual(
+          dryRun?.files.map((file) => [file.name, Buffer.from(file.bytes).toString()]),
+          [["cut-overlay-title.png", "png!"]],
+        );
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          layerKitWorkspace(
+            reporting(report),
+            ffmpegWith((input) =>
+              Effect.sync(() => {
+                dryRuns.push(input);
+                return Option.some([
+                  { command: 1, status: "ok" as const },
+                  {
+                    command: 2,
+                    status: "failed" as const,
+                    stderr: "[AVFilterGraph] No such filter: 'nope'",
+                  },
+                ]);
+              }),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect("says when ffmpeg is not installed, and passes a clean export", () =>
+    Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const { validation } = yield* workspace.publish({
+        threadId: thread,
+        title: "Cut",
+        assetPaths: [],
+        template: boltOnTemplate,
+      });
+      assert.deepEqual(validation, {
+        level: "full",
+        ok: true,
+        errors: [],
+        export: {
+          files: [{ name: "cut.m4a.sh", type: "text/plain", size: 9 }],
+          ffmpegSkipped: "ffmpeg is not on this machine's PATH",
+        },
+      });
+      assert.include(workspaceMutateAdvice(validation), "It loaded and exported without errors.");
+    }).pipe(
+      Effect.provide(
+        layerKitWorkspace(
+          reporting({
+            chromePatches: [],
+            export: {
+              available: true,
+              ok: true,
+              files: [{ name: "cut.m4a.sh", type: "text/plain", size: 9 }],
+              ffmpeg: ["ffmpeg -i a.wav -af volume=2 a.m4a"],
+              problems: [],
+            },
+          }),
+          ffmpegWith(() => Effect.succeed(Option.none())),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("reports a failed export, what it logged, its bad files and return shape", () => {
+    const report = {
+      chromePatches: [],
+      export: {
+        available: true,
+        ok: false,
+        error: 'image stage "glow": x is not defined',
+        files: [
+          {
+            name: "photo-developed.jpg",
+            type: "image/jpeg",
+            size: 3,
+            decodeError: "The source image cannot be decoded.",
+          },
+        ],
+        ffmpeg: [],
+        problems: ["export() returned files[0], which is not a File."],
+      },
+    };
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const { validation } = yield* workspace.publish({
+        threadId: thread,
+        title: "Develop",
+        assetPaths: [],
+        template: boltOnTemplate,
+      });
+      // Problems after the probe started came from the export.
+      assert.deepEqual(validation.errors, [
+        { source: "console", message: "boot noise" },
+        { source: "export", message: "stage blew up" },
+        { source: "customScript", message: 'image stage "glow": x is not defined' },
+        { source: "export", message: 'export() failed: image stage "glow": x is not defined' },
+        { source: "export", message: "export() returned files[0], which is not a File." },
+        {
+          source: "export",
+          message:
+            "export() produced photo-developed.jpg, which does not decode as image/jpeg: The source image cannot be decoded.",
+        },
+      ]);
+      assert.deepEqual(validation.export, {
+        files: [{ name: "photo-developed.jpg", type: "image/jpeg", size: 3 }],
+      });
+    }).pipe(
+      Effect.provide(
+        layerKitWorkspace(
+          reporting(report, {
+            problems: [
+              { source: "console", text: "boot noise" },
+              { source: "console", text: "stage blew up" },
+              {
+                source: "console",
+                text: '[t3template] customScript error: image stage "glow": x is not defined',
+              },
+            ],
+            probe: { problemsBefore: 1, value: Option.some(report) },
+          }),
+        ),
+      ),
+    );
+  });
+
+  it.effect("says when the export runs out of time or the page never booted", () => {
+    let settled = true;
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const publish = () =>
+        workspace.publish({
+          threadId: thread,
+          title: "x",
+          assetPaths: [],
+          template: boltOnTemplate,
+        });
+      const slow = yield* publish();
+      assert.deepEqual(slow.validation, {
+        level: "full",
+        ok: true,
+        errors: [],
+        export: { skipped: "export() did not finish within 6 seconds", files: [] },
+      });
+      settled = false;
+      const stuck = yield* publish();
+      assert.deepEqual(stuck.validation.export, {
+        skipped: "the page did not finish booting within 6 seconds",
+        files: [],
+      });
+    }).pipe(
+      Effect.provide(
+        layerKitWorkspace(
+          observing(() =>
+            Effect.sync(() =>
+              Option.some({
+                problems: [],
+                omitted: 0,
+                settled,
+                ...(settled ? { probe: { problemsBefore: 0, value: Option.none() } } : {}),
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  });
+});
+
+const chromeTemplateKit = (chrome: Record<string, unknown>) =>
+  makeWorkspaceKit({
+    core: null,
+    primitives: [],
+    templates: [
+      {
+        id: "grade",
+        title: "Grade",
+        summary: "Grade one photo.",
+        kit: [],
+        options: {},
+        examples: [],
+        boltOn: {
+          summary: "options.customScript runs once.",
+          api: ["addPanel(title) -> body."],
+          reservedShortcuts: [],
+          example: "t3template.addPanel('Extra');",
+        },
+        chrome,
+        html: "<!doctype html><html><head></head><body></body></html>",
+      },
+    ],
+  });
+
+const exposureChrome = {
+  inspector: [
+    {
+      title: "Light",
+      controls: [{ type: "slider", id: "exposure", label: "Exposure", min: -4, max: 4 }],
+    },
+  ],
+};
+
+const layerChromeTemplateWorkspace = (
+  chrome: Record<string, unknown>,
+  htmlRender = htmlRenderStub,
+) =>
+  Layer.provideMerge(
+    MutationWorkspace.layerWithKit(chromeTemplateKit(chrome)).pipe(
+      Layer.provide(htmlRender),
+      Layer.provide(ffmpegUnused),
+    ),
+    Layer.fresh(ServerConfig.layerTest(process.cwd(), { prefix: "t3code-mutation-chrome-" })),
+  );
+
+it.layer(NodeServices.layer)("MutationWorkspace template chrome", (it) => {
+  it.effect("uses a template's own chrome unless the agent passes one", () =>
+    Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const own = yield* workspace.publish({
+        threadId: thread,
+        title: "Grade",
+        assetPaths: [],
+        template: { id: "grade" },
+      });
+      assert.strictEqual(own.reference.chrome?.inspector?.[0]?.controls[0]?.id, "exposure");
+      const replaced = yield* workspace.publish({
+        threadId: thread,
+        title: "Grade",
+        assetPaths: [],
+        template: { id: "grade" },
+        chrome: { toolbar: [{ type: "button", id: "export", label: "Export" }] },
+      });
+      assert.isUndefined(replaced.reference.chrome?.inspector);
+      assert.deepInclude(replaced.reference.chrome?.toolbar?.[0], { id: "export" });
+    }).pipe(Effect.provide(layerChromeTemplateWorkspace(exposureChrome))),
+  );
+
+  it.effect("names the template when its own chrome is invalid", () =>
+    Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const error = yield* workspace
+        .publish({ threadId: thread, title: "Grade", assetPaths: [], template: { id: "grade" } })
+        .pipe(Effect.flip);
+      assert.strictEqual(error._tag, "WorkspaceChromeInvalidError");
+      assert.include(error.message, 'template "grade" declares chrome T3 rejects');
+      assert.include(error.message, "chrome.toolbar[0].label");
+    }).pipe(
+      Effect.provide(layerChromeTemplateWorkspace({ toolbar: [{ type: "button", id: "export" }] })),
+    ),
+  );
+
+  it.effect("hands the stand-in the chrome, and replays the page's setChrome patches", () => {
+    const seen: Array<HtmlRender.ObservePageInput> = [];
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const { validation } = yield* workspace.publish({
+        threadId: thread,
+        title: "Grade",
+        assetPaths: [],
+        template: { id: "grade" },
+      });
+      assert.include(seen[0]!.html, '"chrome":true');
+      assert.include(seen[0]!.html, '"controls":{"exposure":-4}');
+      assert.deepEqual(validation, {
+        level: "boot",
+        ok: false,
+        errors: [
+          {
+            source: "chrome",
+            message: "setChrome: values must be an object keyed by control id.",
+          },
+          { source: "chrome", message: "setChrome was passed a patch that is not JSON: cyclic" },
+        ],
+      });
+    }).pipe(
+      Effect.provide(
+        layerChromeTemplateWorkspace(
+          exposureChrome,
+          reporting(
+            {
+              chromePatches: [
+                { patch: { values: { exposure: 1 } } },
+                {
+                  patch: {
+                    sidebar: [
+                      { id: "history", title: "History", items: [{ id: "a", label: "A" }] },
+                    ],
+                  },
+                },
+                { patch: { values: [1] } },
+                { error: "setChrome was passed a patch that is not JSON: cyclic" },
+              ],
+            },
+            {},
+            seen,
+          ),
+        ),
+      ),
+    );
+  });
+
+  it.effect("tells the stand-in a page without chrome has none", () => {
+    const seen: Array<HtmlRender.ObservePageInput> = [];
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      yield* workspace.publish({
+        threadId: thread,
+        title: "Page",
+        assetPaths: [],
+        html: "<p></p>",
+      });
+      assert.include(seen[0]!.html, '"chrome":false');
+      assert.include(
+        seen[0]!.html,
+        '"chromeMissing":"This workspace has no native chrome; pass `chrome` to workspace_mutate to add it."',
+      );
+    }).pipe(Effect.provide(layerKitWorkspace(reporting({ chromePatches: [] }, {}, seen))));
+  });
 });
 
 // Real-browser test; runs only when this names a chrome-headless-shell (or Chrome).
@@ -533,7 +1000,7 @@ describe("MutationWorkspace validation in a browser", () => {
             ].join("\n"),
             [clip],
           );
-          expect(healthy.validation).toEqual({ ok: true, errors: [] });
+          expect(healthy.validation).toEqual({ level: "boot", ok: true, errors: [] });
 
           const placeholder = yield* publish(
             [
@@ -543,7 +1010,7 @@ describe("MutationWorkspace validation in a browser", () => {
             ].join("\n"),
             [],
           );
-          expect(placeholder.validation).toEqual({ ok: true, errors: [] });
+          expect(placeholder.validation).toEqual({ level: "boot", ok: true, errors: [] });
 
           const started = yield* Clock.currentTimeMillis;
           const broken = yield* publish(
@@ -556,6 +1023,7 @@ describe("MutationWorkspace validation in a browser", () => {
             [clip],
           );
           expect(broken.validation).toEqual({
+            level: "boot",
             ok: false,
             errors: [
               { source: "customScript", message: "addPanel(title) needs a non-empty string" },
@@ -576,11 +1044,147 @@ describe("MutationWorkspace validation in a browser", () => {
             assetPaths: [],
             template: { id: "photo-develop", options: { customScript: "t3template.nope()" } },
           });
-          expect(boltOn.validation).toEqual({
+          expect(boltOn.validation).toMatchObject({
+            level: "full",
             ok: false,
             errors: [{ source: "customScript", message: "t3template.nope is not a function" }],
           });
+
+          // A working bolt-on: the full export runs and its file is measured.
+          const exported = yield* workspace.publish({
+            threadId: thread,
+            title: "Develop",
+            assetPaths: [],
+            template: {
+              id: "photo-develop",
+              options: {
+                customScript:
+                  "t3template.addControl({ id: 'lift', label: 'Lift', type: 'slider', min: 0, max: 1, step: 0.1, default: 0.5 });",
+              },
+            },
+          });
+          expect(exported.validation).toEqual({
+            level: "full",
+            ok: true,
+            errors: [],
+            export: {
+              files: [
+                {
+                  name: "placeholder-developed.jpg",
+                  type: "image/jpeg",
+                  size: expect.any(Number),
+                  width: 1600,
+                  height: 1067,
+                },
+              ],
+            },
+          });
         }).pipe(Effect.scoped, Effect.provide(layerBrowserWorkspace(executable)));
+      }),
+    60_000,
+  );
+
+  // A template page that declares chrome, patches it at runtime, and exports
+  // files plus an ffmpeg command that reads one of them.
+  const chromeTemplateHtml = `<!doctype html><html><head></head><body><canvas id="c" width="64" height="32"></canvas><script>
+Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (ready) {
+  if (ready[1].exposure !== -4) throw new Error("controls " + JSON.stringify(ready[1]));
+  window.t3template = {
+    export: async function () {
+      const blob = await new Promise((resolve) => document.getElementById("c").toBlob(resolve, "image/png"));
+      const png = new File([blob], "grade-overlay.png", { type: "image/png" });
+      const edl = new File(["{}"], "grade.edl.json", { type: "application/json" });
+      await t3.workspace.attach(edl);
+      await t3.workspace.download(edl, edl.name);
+      return { files: [png, edl], ffmpeg: "ffmpeg -i clip.wav -i grade-overlay.png -filter_complex '[0:a]volume=2[a]' -map '[a]' grade.m4a" };
+    },
+  };
+  return t3.workspace.setChrome({ values: { exposure: 2 } }).then(function () {
+    return t3.workspace.setChrome({ toolbar: "nope" });
+  });
+});
+</script></body></html>`;
+
+  it.live(
+    "runs a template page's setChrome and export against the stand-in",
+    (ctx) =>
+      Effect.gen(function* () {
+        const executable = (yield* HostProcess.Environment)[TEST_BROWSER_ENV];
+        if (!executable) return ctx.skip(`Set ${TEST_BROWSER_ENV} to run this test.`);
+        const dryRuns: Array<FfmpegDryRun.FfmpegDryRunInput> = [];
+        const kit = chromeTemplateKit(exposureChrome);
+        const template = kit.findTemplate("grade");
+        if (!template.ok) throw new Error(template.error);
+        const layer = MutationWorkspace.layerWithKit(
+          makeWorkspaceKit({
+            core: null,
+            primitives: [],
+            templates: [{ ...template.value, html: chromeTemplateHtml }],
+          }),
+        ).pipe(
+          Layer.provide(
+            ffmpegWith((input) =>
+              Effect.sync(() => {
+                dryRuns.push(input);
+                return Option.some([{ command: 1, status: "ok" as const }]);
+              }),
+            ),
+          ),
+          Layer.provide(HtmlRender.layer),
+          Layer.provide(
+            Layer.succeed(
+              PreviewBrowser.PreviewBrowser,
+              PreviewBrowser.PreviewBrowser.of({
+                executable: Effect.die("Validation never installs the preview browser."),
+                installed: Effect.succeed(Option.some(executable)),
+              }),
+            ),
+          ),
+          Layer.provideMerge(
+            Layer.fresh(
+              ServerConfig.layerTest(process.cwd(), { prefix: "t3code-mutation-browser-" }),
+            ),
+          ),
+          Layer.provideMerge(NodeServices.layer),
+        );
+        yield* Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+          const clip = path.join(directory, "clip.wav");
+          yield* fileSystem.writeFileString(clip, "RIFF");
+          const workspace = yield* MutationWorkspace.MutationWorkspace;
+          const { reference, validation } = yield* workspace.publish({
+            threadId: thread,
+            title: "Grade",
+            assetPaths: [clip],
+            template: { id: "grade" },
+            validation: "full",
+          });
+          expect(reference.chrome?.inspector?.[0]?.controls[0]?.id).toBe("exposure");
+          expect(validation).toEqual({
+            level: "full",
+            ok: false,
+            errors: [{ source: "chrome", message: expect.stringContaining("chrome.toolbar") }],
+            export: {
+              files: [
+                {
+                  name: "grade-overlay.png",
+                  type: "image/png",
+                  size: expect.any(Number),
+                  width: 64,
+                  height: 32,
+                },
+                { name: "grade.edl.json", type: "application/json", size: 2 },
+              ],
+              ffmpeg: [{ command: 1, status: "ok" }],
+            },
+          });
+          const [dryRun] = dryRuns;
+          expect(dryRun?.assetPaths).toEqual([clip]);
+          expect(dryRun?.files.map((file) => file.name)).toEqual(["grade-overlay.png"]);
+          expect(Buffer.from(dryRun!.files[0]!.bytes.subarray(1, 4)).toString()).toBe("PNG");
+        }).pipe(Effect.scoped, Effect.provide(layer));
       }),
     30_000,
   );

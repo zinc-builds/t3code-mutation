@@ -182,6 +182,15 @@ describe("generate.mjs", () => {
     assert.throws(() => readKit(wrong), /must register itself as t3kit.templateRuntime/);
   });
 
+  it("keeps a template's chrome manifest and fails on one that is not an object", () => {
+    const chrome = { toolbar: [{ type: "button", id: "export", label: "Export" }] };
+    assert.deepEqual(readKit(template({ chrome })).templates[0]?.chrome, chrome);
+    assert.throws(
+      () => readKit(template({ chrome: [chrome] })),
+      /chrome must be a chrome manifest object/,
+    );
+  });
+
   it("fails on a template without complete bolt-on docs", () => {
     assert.throws(() => readKit(template({ boltOn: undefined })), /needs a boltOn object/);
     assert.throws(

@@ -896,6 +896,10 @@ export function workspaceChromeShortcutCommand(
 
 // Bridge ----------------------------------------------------------------------------
 
+/** What a page's `setChrome` rejects with when its workspace has no chrome to patch. */
+export const WORKSPACE_CHROME_MISSING_ERROR =
+  "This workspace has no native chrome; pass `chrome` to workspace_mutate to add it.";
+
 /** Bridge methods the chrome adds; `WORKSPACE_BRIDGE_METHODS` carries them too. */
 export const WORKSPACE_CHROME_BRIDGE_METHODS = {
   /** Request from the page: patch the chrome (regions replace, values merge). */

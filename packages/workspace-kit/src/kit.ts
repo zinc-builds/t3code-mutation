@@ -24,7 +24,12 @@ export interface WorkspacePagePlan {
   readonly html: string;
   readonly primitives: ReadonlyArray<KitPrimitive>;
   /** Present for a template page; injected as `#t3-template-options`. */
-  readonly template?: { readonly id: string; readonly options: Readonly<Record<string, unknown>> };
+  readonly template?: {
+    readonly id: string;
+    readonly options: Readonly<Record<string, unknown>>;
+    /** The template's own chrome manifest, unchecked; absent when it declares none. */
+    readonly chrome?: Readonly<Record<string, unknown>>;
+  };
 }
 
 export interface KitDocs {
@@ -191,7 +196,11 @@ export function makeWorkspaceKit(source: KitSource) {
     return ok({
       html: template.value.html,
       primitives: primitives.value,
-      template: { id: template.value.id, options },
+      template: {
+        id: template.value.id,
+        options,
+        ...(template.value.chrome === undefined ? {} : { chrome: template.value.chrome }),
+      },
     });
   };
 

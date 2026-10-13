@@ -196,6 +196,30 @@ const MEASURE_EXPRESSION =
 const Ignored = Schema.Unknown;
 const Navigation = Schema.Struct({ errorText: Schema.optional(Schema.String) });
 const Measured = Schema.Struct({ result: Schema.Struct({ value: Schema.Finite }) });
+const Evaluated = Schema.Struct({
+  result: Schema.Struct({ value: Schema.optional(Schema.Unknown) }),
+  exceptionDetails: Schema.optional(
+    Schema.Struct({
+      text: Schema.String,
+      exception: Schema.optional(Schema.Struct({ description: Schema.optional(Schema.String) })),
+    }),
+  ),
+});
+
+/** A follow-up step `observeHtmlPage` runs once the page has settled. */
+export interface PageProbe {
+  /** Evaluates to a promise of a JSON value. */
+  readonly expression: string;
+  readonly budget: Duration.Input;
+}
+
+/** What a probe returned. */
+export interface PageProbeResult {
+  /** How many of the page's problems were reported before the probe started. */
+  readonly problemsBefore: number;
+  /** The probe's value; None when it ran past its budget. */
+  readonly value: Option.Option<unknown>;
+}
 
 interface PageEvents {
   /** The page's main frame, which only ever shows `PAGE_URL`. */
@@ -601,6 +625,31 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       );
     });
 
+    /**
+     * Evaluates `expression` in the loaded page, awaiting a returned promise,
+     * and returns its value as JSON. A thrown error is a page problem.
+     */
+    const evaluate = (expression: string) =>
+      send(
+        "Runtime.evaluate",
+        { expression, awaitPromise: true, returnByValue: true },
+        Evaluated,
+        sessionId,
+      ).pipe(
+        Effect.flatMap((evaluated) =>
+          evaluated.exceptionDetails === undefined
+            ? Effect.succeed(evaluated.result.value)
+            : Effect.fail(
+                new HtmlRenderBrowserError({
+                  reason: "the page's probe threw",
+                  cause:
+                    evaluated.exceptionDetails.exception?.description ??
+                    evaluated.exceptionDetails.text,
+                }),
+              ),
+        ),
+      );
+
     const problems = (): { problems: ReadonlyArray<PageProblem>; omitted: number } => ({
       problems: [...events.problems],
       omitted: events.omittedProblems,
@@ -612,7 +661,7 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       Effect.ignore,
     );
 
-    return { load, observe, screenshot, consoleMessages, problems, close };
+    return { load, observe, evaluate, screenshot, consoleMessages, problems, close };
   });
 
   return { openPage };
@@ -716,6 +765,8 @@ export const observeHtmlPage = Effect.fn("headlessChrome.observeHtmlPage")(funct
   readonly problemPrefixes: ReadonlyArray<string>;
   readonly settledExpression: string;
   readonly budget: Duration.Input;
+  /** Runs once the page has settled; skipped when it never does. */
+  readonly probe?: PageProbe | undefined;
 }) {
   const path = yield* Path.Path;
   const directory = yield* scratchDirectory;
@@ -732,5 +783,15 @@ export const observeHtmlPage = Effect.fn("headlessChrome.observeHtmlPage")(funct
   const settled = yield* page
     .observe(pageBody(input.html), input.urlFragment, input.settledExpression)
     .pipe(Effect.timeoutOption(input.budget));
-  return { ...page.problems(), settled: Option.isSome(settled) };
+  const probe = input.probe;
+  if (Option.isNone(settled) || probe === undefined) {
+    return { ...page.problems(), settled: Option.isSome(settled) };
+  }
+  const problemsBefore = page.problems().problems.length;
+  const value = yield* page.evaluate(probe.expression).pipe(Effect.timeoutOption(probe.budget));
+  return {
+    ...page.problems(),
+    settled: true,
+    probe: { problemsBefore, value } satisfies PageProbeResult,
+  };
 }, Effect.scoped);

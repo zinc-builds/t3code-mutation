@@ -5,6 +5,7 @@ import {
   resolveWorkspaceChromeValues,
   workspaceChromeDefault,
   workspaceChromeValuesEqual,
+  WORKSPACE_CHROME_MISSING_ERROR,
   type WorkspaceChrome,
   type WorkspaceChromeCommand,
   type WorkspaceChromeValue,
@@ -164,7 +165,7 @@ export function setWorkspaceChromePageState(attachmentId: string, state: unknown
 export function patchWorkspaceChrome(attachmentId: string, patch: unknown): string | undefined {
   const session = current(attachmentId);
   if (session === null) {
-    return "This workspace has no native chrome; pass `chrome` to workspace_mutate to add it.";
+    return WORKSPACE_CHROME_MISSING_ERROR;
   }
   const result = applyWorkspaceChromePatch(session.chrome, session.values, patch);
   if ("error" in result) return result.error;

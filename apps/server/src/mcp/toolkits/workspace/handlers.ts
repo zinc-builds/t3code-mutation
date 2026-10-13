@@ -46,6 +46,7 @@ const handlers = {
           title: input.title,
           assetPaths: input.assets ?? [],
           chrome: input.chrome,
+          validation: input.validation,
         })
         .pipe(Effect.mapError(toFailure));
       return {

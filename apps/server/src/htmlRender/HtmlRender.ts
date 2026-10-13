@@ -101,6 +101,8 @@ export interface PageObservation {
   readonly omitted: number;
   /** Whether the page settled within its budget, rather than being cut off. */
   readonly settled: boolean;
+  /** Present when the input asked for a probe and the page settled. */
+  readonly probe?: HeadlessChrome.PageProbeResult;
 }
 
 export interface ObservePageInput {
@@ -115,6 +117,8 @@ export interface ObservePageInput {
   readonly settledExpression: string;
   /** How long the page gets from navigation. */
   readonly budget: Duration.Input;
+  /** A follow-up step, with its own budget, once the page has settled. */
+  readonly probe?: HeadlessChrome.PageProbe | undefined;
 }
 
 export class HtmlRender extends Context.Service<

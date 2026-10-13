@@ -108,6 +108,21 @@ describe("kit pages", () => {
     assert.isTrue(html.indexOf('data-t3kit="viewer"') < html.indexOf("t3-template-options"));
   });
 
+  it("carries a template's chrome manifest into its plan, and none for one without", () => {
+    const chrome = { inspector: [{ title: "Light", controls: [] }] };
+    const withChrome = makeWorkspaceKit({
+      core: null,
+      primitives: [primitive("develop"), primitive("histogram")],
+      templates: [{ ...template, chrome }],
+    }).planPage({ template: { id: "photo-develop" } });
+    assert.deepEqual(withChrome.ok ? withChrome.value.template : undefined, {
+      id: "photo-develop",
+      options: {},
+      chrome,
+    });
+    assert.isFalse("chrome" in plan({ template: { id: "photo-develop" } }).template!);
+  });
+
   it("injects empty options for a template called without them", () => {
     const page = plan({ template: { id: "photo-develop" } });
     assert.include(

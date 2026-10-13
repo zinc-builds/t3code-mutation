@@ -22,9 +22,11 @@ import {
   workspaceKit,
 } from "@t3tools/workspace-kit";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
@@ -33,16 +35,22 @@ import { createAttachmentId } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as HeadlessChrome from "../htmlRender/headlessChrome.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
+import * as FfmpegDryRun from "./FfmpegDryRun.ts";
 import {
+  defaultValidationLevel,
+  exportFfmpegInputs,
   injectValidationHost,
+  PageReport,
   shapeValidation,
   skippedValidation,
   VALIDATION_PROBLEM_PREFIXES,
   VALIDATION_SETTLED_EXPRESSION,
   validationAssetUrl,
   validationHostScript,
+  validationReportExpression,
   type ValidationAsset,
   type WorkspaceValidation,
+  type WorkspaceValidationLevel,
 } from "./workspaceValidation.ts";
 
 export class WorkspaceAssetNotFoundError extends Schema.TaggedError<WorkspaceAssetNotFoundError>()(
@@ -101,8 +109,13 @@ export interface WorkspacePublishInput {
   readonly template?:
     | { readonly id: string; readonly options?: Readonly<Record<string, unknown>> | undefined }
     | undefined;
-  /** The agent's chrome manifest, validated here; undefined for a bare page. */
+  /**
+   * The agent's chrome manifest, validated here. Undefined means the
+   * template's own manifest, if it declares one, or a bare page.
+   */
   readonly chrome?: unknown;
+  /** How far to check the page; undefined means `defaultValidationLevel`. */
+  readonly validation?: WorkspaceValidationLevel | undefined;
 }
 
 /** A stored workspace, and what its page reported when T3 booted it. */
@@ -138,12 +151,32 @@ const MIB = 1024 * 1024;
 const MAX_VALIDATION_ASSET_BYTES = 32 * MIB;
 const MAX_VALIDATION_ASSETS_BYTES = 64 * MIB;
 const VALIDATION_WIDTH = 1_280;
-// The page's own budget, from navigation to settled.
-const VALIDATION_PAGE_BUDGET = "4 seconds";
-// Everything else included: waiting for a browser slot, launching it, reading assets.
-const VALIDATION_TIMEOUT = "7 seconds";
+// The page's own budget, from navigation to settled, and then everything else
+// included: waiting for a browser slot, launching it, reading assets. A full
+// check gives a slow page (a photo developed in software WebGL) longer to boot,
+// since it cannot export before then.
+const VALIDATION_PAGE_BUDGET = { boot: "4 seconds", full: "6 seconds" } as const;
+const VALIDATION_TIMEOUT = { boot: "7 seconds", full: "9 seconds" } as const;
+// At level `full`, the export's own budget once the page has settled, and the
+// dry runs' after it. Validation as a whole takes at most the sum of the three.
+const VALIDATION_EXPORT_BUDGET = "6 seconds";
+const VALIDATION_FFMPEG_BUDGET = "4 seconds";
+// A boot-only report is a synchronous read of what the stand-in recorded.
+const VALIDATION_REPORT_BUDGET = "1 second";
+const decodePageReport = Schema.decodeUnknownEffect(PageReport);
+const totalOf = (...budgets: ReadonlyArray<Duration.Input>) =>
+  Duration.millis(budgets.reduce<number>((total, budget) => total + Duration.toMillis(budget), 0));
 // Assembled template pages kept, by content hash.
 const MAX_TEMPLATE_SHELLS = 16;
+
+/** A stored page to validate, and what it was built with. */
+interface ValidationInput {
+  readonly html: string;
+  readonly level: WorkspaceValidationLevel;
+  readonly template: boolean;
+  readonly assetPaths: ReadonlyArray<string>;
+  readonly chrome: WorkspaceChrome | undefined;
+}
 
 /** A template page assembled once: everything before and after its options tag. */
 interface TemplateShell {
@@ -163,6 +196,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
   const path = yield* Path.Path;
   const config = yield* ServerConfig.ServerConfig;
   const htmlRender = yield* HtmlRender.HtmlRender;
+  const ffmpegDryRun = yield* FfmpegDryRun.FfmpegDryRun;
   const checkAssets = Effect.fn("MutationWorkspace.checkAssets")(function* (
     assetPaths: ReadonlyArray<string>,
   ) {
@@ -247,18 +281,15 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     return { assets, resources, omitted };
   });
 
-  const validate = (input: {
-    readonly html: string;
-    readonly template: boolean;
-    readonly assetPaths: ReadonlyArray<string>;
-    readonly chrome: WorkspaceChrome | undefined;
-  }) =>
+  /** Boots the page, then at level `full` runs its export; bounded by the three budgets. */
+  const observe = (input: ValidationInput) =>
     Effect.gen(function* () {
       const { assets, resources, omitted } = yield* validationAssets(input.assetPaths);
       const host = validationHostScript({
         assets,
         controls: input.chrome === undefined ? {} : resolveWorkspaceChromeValues(input.chrome),
         template: input.template,
+        chrome: input.chrome !== undefined,
       });
       const observation = yield* htmlRender.observe({
         html: injectValidationHost(input.html, host),
@@ -266,21 +297,68 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         resources,
         problemPrefixes: VALIDATION_PROBLEM_PREFIXES,
         settledExpression: VALIDATION_SETTLED_EXPRESSION,
-        budget: VALIDATION_PAGE_BUDGET,
+        budget: VALIDATION_PAGE_BUDGET[input.level],
+        probe: {
+          expression: validationReportExpression(input.level),
+          budget: input.level === "full" ? VALIDATION_EXPORT_BUDGET : VALIDATION_REPORT_BUDGET,
+        },
       });
-      return shapeValidation(observation, omitted);
+      const probed = Option.flatMap(observation, (page) =>
+        page.probe === undefined ? Option.none() : page.probe.value,
+      );
+      const report = Option.isNone(probed) ? undefined : yield* decodePageReport(probed.value);
+      return { observation, report, omitted };
     }).pipe(
-      Effect.timeoutOrElse({
-        duration: VALIDATION_TIMEOUT,
-        orElse: () =>
-          Effect.succeed(
-            skippedValidation(`the preview browser did not finish within ${VALIDATION_TIMEOUT}`),
-          ),
-      }),
+      Effect.timeoutOption(
+        totalOf(
+          VALIDATION_TIMEOUT[input.level],
+          input.level === "full" ? VALIDATION_EXPORT_BUDGET : VALIDATION_REPORT_BUDGET,
+        ),
+      ),
+    );
+
+  const validate = (input: ValidationInput) =>
+    Effect.gen(function* () {
+      const observed = yield* observe(input);
+      if (Option.isNone(observed)) {
+        return skippedValidation(
+          input.level,
+          `the preview browser did not finish within ${VALIDATION_TIMEOUT[input.level]}`,
+        );
+      }
+      const { observation, report, omitted } = observed.value;
+      const { commands, files } =
+        report === undefined ? { commands: [], files: [] } : exportFfmpegInputs(report);
+      const ffmpeg =
+        commands.length === 0
+          ? undefined
+          : yield* ffmpegDryRun
+              .dryRun({
+                commands,
+                assetPaths: input.assetPaths,
+                files,
+                budget: VALIDATION_FFMPEG_BUDGET,
+              })
+              // The dry run stops each command at its budget; this bounds the setup around them.
+              .pipe(
+                Effect.timeoutOption(totalOf(VALIDATION_FFMPEG_BUDGET, "1 second")),
+                Effect.map(Option.getOrUndefined),
+              );
+      return shapeValidation({
+        level: input.level,
+        observation,
+        report,
+        ffmpeg,
+        chrome: input.chrome,
+        omittedAssets: omitted,
+        pageBudget: VALIDATION_PAGE_BUDGET[input.level],
+        exportBudget: VALIDATION_EXPORT_BUDGET,
+      });
+    }).pipe(
       Effect.catch((cause) =>
         Effect.logWarning("Could not validate a workspace page; publishing it unchecked.", {
           cause,
-        }).pipe(Effect.as(skippedValidation(cause.message))),
+        }).pipe(Effect.as(skippedValidation(input.level, cause.message))),
       ),
       Effect.withSpan("MutationWorkspace.validate"),
     );
@@ -288,9 +366,16 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
   const publish = Effect.fn("MutationWorkspace.publish")(function* (input: WorkspacePublishInput) {
     const plan = kit.planPage({ html: input.html, kit: input.kit, template: input.template });
     if (!plan.ok) return yield* new WorkspaceKitInvalidError({ problem: plan.error });
-    const chrome = input.chrome === undefined ? undefined : readWorkspaceChrome(input.chrome);
+    // The agent's manifest replaces the template's own, as a whole.
+    const chromeInput = input.chrome ?? plan.value.template?.chrome;
+    const chrome = chromeInput === undefined ? undefined : readWorkspaceChrome(chromeInput);
     if (chrome !== undefined && !chrome.ok) {
-      return yield* new WorkspaceChromeInvalidError({ problem: chrome.error });
+      return yield* new WorkspaceChromeInvalidError({
+        problem:
+          input.chrome === undefined
+            ? `template "${plan.value.template?.id}" declares chrome T3 rejects (${chrome.error}); pass your own chrome`
+            : chrome.error,
+      });
     }
     yield* checkAssets(input.assetPaths);
     const html = yield* assemblePage(plan.value);
@@ -313,6 +398,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
           .pipe(Effect.mapError((cause) => new WorkspaceStoreError({ cause }))),
         validate({
           html,
+          level: input.validation ?? defaultValidationLevel(plan.value.template),
           template: plan.value.template !== undefined,
           assetPaths: input.assetPaths,
           chrome: chrome?.chrome,
@@ -342,7 +428,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
   return MutationWorkspace.of({ publish, kitDocs });
 });
 
-/** Builds workspaces from a given kit; tests pass a fixture kit. */
+/** Builds workspaces from a given kit; tests pass a fixture kit and their own dry run. */
 export const layerWithKit = (kit: WorkspaceKit) => Layer.effect(MutationWorkspace, make(kit));
 
-export const layer = layerWithKit(workspaceKit);
+export const layer = layerWithKit(workspaceKit).pipe(Layer.provide(FfmpegDryRun.layer));

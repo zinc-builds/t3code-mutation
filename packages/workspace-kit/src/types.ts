@@ -58,6 +58,11 @@ export interface KitTemplateManifest {
   readonly options: Readonly<Record<string, TemplateOptionSpec>>;
   readonly examples: ReadonlyArray<unknown>;
   readonly boltOn: TemplateBoltOn;
+  /**
+   * The native chrome manifest the template's page expects (toolbar, sidebar,
+   * inspector), used when the agent passes none. T3 checks it on publish.
+   */
+  readonly chrome?: Readonly<Record<string, unknown>>;
   readonly [key: string]: unknown;
 }
 

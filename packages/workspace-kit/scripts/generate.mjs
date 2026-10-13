@@ -196,6 +196,15 @@ function readTemplates(kitDir, primitiveNames) {
       });
       if ("html" in manifest) fail(`${where}/template.json must not have an html key.`);
       checkBoltOn(manifest.boltOn, `${where}/template.json boltOn`);
+      // T3 checks the manifest itself on publish; here only its shape.
+      if (
+        "chrome" in manifest &&
+        (manifest.chrome === null ||
+          typeof manifest.chrome !== "object" ||
+          Array.isArray(manifest.chrome))
+      ) {
+        fail(`${where}/template.json chrome must be a chrome manifest object.`);
+      }
       // The manifest as written, so fields T3 does not read (bolt-on docs, notes) reach agents.
       return {
         ...manifest,
