@@ -456,6 +456,7 @@ import {
 import { ChatHeader } from "./chat/ChatHeader";
 import { MutationStage } from "./mutation/MutationStage";
 import { MutationTitleBar } from "./mutation/MutationTitleBar";
+import { WorkspaceToolbar } from "./mutation/WorkspaceToolbar";
 import { leaveWorkspace } from "./mutation/mutationWorkspaceStore";
 import { useMutationWorkspace } from "./mutation/useMutationWorkspace";
 import { prepareWorkspaceMessageAttachments } from "./mutation/workspaceMessageAttachments";
@@ -11508,6 +11509,7 @@ export default function ChatView(props: ChatViewProps) {
               threadTitle={activeThread.title}
               workspaceTitle={mutationWorkspace.workspace.title}
               onBackToChat={leaveMutationWorkspace}
+              toolbar={<WorkspaceToolbar />}
             />
           ) : (
             <ChatHeader

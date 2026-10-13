@@ -1,4 +1,5 @@
 import { MessageSquareIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "../ui/button";
 import {
@@ -11,15 +12,17 @@ import {
 /**
  * The thread header while a workspace is shown: the thread sits one level up
  * in the breadcrumb, so returning to chat reads as going back, not closing.
+ * A workspace with native chrome puts its `toolbar` after the breadcrumb.
  */
 export function MutationTitleBar(props: {
   readonly threadTitle: string;
   readonly workspaceTitle: string;
   readonly onBackToChat: () => void;
+  readonly toolbar?: ReactNode;
 }) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
-      <WorkspaceBreadcrumb ariaLabel="Workspace breadcrumb" className="flex-1">
+      <WorkspaceBreadcrumb ariaLabel="Workspace breadcrumb" className="min-w-0 shrink">
         <WorkspaceBreadcrumbItem className="shrink">
           <button
             type="button"
@@ -40,7 +43,8 @@ export function MutationTitleBar(props: {
           </h2>
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
-      <Button size="xs" variant="ghost-muted" onClick={props.onBackToChat}>
+      {props.toolbar}
+      <Button size="xs" variant="ghost-muted" className="ml-auto" onClick={props.onBackToChat}>
         <MessageSquareIcon />
         Back to chat
       </Button>

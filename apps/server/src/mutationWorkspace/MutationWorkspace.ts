@@ -4,6 +4,7 @@ import {
   WORKSPACE_MAX_TITLE_LENGTH,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
+import { readWorkspaceChrome } from "@t3tools/shared/mutationWorkspaceChrome";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -25,6 +26,15 @@ export class WorkspaceAssetNotFoundError extends Schema.TaggedError<WorkspaceAss
   }
 }
 
+export class WorkspaceChromeInvalidError extends Schema.TaggedError<WorkspaceChromeInvalidError>()(
+  "WorkspaceChromeInvalidError",
+  { problem: Schema.String },
+) {
+  override get message(): string {
+    return `The chrome manifest is invalid: ${this.problem}. Fix it and call workspace_mutate again.`;
+  }
+}
+
 export class WorkspaceStoreError extends Schema.TaggedError<WorkspaceStoreError>()(
   "WorkspaceStoreError",
   { cause: Schema.Defect() },
@@ -37,6 +47,7 @@ export class WorkspaceStoreError extends Schema.TaggedError<WorkspaceStoreError>
 export type WorkspacePublishError =
   | HtmlRender.HtmlRenderPrepareError
   | WorkspaceAssetNotFoundError
+  | WorkspaceChromeInvalidError
   | WorkspaceStoreError;
 
 /**
@@ -51,6 +62,8 @@ export class MutationWorkspace extends Context.Service<
       readonly html: string;
       readonly title: string;
       readonly assetPaths: ReadonlyArray<string>;
+      /** The agent's chrome manifest, validated here; undefined for a bare page. */
+      readonly chrome?: unknown;
     }) => Effect.Effect<WorkspaceReference, WorkspacePublishError>;
   }
 >()("t3/mutationWorkspace/MutationWorkspace") {}
@@ -80,7 +93,12 @@ const make = Effect.gen(function* () {
     readonly html: string;
     readonly title: string;
     readonly assetPaths: ReadonlyArray<string>;
+    readonly chrome?: unknown;
   }) {
+    const chrome = input.chrome === undefined ? undefined : readWorkspaceChrome(input.chrome);
+    if (chrome !== undefined && !chrome.ok) {
+      return yield* new WorkspaceChromeInvalidError({ problem: chrome.error });
+    }
     yield* checkAssets(input.assetPaths);
     const html = injectWorkspaceBridge(yield* htmlRender.prepare(input.html));
     // The `-html` id suffix makes the asset route serve it as a sandboxed text/html document.
@@ -105,6 +123,7 @@ const make = Effect.gen(function* () {
         path: assetPath,
         name: path.basename(assetPath),
       })),
+      ...(chrome === undefined ? {} : { chrome: chrome.chrome }),
     } satisfies WorkspaceReference;
   });
 

@@ -14,6 +14,7 @@ import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 
 import { Button } from "../ui/button";
 import { useWorkspaceBridge } from "./useWorkspaceBridge";
+import { useWorkspaceChromeBridge } from "./useWorkspaceChromeBridge";
 
 /** A cached asset URL with less life than this is minted afresh first. */
 const MIN_URL_LIFE_MS = 5 * 60_000;
@@ -110,6 +111,7 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
   useEffect(postTheme, [theme]);
 
   useWorkspaceBridge(frameRef, src !== null && !navigatedAway, props);
+  useWorkspaceChromeBridge(frameRef, src !== null && !navigatedAway, attachmentId);
 
   // Links in the page open in the browser, only right after the user clicked
   // in the workspace, as with HTML renders.

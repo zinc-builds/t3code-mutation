@@ -15,6 +15,8 @@ import {
   type ThreadImage,
 } from "./activeWorkspace";
 import { useMutationWorkspaceStore } from "./mutationWorkspaceStore";
+import { useWorkspaceChromeSession } from "./useWorkspaceChromeSession";
+import { useWorkspaceChromeStore } from "./workspaceChromeStore";
 
 const EMPTY_IMAGES: ReadonlyArray<ThreadImage> = Object.freeze([]);
 
@@ -104,18 +106,38 @@ function useShownWorkspace(
   return shown.threadKey === threadKey ? shown.workspace : active;
 }
 
-/** Collapses the app sidebar while mutated and reopens it afterwards if it was open. */
-function useCollapsedSidebar(collapsed: boolean) {
+/**
+ * Opens or collapses the app sidebar while mutated (`wanted`), and puts back
+ * what the user had once the workspace closes (`wanted` null). A workspace
+ * with its own sidebar opens it; a bare page collapses it.
+ */
+function useWorkspaceSidebarOpen(wanted: boolean | null) {
   const { isMobile, open, setOpen } = useSidebar();
   const sidebarRef = useRef({ open, setOpen });
+  // What the user had before the first workspace of this stretch; null outside one.
+  const restoreRef = useRef<boolean | null>(null);
   useLayoutEffect(() => {
     sidebarRef.current = { open, setOpen };
   });
   useLayoutEffect(() => {
-    if (!collapsed || isMobile || !sidebarRef.current.open) return;
-    void sidebarRef.current.setOpen(false);
-    return () => void sidebarRef.current.setOpen(true);
-  }, [collapsed, isMobile]);
+    if (isMobile) return;
+    const sidebar = sidebarRef.current;
+    if (wanted === null) {
+      if (restoreRef.current !== null && sidebar.open !== restoreRef.current) {
+        void sidebar.setOpen(restoreRef.current);
+      }
+      restoreRef.current = null;
+      return;
+    }
+    restoreRef.current ??= sidebar.open;
+    if (sidebar.open !== wanted) void sidebar.setOpen(wanted);
+  }, [wanted, isMobile]);
+  useLayoutEffect(
+    () => () => {
+      if (restoreRef.current !== null) void sidebarRef.current.setOpen(restoreRef.current);
+    },
+    [],
+  );
 }
 
 /**
@@ -133,6 +155,16 @@ export function useMutationWorkspace(
     active,
     animate,
   );
-  useCollapsedSidebar(shown !== null);
+  useWorkspaceChromeSession(threadRef, shown?.workspace ?? null);
+  // The page can add a sidebar live, so the session counts as well as the manifest.
+  const liveSidebar = useWorkspaceChromeStore(
+    (state) =>
+      state.session !== null &&
+      state.session.attachmentId === shown?.workspace.attachmentId &&
+      (state.session.chrome.sidebar?.length ?? 0) > 0,
+  );
+  useWorkspaceSidebarOpen(
+    shown === null ? null : liveSidebar || (shown.workspace.chrome?.sidebar?.length ?? 0) > 0,
+  );
   return { shown, resumable, threadImages };
 }
