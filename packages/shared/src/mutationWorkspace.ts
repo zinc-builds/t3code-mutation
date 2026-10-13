@@ -128,24 +128,29 @@ export interface WorkspaceBridgeRect {
   readonly height: number;
 }
 
-export type WorkspaceBridgeRequest =
+/**
+ * A request from the page. Files arrive as `File`s where the host reads the
+ * page's messages directly; a host that relays them across another boundary
+ * (React Native) reads its own encoding of them.
+ */
+export type WorkspaceBridgeRequest<F = File> =
   | { readonly id: string | number; readonly method: typeof WORKSPACE_BRIDGE_METHODS.initialize }
   | {
       readonly id: string | number;
       readonly method: typeof WORKSPACE_BRIDGE_METHODS.send;
       readonly text: string;
       /** Sent in the same message; empty when the page sent text only. */
-      readonly files: ReadonlyArray<File>;
+      readonly files: ReadonlyArray<F>;
     }
   | {
       readonly id: string | number;
       readonly method: typeof WORKSPACE_BRIDGE_METHODS.attach;
-      readonly files: ReadonlyArray<File>;
+      readonly files: ReadonlyArray<F>;
     }
   | {
       readonly id: string | number;
       readonly method: typeof WORKSPACE_BRIDGE_METHODS.download;
-      readonly file: File;
+      readonly file: F;
     };
 
 export type WorkspaceBridgeNotification =
@@ -169,10 +174,21 @@ function readRect(value: unknown): WorkspaceBridgeRect | null | undefined {
     : undefined;
 }
 
-/** A page's bridge message, or undefined when `data` is not one. */
+/**
+ * A page's bridge message, or undefined when `data` is not one. Files are
+ * `File`s unless `isFile` reads the host's own encoding of them.
+ */
 export function readWorkspaceBridgeMessage(
   data: unknown,
-): WorkspaceBridgeRequest | WorkspaceBridgeNotification | undefined {
+): WorkspaceBridgeRequest | WorkspaceBridgeNotification | undefined;
+export function readWorkspaceBridgeMessage<F>(
+  data: unknown,
+  isFile: (value: unknown) => value is F,
+): WorkspaceBridgeRequest<F> | WorkspaceBridgeNotification | undefined;
+export function readWorkspaceBridgeMessage(
+  data: unknown,
+  isFile: (value: unknown) => boolean = isFileLike,
+): WorkspaceBridgeRequest<unknown> | WorkspaceBridgeNotification | undefined {
   if (typeof data !== "object" || data === null) return undefined;
   const { jsonrpc, id, method, params } = data as Record<string, unknown>;
   if (jsonrpc !== "2.0" || typeof method !== "string") return undefined;
@@ -188,7 +204,7 @@ export function readWorkspaceBridgeMessage(
       const files =
         p.files === undefined
           ? []
-          : Array.isArray(p.files) && p.files.every(isFileLike)
+          : Array.isArray(p.files) && p.files.every(isFile)
             ? p.files
             : undefined;
       return hasId && typeof p.text === "string" && p.text.trim() !== "" && files !== undefined
@@ -196,11 +212,11 @@ export function readWorkspaceBridgeMessage(
         : undefined;
     }
     case WORKSPACE_BRIDGE_METHODS.attach:
-      return hasId && Array.isArray(p.files) && p.files.length > 0 && p.files.every(isFileLike)
+      return hasId && Array.isArray(p.files) && p.files.length > 0 && p.files.every(isFile)
         ? { id, method, files: p.files }
         : undefined;
     case WORKSPACE_BRIDGE_METHODS.download:
-      return hasId && isFileLike(p.file) ? { id, method, file: p.file } : undefined;
+      return hasId && isFile(p.file) ? { id, method, file: p.file } : undefined;
     case WORKSPACE_BRIDGE_METHODS.setState:
       return { method, state: p.state };
     case WORKSPACE_BRIDGE_METHODS.restore:

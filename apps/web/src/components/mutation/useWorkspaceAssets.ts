@@ -1,7 +1,13 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import {
+  workspaceAttachmentResource,
+  workspaceErrorMessage,
+  workspaceFileName,
+  workspaceFileResource,
+  type WorkspaceAssetResource,
+} from "@t3tools/client-runtime/state/mutation-workspace-host";
 import type {
-  AssetResource,
   EnvironmentId,
   OrchestrationV2ProjectedTurnItem,
   ScopedThreadRef,
@@ -13,20 +19,15 @@ import { assetEnvironment } from "~/state/assets";
 import { readPreparedConnection } from "~/state/session";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
-import { runningWorkspaceMutations, threadImagesFromTurnItems } from "./activeWorkspace";
+import {
+  runningWorkspaceMutations,
+  threadImagesFromTurnItems,
+} from "@t3tools/client-runtime/state/mutation-workspace-active";
 import {
   prefetchWorkspaceAsset,
   setWorkspaceAssetScope,
   workspaceAssetKey,
 } from "./workspaceAssetCache";
-
-export type WorkspaceAssetResource = Extract<
-  AssetResource,
-  { readonly _tag: "attachment" | "media-file" }
->;
-
-const errorMessage = (error: unknown) =>
-  error instanceof Error && error.message.trim() !== "" ? error.message : String(error);
 
 /** Fetches a workspace asset's bytes from its environment: mint a URL, then download it. */
 export function useWorkspaceAssetFetcher() {
@@ -43,7 +44,8 @@ export function useWorkspaceAssetFetcher() {
     if (connection === null)
       throw new Error("Reconnect to this environment to load the workspace.");
     const minted = await createAssetUrl({ environmentId, input: { resource } });
-    if (minted._tag !== "Success") throw new Error(errorMessage(squashAtomCommandFailure(minted)));
+    if (minted._tag !== "Success")
+      throw new Error(workspaceErrorMessage(squashAtomCommandFailure(minted)));
     const url = resolveAssetUrl(connection.httpBaseUrl, minted.value.relativeUrl);
     if (url === null) throw new Error(`The environment returned an invalid URL for ${name}.`);
     const response = await fetch(url);
@@ -86,18 +88,13 @@ export function useWorkspaceAssetPrewarm(
     const { fetchAsset: fetchNow, visibleTurnItems: items } = latest.current;
     const resources: Array<{ resource: WorkspaceAssetResource; name: string }> = [
       ...threadImagesFromTurnItems(items).map((image) => ({
-        resource: {
-          _tag: "attachment" as const,
-          attachmentId: image.attachmentId,
-          fileName: image.name,
-          mimeType: image.mimeType,
-        },
+        resource: workspaceAttachmentResource(image),
         name: image.name,
       })),
       ...fresh.flatMap(({ assetPaths }) =>
         assetPaths.map((path) => ({
-          resource: { _tag: "media-file" as const, threadId, path },
-          name: path.slice(path.search(/[^\\/]*$/)),
+          resource: workspaceFileResource(threadId, path),
+          name: workspaceFileName(path),
         })),
       ),
     ];

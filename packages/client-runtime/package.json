@@ -403,6 +403,14 @@
       "types": "./src/state/mutationWorkspace.ts",
       "default": "./src/state/mutationWorkspace.ts"
     },
+    "./state/mutation-workspace-active": {
+      "types": "./src/state/mutationWorkspaceActive.ts",
+      "default": "./src/state/mutationWorkspaceActive.ts"
+    },
+    "./state/mutation-workspace-host": {
+      "types": "./src/state/mutationWorkspaceHost.ts",
+      "default": "./src/state/mutationWorkspaceHost.ts"
+    },
     "./source-control-clients": {
       "types": "./src/sourceControlClients.ts",
       "default": "./src/sourceControlClients.ts"

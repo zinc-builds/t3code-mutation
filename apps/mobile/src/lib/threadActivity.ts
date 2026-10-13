@@ -64,10 +64,12 @@ import {
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import type { McpAppReference } from "@t3tools/shared/mcpApp";
+import type { WorkspaceReference } from "@t3tools/shared/mutationWorkspace";
 import {
   compactDynamicToolOutput,
   htmlRenderFromToolItem,
   mcpAppFromToolItem,
+  workspaceFromToolItem,
 } from "@t3tools/shared/toolOutput";
 import * as DateTime from "effect/DateTime";
 
@@ -177,6 +179,16 @@ type RawThreadFeedEntry =
       readonly render: HtmlRenderReference;
     }
   | {
+      /** A workspace a completed `workspace_mutate` call published; reopens it. */
+      readonly type: "workspace";
+      readonly id: string;
+      readonly createdAt: string;
+      readonly runId: RunId | null;
+      /** The tool item, which the thread's active workspace is keyed by. */
+      readonly itemId: string;
+      readonly workspace: WorkspaceReference;
+    }
+  | {
       /** An MCP App a completed tool call captured, hosted in place of its work row. */
       readonly type: "mcp-app";
       readonly id: string;
@@ -192,7 +204,7 @@ type RawThreadFeedEntry =
 export type ThreadFeedEntry = ThreadFeedEntryContent & { readonly continuesWorkLog?: boolean };
 
 type ThreadFeedEntryContent =
-  | Extract<RawThreadFeedEntry, { type: "message" | "html-render" | "mcp-app" }>
+  | Extract<RawThreadFeedEntry, { type: "message" | "html-render" | "workspace" | "mcp-app" }>
   | {
       readonly type: "activity-group";
       readonly id: string;
@@ -1085,6 +1097,7 @@ function deriveThreadFeedRunFolds(
         ? (entry.message.runId ?? runlessKey)
         : entry.type === "activity-group" ||
             entry.type === "html-render" ||
+            entry.type === "workspace" ||
             entry.type === "mcp-app"
           ? (entry.runId ?? runlessKey)
           : null;
@@ -1138,6 +1151,7 @@ function deriveThreadFeedRunFolds(
             entry.id !== firstAssistantId &&
             entry.id !== terminalAssistantId &&
             entry.type !== "html-render" &&
+            entry.type !== "workspace" &&
             entry.type !== "mcp-app" &&
             !(
               entry.type === "activity-group" &&
@@ -1792,6 +1806,24 @@ export function buildThreadFeed(
         createdAt,
         runId: item.runId,
         render,
+      };
+      projectedEntriesCache.set(row, { attemptId, entry });
+      entries.push(entry);
+      continue;
+    }
+    // A running or failed call stays an ordinary work row.
+    const workspace =
+      item.type === "dynamic_tool" && item.status === "completed"
+        ? workspaceFromToolItem(item)
+        : undefined;
+    if (workspace) {
+      const entry: RawThreadFeedEntry = {
+        type: "workspace",
+        id: `workspace:${row.visibility}:${row.sourceThreadId}:${row.sourceItemId}`,
+        createdAt,
+        runId: item.runId,
+        itemId: item.id,
+        workspace,
       };
       projectedEntriesCache.set(row, { attemptId, entry });
       entries.push(entry);

@@ -1,23 +1,31 @@
+import {
+  workspaceAgentStatusNotification,
+  workspaceAssetSources,
+  workspaceBridgeFailureTitle,
+  workspaceComposerSizeNotification,
+  workspaceErrorMessage,
+  workspaceInitialPageState,
+  workspaceStateErrorNotification,
+  type WorkspaceAssetSource,
+} from "@t3tools/client-runtime/state/mutation-workspace-host";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
   readWorkspaceBridgeMessage,
   WORKSPACE_BRIDGE_METHODS,
   workspaceBridgeError,
-  workspaceBridgeNotification,
   workspaceBridgeResult,
   type WorkspaceBridgeRect,
   type WorkspaceBridgeRequest,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
-import { workspacePageState } from "@t3tools/shared/mutationWorkspaceChrome";
 import { type RefObject, useEffect, useRef } from "react";
 
 import { mutationWorkspaceEnvironment } from "~/state/mutationWorkspace";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { toastManager } from "../ui/toast";
-import { useWorkspaceAssetFetcher, type WorkspaceAssetResource } from "./useWorkspaceAssets";
+import { useWorkspaceAssetFetcher } from "./useWorkspaceAssets";
 import { loadWorkspaceAsset, workspaceAssetKey } from "./workspaceAssetCache";
 import { setWorkspaceChromePageState } from "./workspaceChromeStore";
 
@@ -53,12 +61,9 @@ type WorkspaceBridgeAsset = {
   | { readonly source: "file"; readonly path: string }
 );
 
-const errorMessage = (error: unknown) =>
-  error instanceof Error && error.message.trim() !== "" ? error.message : String(error);
-
 const commandError = (result: {
   readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
-}) => new Error(errorMessage(squashAtomCommandFailure(result)));
+}) => new Error(workspaceErrorMessage(squashAtomCommandFailure(result)));
 
 /** Saves a file through the browser's own download, which asks where when it is set to. */
 function saveBlob(blob: Blob, name: string) {
@@ -72,12 +77,8 @@ function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-const agentStatus = (working: boolean) =>
-  workspaceBridgeNotification(WORKSPACE_BRIDGE_METHODS.agentStatus, {
-    status: working ? "working" : "idle",
-  });
-const composerSize = (height: number) =>
-  workspaceBridgeNotification(WORKSPACE_BRIDGE_METHODS.composerSize, { height });
+const agentStatus = workspaceAgentStatusNotification;
+const composerSize = workspaceComposerSizeNotification;
 
 /**
  * Hosts the `t3/workspace/*` bridge for the page in `frameRef` while `enabled`:
@@ -122,12 +123,12 @@ export function useWorkspaceBridge(
     let initializedAssets = 0;
     // Attachments never change, so pages share them; a file is fetched per page
     // unless it was prefetched for this one.
-    const fetchAsset = (resource: WorkspaceAssetResource, name: string) => {
+    const fetchAsset = (source: WorkspaceAssetSource) => {
       const { environmentId } = latest.current.options;
       const loaded = loadWorkspaceAsset(
-        workspaceAssetKey(environmentId, resource),
-        resource._tag === "attachment",
-        () => latest.current.fetchAsset(environmentId, resource, name),
+        workspaceAssetKey(environmentId, source.resource),
+        source.resource._tag === "attachment",
+        () => latest.current.fetchAsset(environmentId, source.resource, source.name),
       );
       if (loaded.prefetched) prefetchedAssets += 1;
       return loaded.blob;
@@ -141,42 +142,25 @@ export function useWorkspaceBridge(
           if (result._tag !== "Success") throw commandError(result);
           return result.value.state;
         });
-      const images = threadImages.map(async (image): Promise<WorkspaceBridgeAsset> => {
-        const blob = await fetchAsset(
-          {
-            _tag: "attachment",
-            attachmentId: image.attachmentId,
-            fileName: image.name,
-            mimeType: image.mimeType,
-          },
-          image.name,
-        );
-        return {
-          name: image.name,
-          mimeType: image.mimeType,
-          source: "attachment",
-          attachmentId: image.attachmentId,
-          file: new File([blob], image.name, { type: image.mimeType }),
-        };
-      });
-      const files = workspace.assets.map(async (asset): Promise<WorkspaceBridgeAsset> => {
-        const blob = await fetchAsset(
-          { _tag: "media-file", threadId, path: asset.path },
-          asset.name,
-        );
-        return {
-          name: asset.name,
-          mimeType: blob.type,
-          source: "file",
-          path: asset.path,
-          file: new File([blob], asset.name, { type: blob.type }),
-        };
-      });
-      const [storedState, assets] = await Promise.all([state, Promise.all([...images, ...files])]);
+      const files = workspaceAssetSources(threadId, workspace, threadImages).map(
+        async (source): Promise<WorkspaceBridgeAsset> => {
+          const blob = await fetchAsset(source);
+          const mimeType = source.mimeType ?? blob.type;
+          const file = new File([blob], source.name, { type: mimeType });
+          return source.source === "attachment"
+            ? {
+                name: source.name,
+                mimeType,
+                source: "attachment",
+                attachmentId: source.attachmentId,
+                file,
+              }
+            : { name: source.name, mimeType, source: "file", path: source.path, file };
+        },
+      );
+      const [storedState, assets] = await Promise.all([state, Promise.all(files)]);
       initializedAssets = assets.length;
-      // The server answers null before the page stored anything.
-      // A workspace with chrome stores { controls, page }; the page sees only its part.
-      return { state: workspacePageState(storedState ?? undefined) ?? undefined, assets };
+      return { state: workspaceInitialPageState(storedState), assets };
     };
 
     const run = async (request: WorkspaceBridgeRequest) => {
@@ -201,19 +185,6 @@ export function useWorkspaceBridge(
       }
     };
 
-    const failureTitle = (method: WorkspaceBridgeRequest["method"]) => {
-      switch (method) {
-        case WORKSPACE_BRIDGE_METHODS.initialize:
-          return "Couldn't load the workspace";
-        case WORKSPACE_BRIDGE_METHODS.download:
-          return "Couldn't save the file";
-        // Sending and attaching go through the composer, which reports its own failures.
-        case WORKSPACE_BRIDGE_METHODS.send:
-        case WORKSPACE_BRIDGE_METHODS.attach:
-          return null;
-      }
-    };
-
     const respond = (request: WorkspaceBridgeRequest) => {
       void run(request).then(
         (result) => {
@@ -233,9 +204,9 @@ export function useWorkspaceBridge(
           }
         },
         (error: unknown) => {
-          const message = errorMessage(error);
+          const message = workspaceErrorMessage(error);
           post(workspaceBridgeError(request.id, message));
-          const title = failureTitle(request.method);
+          const title = workspaceBridgeFailureTitle(request.method);
           if (title !== null) toastManager.add({ type: "error", title, description: message });
         },
       );
@@ -252,9 +223,9 @@ export function useWorkspaceBridge(
             lastStateFailure = null;
             return;
           }
-          const message = errorMessage(squashAtomCommandFailure(result));
+          const message = workspaceErrorMessage(squashAtomCommandFailure(result));
           // The page hears about every failure; the user once per distinct one.
-          post(workspaceBridgeNotification(WORKSPACE_BRIDGE_METHODS.stateError, { message }));
+          post(workspaceStateErrorNotification(message));
           if (message === lastStateFailure) return;
           lastStateFailure = message;
           toastManager.add({

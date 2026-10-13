@@ -4,7 +4,7 @@ import { memo } from "react";
 
 import { ComposerBanner } from "../chat/ComposerBanner";
 import { Button } from "../ui/button";
-import type { ItemWorkspace } from "./activeWorkspace";
+import type { ItemWorkspace } from "@t3tools/client-runtime/state/mutation-workspace-active";
 import { openWorkspace } from "./mutationWorkspaceStore";
 
 /** The way back into the agent's workspace after the user returned to chat from it. */

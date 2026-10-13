@@ -13,7 +13,7 @@ import {
   threadImagesFromTurnItems,
   type ItemWorkspace,
   type ThreadImage,
-} from "./activeWorkspace";
+} from "@t3tools/client-runtime/state/mutation-workspace-active";
 import { useMutationWorkspaceStore } from "./mutationWorkspaceStore";
 import { useWorkspaceAssetPrewarm } from "./useWorkspaceAssets";
 import { useWorkspaceChromeSession } from "./useWorkspaceChromeSession";
