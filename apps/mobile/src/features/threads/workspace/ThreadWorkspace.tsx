@@ -263,6 +263,11 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
       case WORKSPACE_BRIDGE_METHODS.download:
         await shareWorkspaceFile(request.file);
         return {};
+      // Screenshots would cross the WebView boundary as base64; until mobile
+      // carries them, pages show their own "not available" state.
+      case WORKSPACE_BRIDGE_METHODS.previewOpen:
+      case WORKSPACE_BRIDGE_METHODS.preview:
+        throw new Error("Live previews are not available on mobile yet.");
     }
   };
 
@@ -277,7 +282,10 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
         const title = workspaceBridgeFailureTitle(request.method);
         if (title !== null) {
           Alert.alert(title, message);
-        } else {
+        } else if (
+          request.method === WORKSPACE_BRIDGE_METHODS.send ||
+          request.method === WORKSPACE_BRIDGE_METHODS.attach
+        ) {
           // Sending and attaching are the composer's work, so it shows why they failed.
           setThreadComposerError(scopedThreadKey(current.environmentId, current.threadId), message);
         }

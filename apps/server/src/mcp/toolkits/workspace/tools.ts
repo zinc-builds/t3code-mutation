@@ -67,6 +67,16 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
     chrome: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
       description: `${WORKSPACE_CHROME_GUIDE} A template that declares its own chrome gets it when you omit this; passing chrome replaces the template's.`,
     }),
+    preview: Schema.optional(
+      Schema.Struct({
+        url: Schema.String.annotate({
+          description: "Absolute http(s) URL, such as http://localhost:5173/.",
+        }),
+      }),
+    ).annotate({
+      description:
+        "A live web page the workspace reviews, usually the user's dev server for a design review. The page reaches it through t3.workspace.preview; it may open any URL on this origin, and no other.",
+    }),
     validation: Schema.optional(Schema.Literals(WORKSPACE_VALIDATION_LEVELS)).annotate({
       description:
         'How far T3 checks the page before returning. "boot" loads it with your assets for a few seconds and reports uncaught exceptions, console errors, customScript failures, and setChrome patches T3 would reject. "full" then also calls window.t3template.export() (up to 6 s; its files are captured, not delivered to the user) and dry-runs each ffmpeg command the export returns against your assets with this machine\'s ffmpeg (0.5 s of output each, up to 4 s in all; skipped when ffmpeg is not installed). Default: "full" for a template with options.customScript, since bolt-ons most often break an export that loads fine; "boot" otherwise. Pass "full" after changing what an export reads; pass "boot" to skip the export while iterating on layout.',
@@ -78,6 +88,7 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
       title: Schema.String,
       assets: Schema.Array(Schema.Struct({ path: Schema.String, name: Schema.String })),
       chrome: Schema.optional(Schema.Unknown),
+      preview: Schema.optional(Schema.Struct({ url: Schema.String })),
     }),
     validation: Schema.Struct({
       level: Schema.Literals(WORKSPACE_VALIDATION_LEVELS),

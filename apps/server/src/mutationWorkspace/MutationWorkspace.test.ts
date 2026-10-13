@@ -998,6 +998,41 @@ it.layer(NodeServices.layer)("MutationWorkspace template chrome", (it) => {
   });
 });
 
+it.layer(NodeServices.layer)("MutationWorkspace preview", (it) => {
+  it.effect("publishes the preview it reviews and hands its URL to the stand-in", () => {
+    const seen: Array<HtmlRender.ObservePageInput> = [];
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const { reference } = yield* workspace.publish({
+        threadId: thread,
+        title: "Design review",
+        assetPaths: [],
+        html: "<p></p>",
+        preview: { url: "http://localhost:5173/pricing" },
+      });
+      assert.deepStrictEqual(reference.preview, { url: "http://localhost:5173/pricing" });
+      assert.include(seen[0]!.html, '"previewUrl":"http://localhost:5173/pricing"');
+    }).pipe(Effect.provide(layerKitWorkspace(reporting({ chromePatches: [] }, {}, seen))));
+  });
+
+  it.effect("rejects a preview that is not an http(s) URL as an invalid request", () =>
+    Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const error = yield* workspace
+        .publish({
+          threadId: thread,
+          title: "Design review",
+          assetPaths: [],
+          html: "<p></p>",
+          preview: { url: "localhost:5173" },
+        })
+        .pipe(Effect.flip);
+      assert.strictEqual(error._tag, "WorkspacePreviewUrlInvalidError");
+      assert.include(error.message, "http://localhost:5173/");
+    }).pipe(Effect.provide(layerKitWorkspace())),
+  );
+});
+
 // Real-browser test; runs only when this names a chrome-headless-shell (or Chrome).
 const TEST_BROWSER_ENV = "T3CODE_TEST_HEADLESS_SHELL";
 

@@ -74,6 +74,17 @@ describe("RPC authorization scopes", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.cloudInstallRelayClient)).toBe(AuthRelayWriteScope);
   });
 
+  it("drives a workspace's live preview only with preview operate access", () => {
+    // The review page runs in the environment's browser, like a server preview tab.
+    for (const method of [
+      WS_METHODS.workspacePreviewOpen,
+      WS_METHODS.workspacePreviewAct,
+      WS_METHODS.workspaceSubscribePreview,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthPreviewOperateScope);
+    }
+  });
+
   it("requires permission to operate on a thread before uploading feedback", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.providerUploadFeedback)).toBe(
       AuthOrchestrationOperateScope,

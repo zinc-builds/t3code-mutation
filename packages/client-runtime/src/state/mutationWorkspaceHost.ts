@@ -140,7 +140,8 @@ export function workspaceStateErrorNotification(message: string) {
 /**
  * The title the user sees when the host's own work for a request fails, or
  * null when the request reports its failure elsewhere: sending and attaching
- * go through the composer, which shows its own.
+ * go through the composer, which shows its own, and the page shows a
+ * preview's.
  */
 export function workspaceBridgeFailureTitle(
   method: WorkspaceBridgeRequest<unknown>["method"],
@@ -152,6 +153,10 @@ export function workspaceBridgeFailureTitle(
       return "Couldn't save the file";
     case WORKSPACE_BRIDGE_METHODS.send:
     case WORKSPACE_BRIDGE_METHODS.attach:
+      return null;
+    // A page shows its own preview's failures, such as a dev server that is down.
+    case WORKSPACE_BRIDGE_METHODS.previewOpen:
+    case WORKSPACE_BRIDGE_METHODS.preview:
       return null;
   }
 }

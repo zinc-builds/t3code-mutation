@@ -6,6 +6,7 @@ import {
   injectWorkspaceBridge,
   WORKSPACE_KIT_DOCS_TOOL_NAME,
   WORKSPACE_MAX_TITLE_LENGTH,
+  workspacePreviewOrigin,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
 import {
@@ -81,6 +82,15 @@ export class WorkspaceKitInvalidError extends Schema.TaggedError<WorkspaceKitInv
   }
 }
 
+export class WorkspacePreviewUrlInvalidError extends Schema.TaggedError<WorkspacePreviewUrlInvalidError>()(
+  "WorkspacePreviewUrlInvalidError",
+  { url: Schema.String },
+) {
+  override get message(): string {
+    return `preview.url must be an absolute http(s) URL, such as http://localhost:5173/, not "${this.url.slice(0, 200)}".`;
+  }
+}
+
 export class WorkspaceStoreError extends Schema.TaggedError<WorkspaceStoreError>()(
   "WorkspaceStoreError",
   { cause: Schema.Defect() },
@@ -95,6 +105,7 @@ export type WorkspacePublishError =
   | WorkspaceAssetNotFoundError
   | WorkspaceChromeInvalidError
   | WorkspaceKitInvalidError
+  | WorkspacePreviewUrlInvalidError
   | WorkspaceStoreError;
 
 /** What an agent asks `workspace_mutate` to build. */
@@ -117,6 +128,8 @@ export interface WorkspacePublishInput {
   readonly chrome?: unknown;
   /** How far to check the page; undefined means `defaultValidationLevel`. */
   readonly validation?: WorkspaceValidationLevel | undefined;
+  /** A live page the workspace reviews; its origin is what the workspace may open. */
+  readonly preview?: { readonly url: string } | undefined;
 }
 
 /** A stored workspace, and what its page reported when T3 booted it. */
@@ -177,6 +190,7 @@ interface ValidationInput {
   readonly template: boolean;
   readonly assetPaths: ReadonlyArray<string>;
   readonly chrome: WorkspaceChrome | undefined;
+  readonly previewUrl: string | undefined;
 }
 
 /** A template page assembled once: everything before and after its options tag. */
@@ -312,6 +326,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         controls: input.chrome === undefined ? {} : resolveWorkspaceChromeValues(input.chrome),
         template: input.template,
         chrome: input.chrome !== undefined,
+        previewUrl: input.previewUrl,
       });
       const observation = yield* htmlRender.observe({
         html: injectValidationHost(input.html, host),
@@ -399,6 +414,9 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
             : chrome.error,
       });
     }
+    if (input.preview !== undefined && workspacePreviewOrigin(input.preview.url) === undefined) {
+      return yield* new WorkspacePreviewUrlInvalidError({ url: input.preview.url });
+    }
     yield* checkAssets(input.assetPaths);
     const html = yield* assemblePage(plan.value);
     // The `-html` id suffix makes the asset route serve it as a sandboxed text/html document.
@@ -424,6 +442,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
           template: plan.value.template !== undefined,
           assetPaths: input.assetPaths,
           chrome: chrome?.chrome,
+          previewUrl: input.preview?.url,
         }),
       ],
       { concurrency: 2 },
@@ -436,6 +455,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         name: path.basename(assetPath),
       })),
       ...(chrome === undefined ? {} : { chrome: chrome.chrome }),
+      ...(input.preview === undefined ? {} : { preview: { url: input.preview.url } }),
     } satisfies WorkspaceReference;
     return { reference, validation } satisfies WorkspacePublished;
   });

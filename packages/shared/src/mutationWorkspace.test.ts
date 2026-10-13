@@ -8,6 +8,7 @@ import {
   readWorkspaceReference,
   WORKSPACE_BRIDGE_METHODS,
   WORKSPACE_MAX_ASSETS,
+  workspacePreviewOrigin,
 } from "./mutationWorkspace.ts";
 import { isWorkspaceRestoreToolItem, workspaceFromToolItem } from "./toolOutput.ts";
 
@@ -38,6 +39,27 @@ describe("readWorkspaceReference", () => {
       name: `${index}.png`,
     }));
     expect(readWorkspaceReference({ ...reference, assets: tooMany })).toBeUndefined();
+  });
+});
+
+describe("workspace previews", () => {
+  it("grants an http(s) URL's origin and nothing else", () => {
+    expect(workspacePreviewOrigin("http://localhost:5173/settings?tab=2")).toBe(
+      "http://localhost:5173",
+    );
+    expect(workspacePreviewOrigin("https://staging.example.com")).toBe(
+      "https://staging.example.com",
+    );
+    for (const url of ["localhost:5173", "file:///etc/hosts", "javascript:alert(1)", ""]) {
+      expect(workspacePreviewOrigin(url)).toBeUndefined();
+    }
+  });
+
+  it("keeps a declared preview on the reference and refuses a malformed one", () => {
+    const preview = { url: "http://localhost:5173/" };
+    expect(readWorkspaceReference({ ...reference, preview })).toEqual({ ...reference, preview });
+    expect(readWorkspaceReference({ ...reference, preview: { url: "ftp://x" } })).toBeUndefined();
+    expect(readWorkspaceReference({ ...reference, preview: "http://x" })).toBeUndefined();
   });
 });
 
@@ -116,6 +138,53 @@ describe("readWorkspaceBridgeMessage", () => {
         rpc(WORKSPACE_BRIDGE_METHODS.composerSlot, { rect: { ...rect, width: Number.NaN } }),
       ),
     ).toBeUndefined();
+  });
+
+  it("reads preview requests only with a valid action", () => {
+    expect(readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.previewOpen, {}, "p1"))).toEqual(
+      {
+        id: "p1",
+        method: WORKSPACE_BRIDGE_METHODS.previewOpen,
+        url: undefined,
+        viewport: undefined,
+      },
+    );
+    expect(
+      readWorkspaceBridgeMessage(
+        rpc(
+          WORKSPACE_BRIDGE_METHODS.previewOpen,
+          { url: "http://localhost:5173/", viewport: { width: 390, height: 844 } },
+          "p2",
+        ),
+      ),
+    ).toMatchObject({ url: "http://localhost:5173/", viewport: { width: 390, height: 844 } });
+    // A viewport out of range, or a URL that is not a string.
+    expect(
+      readWorkspaceBridgeMessage(
+        rpc(WORKSPACE_BRIDGE_METHODS.previewOpen, { viewport: { width: 10, height: 844 } }, "p3"),
+      ),
+    ).toBeUndefined();
+    expect(
+      readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.previewOpen, { url: 5 }, "p4")),
+    ).toBeUndefined();
+
+    const action = { _tag: "elementsAt", x: 120, y: 640 };
+    expect(
+      readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.preview, { action }, 3)),
+    ).toEqual({ id: 3, method: WORKSPACE_BRIDGE_METHODS.preview, action });
+    for (const bad of [
+      { _tag: "evaluate", script: "fetch('/admin')" },
+      { _tag: "elementsAt", x: "120", y: 640 },
+      { _tag: "highlight" },
+      { _tag: "inspect", selector: "" },
+    ]) {
+      expect(
+        readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.preview, { action: bad }, 4)),
+      ).toBeUndefined();
+    }
+    expect(readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.preview, { action }))).toBe(
+      undefined,
+    );
   });
 
   it("ignores host notifications, other protocols, and unknown methods", () => {
@@ -227,6 +296,11 @@ function loadBridge() {
     setState: (state: unknown) => void;
     send: (text: string, options?: { files: unknown }) => Promise<unknown>;
     restore: () => void;
+    preview: {
+      open: (url?: string, options?: { viewport: unknown }) => Promise<unknown>;
+      elementsAt: (x: number, y: number) => Promise<unknown>;
+      highlight: (selector: string | null) => Promise<unknown>;
+    };
     on: (event: string, callback: (value: unknown) => void) => () => void;
   };
   const fromHost = (data: unknown) => {
@@ -347,5 +421,38 @@ describe("workspace bridge", () => {
     });
     expect(errors).toHaveLength(1);
     expect((errors[0] as Error).message).toBe("Workspace state is over 64KB.");
+  });
+
+  it("drives the live preview through requests the host reads, and hears its changes", async () => {
+    const { workspace, posted, fromHost } = loadBridge();
+    const changes: unknown[] = [];
+    workspace.on("preview-changed", (change) => changes.push(change));
+
+    const opened = workspace.preview.open(undefined, { viewport: { width: 390, height: 844 } });
+    expect(readWorkspaceBridgeMessage({ jsonrpc: "2.0", ...posted[0] })).toMatchObject({
+      method: WORKSPACE_BRIDGE_METHODS.previewOpen,
+      url: undefined,
+      viewport: { width: 390, height: 844 },
+    });
+    const session = { sessionId: "s1", url: "http://localhost:5173/", title: "App" };
+    fromHost({ jsonrpc: "2.0", id: posted[0]!.id, result: session });
+    await expect(opened).resolves.toEqual(session);
+
+    // Results arrive wrapped, and the page gets the part it asked for.
+    const under = workspace.preview.elementsAt(120, 640);
+    expect(readWorkspaceBridgeMessage({ jsonrpc: "2.0", ...posted[1] })).toMatchObject({
+      action: { _tag: "elementsAt", x: 120, y: 640 },
+    });
+    fromHost({ jsonrpc: "2.0", id: posted[1]!.id, result: { elements: [{ selector: "#hero" }] } });
+    await expect(under).resolves.toEqual([{ selector: "#hero" }]);
+
+    void workspace.preview.highlight(null);
+    expect(readWorkspaceBridgeMessage({ jsonrpc: "2.0", ...posted[2] })).toMatchObject({
+      action: { _tag: "highlight", selector: null },
+    });
+
+    const change = { sessionId: "s1", reason: "mutated", url: session.url, title: "App" };
+    fromHost({ jsonrpc: "2.0", method: WORKSPACE_BRIDGE_METHODS.previewChanged, params: change });
+    expect(changes).toEqual([change]);
   });
 });

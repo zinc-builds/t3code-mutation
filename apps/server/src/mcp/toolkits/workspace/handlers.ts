@@ -15,6 +15,7 @@ const INVALID_REQUEST_ERRORS = new Set([
   "WorkspaceAssetNotFoundError",
   "WorkspaceChromeInvalidError",
   "WorkspaceKitInvalidError",
+  "WorkspacePreviewUrlInvalidError",
 ]);
 
 // Every workspace error message is built on the server and tells the agent what to do next.
@@ -46,6 +47,7 @@ const handlers = {
           title: input.title,
           assetPaths: input.assets ?? [],
           chrome: input.chrome,
+          preview: input.preview,
           validation: input.validation,
         })
         .pipe(Effect.mapError(toFailure));

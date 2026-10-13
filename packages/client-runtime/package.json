@@ -411,6 +411,10 @@
       "types": "./src/state/mutationWorkspaceHost.ts",
       "default": "./src/state/mutationWorkspaceHost.ts"
     },
+    "./state/mutation-workspace-preview-host": {
+      "types": "./src/state/mutationWorkspacePreviewHost.ts",
+      "default": "./src/state/mutationWorkspacePreviewHost.ts"
+    },
     "./source-control-clients": {
       "types": "./src/sourceControlClients.ts",
       "default": "./src/sourceControlClients.ts"

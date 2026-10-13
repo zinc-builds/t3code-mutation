@@ -10,6 +10,14 @@
  * Apps, under its own `t3/workspace/*` methods.
  */
 
+import {
+  WORKSPACE_PREVIEW_MAX_URL_LENGTH,
+  WorkspacePreviewAction,
+  WorkspacePreviewViewport,
+} from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
 import { HOST_CONTEXT_CHANGED_METHOD } from "./htmlRender.ts";
 import {
   readStoredWorkspaceChrome,
@@ -38,6 +46,11 @@ export interface WorkspaceAssetReference {
   readonly name: string;
 }
 
+/** A live page the agent handed the workspace to review, such as the user's dev server. */
+export interface WorkspacePreviewReference {
+  readonly url: string;
+}
+
 /** What a `workspace_mutate` result carries so clients can show the workspace. */
 export interface WorkspaceReference {
   readonly attachmentId: string;
@@ -45,6 +58,27 @@ export interface WorkspaceReference {
   readonly assets: ReadonlyArray<WorkspaceAssetReference>;
   /** The native chrome the agent declared (mutationWorkspaceChrome.ts); absent for a bare page. */
   readonly chrome?: WorkspaceChrome;
+  /** The page `t3.workspace.preview.open()` opens when the page names none. */
+  readonly preview?: WorkspacePreviewReference;
+}
+
+/**
+ * The origin a workspace preview URL grants, or undefined when it is not an
+ * absolute http(s) URL. A workspace may preview any page on an origin the
+ * agent declared, as a dev server's routes share one.
+ */
+export function workspacePreviewOrigin(url: string): string | undefined {
+  if (url.length === 0 || url.length > WORKSPACE_PREVIEW_MAX_URL_LENGTH) return undefined;
+  if (!URL.canParse(url)) return undefined;
+  const parsed = new URL(url);
+  return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.origin : undefined;
+}
+
+function readPreview(value: unknown): WorkspacePreviewReference | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null) return null;
+  const { url } = value as Record<string, unknown>;
+  return typeof url === "string" && workspacePreviewOrigin(url) !== undefined ? { url } : null;
 }
 
 function readAsset(value: unknown): WorkspaceAssetReference | undefined {
@@ -57,7 +91,7 @@ function readAsset(value: unknown): WorkspaceAssetReference | undefined {
 
 export function readWorkspaceReference(value: unknown): WorkspaceReference | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const { attachmentId, title, assets, chrome } = value as Record<string, unknown>;
+  const { attachmentId, title, assets, chrome, preview } = value as Record<string, unknown>;
   if (
     typeof attachmentId !== "string" ||
     attachmentId.length === 0 ||
@@ -74,11 +108,14 @@ export function readWorkspaceReference(value: unknown): WorkspaceReference | und
   });
   if (readAssets.length !== assets.length) return undefined;
   const readChrome = readStoredWorkspaceChrome(chrome);
+  const readPreviewReference = readPreview(preview);
+  if (readPreviewReference === null) return undefined;
   return {
     attachmentId,
     title: title.trim().slice(0, WORKSPACE_MAX_TITLE_LENGTH) || "Workspace",
     assets: readAssets,
     ...(readChrome === undefined ? {} : { chrome: readChrome }),
+    ...(readPreviewReference === undefined ? {} : { preview: readPreviewReference }),
   };
 }
 
@@ -91,8 +128,17 @@ export function workspaceMutateInputAssetPaths(input: unknown): string[] {
     : [];
 }
 
+/** The preview URL a `workspace_mutate` call's input names, as the agent passed it. */
+export function workspaceMutateInputPreviewUrl(input: unknown): string | undefined {
+  const preview =
+    typeof input === "object" && input !== null && "preview" in input ? input.preview : undefined;
+  const url =
+    typeof preview === "object" && preview !== null && "url" in preview ? preview.url : undefined;
+  return typeof url === "string" && url.length > 0 ? url : undefined;
+}
+
 export function workspaceReferencesEqual(left: WorkspaceReference, right: WorkspaceReference) {
-  // Chrome, like the page, is fixed per attachment, so the attachment id covers it.
+  // Chrome and the preview, like the page, are fixed per attachment, so the attachment id covers them.
   return (
     left.attachmentId === right.attachmentId &&
     left.title === right.title &&
@@ -127,6 +173,12 @@ export const WORKSPACE_BRIDGE_METHODS = {
   agentStatus: "t3/workspace/agent-status",
   /** Notification from the host: the page's last state was not stored, and why. */
   stateError: "t3/workspace/state-error",
+  /** Request from the page: open (or replace) its live preview of a URL. */
+  previewOpen: "t3/workspace/preview-open",
+  /** Request from the page: act on its open live preview. */
+  preview: "t3/workspace/preview",
+  /** Notification from the host: the live preview loaded, navigated, changed, or closed. */
+  previewChanged: "t3/workspace/preview-changed",
   ...WORKSPACE_CHROME_BRIDGE_METHODS,
 } as const;
 
@@ -160,6 +212,18 @@ export type WorkspaceBridgeRequest<F = File> =
       readonly id: string | number;
       readonly method: typeof WORKSPACE_BRIDGE_METHODS.download;
       readonly file: F;
+    }
+  | {
+      readonly id: string | number;
+      readonly method: typeof WORKSPACE_BRIDGE_METHODS.previewOpen;
+      /** Undefined opens the workspace's declared preview. */
+      readonly url: string | undefined;
+      readonly viewport: WorkspacePreviewViewport | undefined;
+    }
+  | {
+      readonly id: string | number;
+      readonly method: typeof WORKSPACE_BRIDGE_METHODS.preview;
+      readonly action: WorkspacePreviewAction;
     };
 
 export type WorkspaceBridgeNotification =
@@ -169,6 +233,9 @@ export type WorkspaceBridgeNotification =
       readonly method: typeof WORKSPACE_BRIDGE_METHODS.composerSlot;
       readonly rect: WorkspaceBridgeRect | null;
     };
+
+const decodePreviewAction = Schema.decodeUnknownOption(WorkspacePreviewAction);
+const decodePreviewViewport = Schema.decodeUnknownOption(WorkspacePreviewViewport);
 
 function isFileLike(value: unknown): value is File {
   return typeof File !== "undefined" && value instanceof File;
@@ -226,6 +293,21 @@ export function readWorkspaceBridgeMessage(
         : undefined;
     case WORKSPACE_BRIDGE_METHODS.download:
       return hasId && isFile(p.file) ? { id, method, file: p.file } : undefined;
+    case WORKSPACE_BRIDGE_METHODS.previewOpen: {
+      if (!hasId || (p.url !== undefined && typeof p.url !== "string")) return undefined;
+      const viewport = p.viewport === undefined ? undefined : decodePreviewViewport(p.viewport);
+      if (viewport !== undefined && Option.isNone(viewport)) return undefined;
+      return {
+        id,
+        method,
+        url: p.url,
+        viewport: viewport === undefined ? undefined : viewport.value,
+      };
+    }
+    case WORKSPACE_BRIDGE_METHODS.preview: {
+      const action = decodePreviewAction(p.action);
+      return hasId && Option.isSome(action) ? { id, method, action: action.value } : undefined;
+    }
     case WORKSPACE_BRIDGE_METHODS.setState:
       return { method, state: p.state };
     case WORKSPACE_BRIDGE_METHODS.restore:
@@ -271,6 +353,7 @@ if(d.id!=null&&pending[d.id]){var p=pending[d.id];delete pending[d.id];if(d.erro
 if(d.method===M.composerSize&&d.params&&typeof d.params.height==="number"){composerHeight=d.params.height;sizeSlot();emit("composer-size",composerHeight);}
 if(d.method===M.agentStatus&&d.params){emit("agent-status",d.params.status);}
 if(d.method===M.stateError&&d.params){emit("state-error",new Error(String(d.params.message||"The workspace controls were not saved.")));}
+if(d.method===M.previewChanged&&d.params){emit("preview-changed",d.params);}
 if(d.method===${JSON.stringify(HOST_CONTEXT_CHANGED_METHOD)}&&d.params&&d.params.styles){var t=d.params.theme==="light"?"light":"dark";setTimeout(function(){emit("theme",{appearance:t});});}
 });
 var initialized=null;
@@ -299,6 +382,18 @@ attach:function(files){return request(M.attach,{files:toFiles(files)});},
 download:function(blob,name){var f=blob instanceof File?blob:new File([blob],name||"export",{type:blob.type});return request(M.download,{file:f});},
 restore:function(){flushState();notify(M.restore);},
 on:function(name,cb){(listeners[name]=listeners[name]||[]).push(cb);return function(){listeners[name]=(listeners[name]||[]).filter(function(x){return x!==cb;});};}
+};
+function act(action){return request(M.preview,{action:action});}
+window.t3.workspace.preview={
+open:function(url,opts){return request(M.previewOpen,{url:url==null?undefined:String(url),viewport:opts&&opts.viewport?{width:opts.viewport.width,height:opts.viewport.height}:undefined});},
+screenshot:function(opts){return act({_tag:"screenshot",fullPage:!!(opts&&opts.fullPage)});},
+elementsAt:function(x,y){return act({_tag:"elementsAt",x:x,y:y}).then(function(r){return r.elements;});},
+inspect:function(selector){return act({_tag:"inspect",selector:String(selector)}).then(function(r){return r.element;});},
+highlight:function(selector){return act({_tag:"highlight",selector:selector==null?null:String(selector)}).then(function(){});},
+scroll:function(y){return act({_tag:"scroll",y:y}).then(function(r){return r.scrollY;});},
+setViewport:function(v){return act({_tag:"setViewport",viewport:{width:v.width,height:v.height}}).then(function(r){return r.viewport;});},
+reload:function(){return act({_tag:"reload"}).then(function(){});},
+close:function(){return act({_tag:"close"}).then(function(){});}
 };
 })();
 ${WORKSPACE_CHROME_BRIDGE_SCRIPT}`;
@@ -329,5 +424,6 @@ export const WORKSPACE_PAGE_GUIDE = [
   "setState(object) replaces the stored state: compact JSON under 64KB, never media or datasets, with a version field and everything needed to look the same after a rebuild or reload (control values, selection, zoom, playhead, open panels). Call it whenever any of these change; it is debounced and flushed when the page leaves, and on('state-error', cb) gets an Error when storing fails (T3 already tells the user). You read it with workspace_state, and T3 adds it to each message the user sends while the workspace is open.",
   "send(text, { files }) posts a chat message as the user, with optional files attached to that same message (Files named like edit.json; a bare Blob is named export). T3 accepts it only during the user's click or key press, so call it directly in the handler, with any files prepared beforehand, before slow work. Keep the text short and human; put machine-readable payloads in files. attach(fileOrFiles) puts files in the composer for the user to send with their own words; download(blobOrFile, name) saves a file to the user's machine. Each returns a promise that resolves, or rejects with an Error that says why; T3 already shows failed downloads and loads to the user.",
   "restore() returns the thread to chat. on(event, cb) returns an unsubscribe function: 'agent-status' gets 'working' or 'idle'; 'theme' gets {appearance} after load and on every theme change, once the variables apply, so read them with getComputedStyle when you draw and redraw canvases then.",
+  "Live preview (design review of a web page, usually the user's dev server): pass preview: {url} to workspace_mutate, then await t3.workspace.preview.open() (or open(url) for another page on that origin, or on a preview tab's origin) for {sessionId, url, title, viewport}; the sandbox cannot load the site itself, so T3 renders it on the environment and the page works on images. screenshot({fullPage}) gives {file, width, height, scrollY}: draw file (a PNG) at width x height CSS px; every coordinate is CSS px in the document, so a point on a viewport capture is (x, y + scrollY). elementsAt(x, y) gives the elements there, innermost first, and inspect(selector) one or null, each {selector, tag, box: {x, y, width, height}, text, html, styles}; highlight(selector or null) outlines one in later screenshots; scroll(y), setViewport({width, height}), reload(), close(). on('preview-changed', cb) gets {sessionId, reason: 'loaded' | 'navigated' | 'mutated' | 'closed', url, title} when the page changes on its own (a hot reload), so take a new screenshot then. Send the user's review as a file of changes that name each element by selector.",
   "Preview edits live in the page (canvas 2D, WebGL, Web Audio, <video>) so every control responds instantly, and offer an Export: when the browser can render the result at full quality, send or attach the file; otherwise send a machine-readable description of the edit (develop settings JSON, an edit decision list, a recipe) that names media by path, and apply it to the originals with your own tools when it arrives.",
 ].join(" ");

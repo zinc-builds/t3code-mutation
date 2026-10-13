@@ -15,6 +15,13 @@ import {
   McpAppUpdateModelContextInput,
 } from "./mcpApps.ts";
 import {
+  WorkspacePreviewActInput,
+  WorkspacePreviewActResult,
+  WorkspacePreviewError,
+  WorkspacePreviewEvent,
+  WorkspacePreviewOpenInput,
+  WorkspacePreviewSession,
+  WorkspacePreviewSubscribeInput,
   WorkspaceReadStateInput,
   WorkspaceReadStateResult,
   WorkspaceStateError,
@@ -411,6 +418,9 @@ export const WS_METHODS = {
   // Mutation workspace methods
   workspaceReadState: "workspace.readState",
   workspaceUpdateState: "workspace.updateState",
+  workspacePreviewOpen: "workspace.previewOpen",
+  workspacePreviewAct: "workspace.previewAct",
+  workspaceSubscribePreview: "workspace.subscribePreview",
 
   // Provider methods
   providerUploadFeedback: "provider.uploadFeedback",
@@ -1360,6 +1370,25 @@ const WsWorkspaceUpdateStateRpc = Rpc.make(WS_METHODS.workspaceUpdateState, {
   error: Schema.Union([WorkspaceStateError, EnvironmentAuthorizationError]),
 });
 
+const WsWorkspacePreviewOpenRpc = Rpc.make(WS_METHODS.workspacePreviewOpen, {
+  payload: WorkspacePreviewOpenInput,
+  success: WorkspacePreviewSession,
+  error: Schema.Union([WorkspacePreviewError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspacePreviewActRpc = Rpc.make(WS_METHODS.workspacePreviewAct, {
+  payload: WorkspacePreviewActInput,
+  success: WorkspacePreviewActResult,
+  error: Schema.Union([WorkspacePreviewError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspaceSubscribePreviewRpc = Rpc.make(WS_METHODS.workspaceSubscribePreview, {
+  payload: WorkspacePreviewSubscribeInput,
+  success: WorkspacePreviewEvent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
 const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
   payload: ProviderUploadFeedbackInput,
   success: ProviderUploadFeedbackResult,
@@ -2024,6 +2053,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsMcpAppsUpdateModelContextRpc,
   WsWorkspaceReadStateRpc,
   WsWorkspaceUpdateStateRpc,
+  WsWorkspacePreviewOpenRpc,
+  WsWorkspacePreviewActRpc,
+  WsWorkspaceSubscribePreviewRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsSubscribeWorktreeSetupRpc,

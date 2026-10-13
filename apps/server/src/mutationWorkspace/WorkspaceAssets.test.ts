@@ -132,3 +132,43 @@ it.effect("fails with a resolution error for a thread that does not exist", () =
     assert.strictEqual(error._tag, "AssetWorkspaceContextResolutionError");
   }).pipe(Effect.provide(layerThreads({}))),
 );
+
+it.effect(
+  "finds a preview origin declared by a published or running call, or a fork's source",
+  () =>
+    Effect.gen(function* () {
+      const assets = yield* WorkspaceAssets.WorkspaceAssets;
+      // A published reference, and a running call's input; any path on the origin.
+      assert.isTrue(yield* assets.declaresPreviewOrigin(thread, "http://localhost:5173"));
+      assert.isTrue(yield* assets.declaresPreviewOrigin(thread, "http://localhost:3000"));
+      assert.isTrue(yield* assets.declaresPreviewOrigin(fork, "http://localhost:5173"));
+      // Another port is another origin, and a failed call declares nothing.
+      assert.isFalse(yield* assets.declaresPreviewOrigin(thread, "http://localhost:8080"));
+      assert.isFalse(yield* assets.declaresPreviewOrigin(thread, "http://intranet.local"));
+    }).pipe(
+      Effect.provide(
+        layerThreads({
+          [thread]: {
+            items: [
+              mutateItem("t1", "completed", {
+                output: {
+                  mutationWorkspace: {
+                    attachmentId: "t1-html",
+                    title: "Review",
+                    assets: [],
+                    preview: { url: "http://localhost:5173/settings" },
+                  },
+                  message: "The thread now shows this workspace.",
+                },
+              }),
+              mutateItem("t2", "running", {
+                input: { preview: { url: "http://localhost:3000/" } },
+              }),
+              mutateItem("t3", "failed", { input: { preview: { url: "http://localhost:8080/" } } }),
+            ],
+          },
+          [fork]: { items: [], forkedFrom: thread },
+        }),
+      ),
+    ),
+);

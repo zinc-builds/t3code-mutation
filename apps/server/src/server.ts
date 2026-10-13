@@ -70,6 +70,9 @@ import * as PortScanner from "./preview/PortScanner.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as DesktopBrowserChannel from "./preview/DesktopBrowserChannel.ts";
 import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
+import * as WorkspaceAssets from "./mutationWorkspace/WorkspaceAssets.ts";
+import * as WorkspacePreview from "./mutationWorkspace/WorkspacePreview.ts";
+import * as WorkspacePreviewBrowser from "./mutationWorkspace/WorkspacePreviewBrowser.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as GitManager from "./git/GitManager.ts";
@@ -732,6 +735,13 @@ const layerMakeRoutes = Layer.mergeAll(
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP. Provided
   // after the guide service so it reaches that too.
   Layer.provide(layerPullRequestService),
+  // Workspace previews review pages in the same browser, apart from its tabs.
+  Layer.provide(
+    WorkspacePreview.layer.pipe(
+      Layer.provide(WorkspacePreviewBrowser.layerServerBrowser),
+      Layer.provide(WorkspaceAssets.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
+    ),
+  ),
   // The stream route and the WebSocket RPCs share one browser.
   Layer.provide(ServerBrowser.layer.pipe(Layer.provide(DesktopBrowserChannel.layer))),
   // Server browser tabs and HTML render previews install and run the same headless browser.

@@ -8,6 +8,10 @@ import {
   workspaceStateErrorNotification,
   type WorkspaceAssetSource,
 } from "@t3tools/client-runtime/state/mutation-workspace-host";
+import {
+  createWorkspacePreviewHost,
+  workspacePreviewChangedNotification,
+} from "@t3tools/client-runtime/state/mutation-workspace-preview-host";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
@@ -19,7 +23,9 @@ import {
   type WorkspaceBridgeRequest,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
-import { type RefObject, useEffect, useRef } from "react";
+import { RegistryContext } from "@effect/atom-react";
+import { AsyncResult } from "effect/reactivity";
+import { type RefObject, useContext, useEffect, useRef } from "react";
 
 import { mutationWorkspaceEnvironment } from "~/state/mutationWorkspace";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -65,6 +71,14 @@ const commandError = (result: {
   readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
 }) => new Error(workspaceErrorMessage(squashAtomCommandFailure(result)));
 
+/** A screenshot's bytes as the File the page receives. */
+function base64File(base64: string, mimeType: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new File([bytes], "preview.png", { type: mimeType });
+}
+
 /** Saves a file through the browser's own download, which asks where when it is set to. */
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -99,10 +113,17 @@ export function useWorkspaceBridge(
   const updateState = useAtomCommand(mutationWorkspaceEnvironment.updateState, {
     reportFailure: false,
   });
+  const previewOpen = useAtomCommand(mutationWorkspaceEnvironment.previewOpen, {
+    reportFailure: false,
+  });
+  const previewAct = useAtomCommand(mutationWorkspaceEnvironment.previewAct, {
+    reportFailure: false,
+  });
+  const registry = useContext(RegistryContext);
   const fetchAsset = useWorkspaceAssetFetcher();
   // Read on every message, so the bridge sees current props without
   // re-subscribing (which would drop requests in flight).
-  const live = { options, readState, updateState, fetchAsset };
+  const live = { options, readState, updateState, fetchAsset, previewOpen, previewAct, registry };
   const latest = useRef(live);
   useEffect(() => {
     latest.current = live;
@@ -163,6 +184,56 @@ export function useWorkspaceBridge(
       return { state: workspaceInitialPageState(storedState), assets };
     };
 
+    const previewHost = createWorkspacePreviewHost({
+      declaredUrl: () => latest.current.options.workspace.preview?.url,
+      open: async (input) => {
+        const { environmentId, threadId } = latest.current.options;
+        const result = await latest.current.previewOpen({
+          environmentId,
+          input: {
+            threadId,
+            url: input.url,
+            ...(input.viewport === undefined ? {} : { viewport: input.viewport }),
+          },
+        });
+        if (result._tag !== "Success") throw commandError(result);
+        return result.value;
+      },
+      act: async (sessionId, action) => {
+        const { environmentId, threadId } = latest.current.options;
+        const result = await latest.current.previewAct({
+          environmentId,
+          input: { threadId, sessionId, action },
+        });
+        if (result._tag !== "Success") throw commandError(result);
+        return result.value;
+      },
+      close: (sessionId) => {
+        const { environmentId, threadId } = latest.current.options;
+        // Nothing to report: a page that is already gone needs no closing, and
+        // the server closes one nobody follows by itself.
+        void latest.current.previewAct({
+          environmentId,
+          input: { threadId, sessionId, action: { _tag: "close" } },
+        });
+      },
+      follow: (sessionId, onEvent) => {
+        const { environmentId, threadId } = latest.current.options;
+        return latest.current.registry.subscribe(
+          mutationWorkspaceEnvironment.previewEvents({
+            environmentId,
+            input: { threadId, sessionId },
+          }),
+          (result) => {
+            if (AsyncResult.isSuccess(result)) onEvent(result.value);
+          },
+          { immediate: true },
+        );
+      },
+      notify: (change) => post(workspacePreviewChangedNotification(change)),
+      toFile: base64File,
+    });
+
     const run = async (request: WorkspaceBridgeRequest) => {
       const { options: current } = latest.current;
       switch (request.method) {
@@ -182,6 +253,10 @@ export function useWorkspaceBridge(
         case WORKSPACE_BRIDGE_METHODS.download:
           saveBlob(request.file, request.file.name);
           return {};
+        case WORKSPACE_BRIDGE_METHODS.previewOpen:
+          return previewHost.open(request.url, request.viewport);
+        case WORKSPACE_BRIDGE_METHODS.preview:
+          return previewHost.act(request.action);
       }
     };
 
@@ -262,6 +337,7 @@ export function useWorkspaceBridge(
     window.addEventListener("message", receive);
     return () => {
       window.removeEventListener("message", receive);
+      previewHost.dispose();
       // The page is gone or no longer trusted, so its slot no longer holds the composer.
       latest.current.options.onComposerSlotChange(null);
     };

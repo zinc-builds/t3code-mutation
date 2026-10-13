@@ -16,6 +16,7 @@ import {
   WORKSPACE_OUTPUT_KEY,
   WORKSPACE_RESTORE_TOOL_NAME,
   workspaceMutateInputAssetPaths,
+  workspaceMutateInputPreviewUrl,
   type WorkspaceReference,
 } from "./mutationWorkspace.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
@@ -237,6 +238,27 @@ export function workspaceToolItemAssetPaths(item: {
   return resolveT3McpToolId(item.toolName) === WORKSPACE_MUTATE_TOOL_NAME
     ? workspaceMutateInputAssetPaths(item.input)
     : [];
+}
+
+/**
+ * The preview URL a `workspace_mutate` item hands its workspace, read like
+ * its asset paths: from a completed call's result, or a running call's input.
+ */
+export function workspaceToolItemPreviewUrl(item: {
+  readonly type: string;
+  readonly status: string;
+  readonly toolName?: string | null | undefined;
+  readonly input?: unknown;
+  readonly output?: unknown;
+}): string | undefined {
+  if (item.type !== "dynamic_tool") return undefined;
+  if (item.status === "completed") {
+    return workspaceFromToolItem({ toolName: item.toolName, output: item.output })?.preview?.url;
+  }
+  if (item.status !== "pending" && item.status !== "running") return undefined;
+  return resolveT3McpToolId(item.toolName) === WORKSPACE_MUTATE_TOOL_NAME
+    ? workspaceMutateInputPreviewUrl(item.input)
+    : undefined;
 }
 
 /** Whether a completed tool call handed the thread back to chat with `workspace_restore`. */

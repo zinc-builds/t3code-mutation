@@ -172,6 +172,10 @@ export const RPC_REQUIRED_SCOPES = {
   // A workspace page stores its controls as the user works them, like any edit to the thread.
   [WS_METHODS.workspaceReadState]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceUpdateState]: AuthOrchestrationOperateScope,
+  // A workspace's live preview drives the environment's browser, like a server preview tab.
+  [WS_METHODS.workspacePreviewOpen]: AuthPreviewOperateScope,
+  [WS_METHODS.workspacePreviewAct]: AuthPreviewOperateScope,
+  [WS_METHODS.workspaceSubscribePreview]: AuthPreviewOperateScope,
   [WS_METHODS.subscribeVcsStatus]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeWorktreeSetup]: AuthOrchestrationReadScope,
   [WS_METHODS.worktreeSetupCancel]: AuthOrchestrationOperateScope,

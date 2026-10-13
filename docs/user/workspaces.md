@@ -12,6 +12,10 @@ The composer stays available while a workspace is open. Each message you send ca
 
 **Export** adds the result to the composer, ready to send, and saves a copy to your machine. Video and audio editors export an edit list and an ffmpeg command rather than a rendered file: send them to the agent and ask it to render, which needs ffmpeg on the machine running T3 Code.
 
+## Reviewing a Web Page
+
+Ask for a review workspace on a page, usually your dev server: "open localhost:5173 so I can mark up the design". The workspace shows the live page, refreshes when it changes (a hot reload), and lets you pin notes to elements, so the agent gets exact selectors and styles instead of a screenshot to interpret. T3 Code loads the page in its own headless browser on the machine running it, signed out, and only opens addresses the agent named or that the thread's preview shows. Not available on mobile yet.
+
 ## Leaving and Reopening
 
 Use **Back to chat** (on mobile, **Chat** or Android back) to return to the conversation; the workspace and your settings are kept. Reopen it from the banner above the composer or from its row in the thread. Ask the agent when you are done and it closes the workspace for the thread.

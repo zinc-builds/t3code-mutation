@@ -121,6 +121,9 @@ export const VALIDATION_PROBLEM_PREFIXES = [TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER]
 
 /**
  * The client's side of the workspace bridge, for a page loaded on its own.
+ * A live preview is answered with a stand-in session on the declared URL whose
+ * screenshots are blank and whose element reads find nothing, so a page's
+ * review flow boots without the agent's dev server.
  * There the bridge's `window.parent` is the page itself, so this script, run
  * first, takes over `postMessage` and answers the bridge the way the client
  * would: `initialize` with the assets (or a placeholder photo when there are
@@ -142,9 +145,13 @@ export function validationHostScript(input: {
   readonly controls: Readonly<Record<string, unknown>>;
   readonly template: boolean;
   readonly chrome: boolean;
+  readonly previewUrl?: string | undefined;
 }): string {
   const config = JSON.stringify({
     assets: input.assets,
+    previewUrl: input.previewUrl ?? "http://localhost/",
+    previewOpen: WORKSPACE_BRIDGE_METHODS.previewOpen,
+    preview: WORKSPACE_BRIDGE_METHODS.preview,
     controls: input.controls,
     initialize: WORKSPACE_BRIDGE_METHODS.initialize,
     controlsMethod: WORKSPACE_BRIDGE_METHODS.controls,
@@ -190,6 +197,15 @@ var budget={left:C.maxInputBytes};
 return Promise.all(files.map(function(f){return describe(f,cmds,budget);})).then(function(d){out.export={available:true,ok:x.ok,error:x.error,files:d,ffmpeg:cmds,problems:problems};return out;});});};
 function placeholder(){var c=document.createElement("canvas");c.width=1600;c.height=1067;var g=c.getContext("2d"),l=g.createLinearGradient(0,0,1600,1067);l.addColorStop(0,"#3b5b7a");l.addColorStop(0.5,"#c9a26b");l.addColorStop(1,"#2d2a26");g.fillStyle=l;g.fillRect(0,0,1600,1067);
 return new Promise(function(r){c.toBlob(r,"image/png");}).then(function(b){return{name:"placeholder.png",mimeType:"image/png",source:"attachment",attachmentId:"validation-placeholder",file:new File([b],"placeholder.png",{type:"image/png"})};});}
+var viewport={width:1280,height:800};
+function blank(w,h){var c=document.createElement("canvas");c.width=w;c.height=h;return new Promise(function(r){c.toBlob(r,"image/png");}).then(function(b){return new File([b],"preview.png",{type:"image/png"});});}
+function previewAct(a){a=a||{};switch(a._tag){
+case "screenshot":var h=a.fullPage?viewport.height*2:viewport.height;return blank(viewport.width,h).then(function(f){return{file:f,width:viewport.width,height:h,scrollY:0,fullPage:!!a.fullPage};});
+case "elementsAt":return Promise.resolve({elements:[]});
+case "inspect":return Promise.resolve({element:null});
+case "scroll":return Promise.resolve({scrollY:Math.max(0,Number(a.y)||0)});
+case "setViewport":viewport={width:a.viewport.width,height:a.viewport.height};return Promise.resolve({viewport:viewport});
+default:return Promise.resolve({});}}
 function assets(){if(C.assets.length===0)return placeholder().then(function(a){return[a];});
 return Promise.all(C.assets.map(function(a){return fetch(a.url).then(function(r){if(!r.ok)throw new Error(a.name+" could not be loaded.");return r.blob();}).then(function(b){return{name:a.name,mimeType:a.mimeType,source:"file",path:a.path,file:new File([b],a.name,{type:a.mimeType})};});}));}
 window.postMessage=function(m,o,t){
@@ -201,7 +217,8 @@ try{V.chromePatches.push({patch:JSON.parse(JSON.stringify(p.patch===undefined?nu
 if(m.method===C.attach&&Array.isArray(p.files))p.files.forEach(function(f){V.files.push(f);});
 if(m.method===C.download&&p.file)V.files.push(p.file);
 var init=m.method===C.initialize;
-(init?assets().then(function(a){return{state:undefined,assets:a};}):Promise.resolve({})).then(function(result){
+if(m.method===C.previewOpen&&p.viewport)viewport={width:p.viewport.width,height:p.viewport.height};
+(init?assets().then(function(a){return{state:undefined,assets:a};}):m.method===C.previewOpen?Promise.resolve({sessionId:"validation",url:p.url||C.previewUrl,title:"",viewport:viewport}):m.method===C.preview?previewAct(p.action):Promise.resolve({})).then(function(result){
 post({jsonrpc:"2.0",id:m.id,result:result},"*");
 if(init){post({jsonrpc:"2.0",method:C.controlsMethod,params:{values:C.controls}},"*");post({jsonrpc:"2.0",method:C.composerSize,params:{height:0}},"*");post({jsonrpc:"2.0",method:C.agentStatus,params:{status:"idle"}},"*");arm();}
 },function(e){post({jsonrpc:"2.0",id:m.id,error:{code:-32000,message:String(e&&e.message||e)}},"*");arm();});

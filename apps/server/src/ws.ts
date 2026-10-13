@@ -119,6 +119,7 @@ import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ThreadManagementService from "./orchestration-v2/ThreadManagementService.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as WorkspaceAssets from "./mutationWorkspace/WorkspaceAssets.ts";
+import * as WorkspacePreview from "./mutationWorkspace/WorkspacePreview.ts";
 import * as WorkspaceState from "./mutationWorkspace/WorkspaceState.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
@@ -1205,6 +1206,7 @@ const layerWsRpc = (
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
+  workspacePreview: WorkspacePreview.WorkspacePreview["Service"],
 ) =>
   ServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -2283,6 +2285,9 @@ const layerWsRpc = (
             .pipe(Effect.map((state) => ({ state: state ?? null }))),
         [WS_METHODS.workspaceUpdateState]: (input) =>
           workspaceState.write(input.threadId, input.state),
+        [WS_METHODS.workspacePreviewOpen]: (input) => workspacePreview.open(input),
+        [WS_METHODS.workspacePreviewAct]: (input) => workspacePreview.act(input),
+        [WS_METHODS.workspaceSubscribePreview]: (input) => workspacePreview.subscribe(input),
         [WS_METHODS.providerUploadFeedback]: (input) =>
           Effect.gen(function* () {
             const projection = yield* threadManagement.getThreadRecords(input.threadId, [
@@ -3179,6 +3184,8 @@ export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
+    // Review pages outlive a connection briefly, so a reconnecting client finds its own.
+    const workspacePreview = yield* WorkspacePreview.WorkspacePreview;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
@@ -3236,6 +3243,7 @@ export const layer = Layer.unwrap(
               clientAnalyticsProps,
               previewAutomationBroker,
               serverBrowser,
+              workspacePreview,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               // Request fibers run in the handlers' context, so this reporter sees
