@@ -37,6 +37,18 @@ const listOr = (names: ReadonlyArray<string>, none: string) =>
 
 const templateDocs = ({ html: _html, ...template }: KitTemplate) => template;
 
+/**
+ * A template's catalog line: what it is (its summary up to the first colon or
+ * full stop) and when to pick it (the "Pick it ..." sentence). The full
+ * summary stays in `docs`.
+ */
+export function templateCatalogLine(summary: string): string {
+  const text = summary.replace(/\s+/g, " ").trim();
+  const lead = (/^[^:.]+/.exec(text)?.[0] ?? text).trim();
+  const pick = /(?:^|\s)(Pick it\b.*?\.)(?=\s|$)/.exec(text)?.[1];
+  return pick === undefined || lead === pick.slice(0, -1) ? `${lead}.` : `${lead}. ${pick}`;
+}
+
 // A literal `</script` inside an inline script would end it early.
 const inlineScript = (attributes: string, source: string) =>
   `<script ${attributes}>${source.replace(/<\/script/gi, "<\\/script")}</script>`;
@@ -56,7 +68,7 @@ export function makeWorkspaceKit(source: KitSource) {
     "Templates (template: {id, options}):",
     ...(source.templates.length === 0
       ? ["- none installed yet"]
-      : source.templates.map((t) => `- ${t.id}: ${t.summary}`)),
+      : source.templates.map((t) => `- ${t.id}: ${templateCatalogLine(t.summary)}`)),
     "Kit primitives (kit: [names], then window.t3kit.<name>.create(el, options)):",
     ...source.primitives.map((p) => `- ${p.name}: ${p.summary}`),
   ].join("\n");

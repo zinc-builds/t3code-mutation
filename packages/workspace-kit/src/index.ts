@@ -12,6 +12,7 @@ export const workspaceKit = makeWorkspaceKit(GENERATED_KIT);
 
 export {
   makeWorkspaceKit,
+  templateCatalogLine,
   type KitDocs,
   type KitResult,
   type WorkspaceKit,

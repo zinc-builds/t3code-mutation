@@ -1,14 +1,16 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ThreadId } from "@t3tools/contracts";
-import { makeWorkspaceKit } from "@t3tools/workspace-kit";
+import { makeWorkspaceKit, workspaceKit } from "@t3tools/workspace-kit";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import * as ServerConfig from "../config.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
+import * as PreviewBrowser from "../preview/PreviewBrowser.ts";
 import * as MutationWorkspace from "./MutationWorkspace.ts";
 
 // Publishing only needs `prepare`; the page passes through untouched.
@@ -189,5 +191,58 @@ it.layer(NodeServices.layer)("MutationWorkspace kit", (it) => {
       const error = yield* workspace.kitDocs(["nope"]).pipe(Effect.flip);
       assert.include(error.message, "Unknown kit names: nope.");
     }).pipe(Effect.provide(layerKitWorkspace())),
+  );
+});
+
+// The shipped kit through the real prepare step (image inlining and its
+// limits); only the preview browser is absent, which publishing never needs.
+const layerShippedKitWorkspace = () =>
+  MutationWorkspace.layer.pipe(
+    Layer.provide(HtmlRender.layer),
+    Layer.provide(
+      Layer.succeed(
+        PreviewBrowser.PreviewBrowser,
+        PreviewBrowser.PreviewBrowser.of({
+          executable: Effect.die("Publishing a workspace needs no preview browser."),
+          installed: Effect.succeed(Option.none()),
+        }),
+      ),
+    ),
+    Layer.provideMerge(
+      Layer.fresh(ServerConfig.layerTest(process.cwd(), { prefix: "t3code-mutation-kit-test-" })),
+    ),
+  );
+
+it.layer(NodeServices.layer)("MutationWorkspace shipped templates", (it) => {
+  it.effect("publishes every shipped template's examples with its kit and options", () =>
+    Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const docs = yield* workspace.kitDocs(workspaceKit.templateIds);
+      assert.isNotEmpty(docs.templates);
+      for (const template of docs.templates) {
+        assert.isNotEmpty(template.examples, `${template.id} ships examples`);
+        for (const example of template.examples) {
+          const options = example as Record<string, unknown>;
+          const where = `${template.id} ${JSON.stringify(options)}`;
+          const reference = yield* workspace.publish({
+            threadId: thread,
+            template: { id: template.id, options },
+            title: template.title,
+            assetPaths: [],
+          });
+          const html = yield* readStored(reference.attachmentId);
+          const bridge = html.indexOf("window.t3.workspace=");
+          const optionsTag = html.indexOf('<script id="t3-template-options"');
+          assert.isTrue(bridge > 0, where);
+          for (const name of template.kit) {
+            const at = html.indexOf(`<script data-t3kit="${name}">`);
+            assert.isTrue(at > bridge && at < optionsTag, `${where}: ${name} loads in order`);
+          }
+          const tag =
+            /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
+          assert.deepEqual(JSON.parse(tag?.[1] ?? "null"), options, where);
+        }
+      }
+    }).pipe(Effect.provide(layerShippedKitWorkspace())),
   );
 });

@@ -1,6 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { makeWorkspaceKit, workspaceKit } from "./index.ts";
+import { GENERATED_KIT } from "./generated.ts";
+import {
+  makeWorkspaceKit,
+  templateCatalogLine,
+  validateTemplateOptions,
+  workspaceKit,
+} from "./index.ts";
 import type { KitPrimitive, KitTemplate } from "./types.ts";
 
 const primitive = (name: string, source = `t3kit.${name}={};`): KitPrimitive => ({
@@ -177,9 +183,62 @@ describe("kit docs", () => {
     assert.include(errorOf(kit.docs(["nope"])), "Unknown kit names: nope.");
   });
 
-  it("keeps the shipped catalog compact", () => {
-    assert.isAtMost(workspaceKit.catalog.length, 1_600);
-    for (const name of workspaceKit.primitiveNames)
+  it("keeps the shipped catalog compact, with every template and primitive", () => {
+    assert.isAtMost(workspaceKit.catalog.length, 2_000);
+    for (const name of [...workspaceKit.templateIds, ...workspaceKit.primitiveNames])
       assert.include(workspaceKit.catalog, `- ${name}: `);
   });
+
+  it("lists a template by what it is and when to pick it", () => {
+    assert.strictEqual(
+      templateCatalogLine(
+        "Editor for one photo: crop, grade. History too. Pick it for any photo edit. Exports.",
+      ),
+      "Editor for one photo. Pick it for any photo edit.",
+    );
+    assert.strictEqual(templateCatalogLine("Grade one photo."), "Grade one photo.");
+  });
+});
+
+describe("shipped templates", () => {
+  const defaultsOf = (template: KitTemplate) =>
+    Object.fromEntries(
+      Object.entries(template.options).flatMap(([key, spec]) =>
+        spec.default === undefined ? [] : [[key, spec.default]],
+      ),
+    );
+
+  it("are installed and documented", () => {
+    assert.isNotEmpty(workspaceKit.templateIds);
+    const docs = workspaceKit.docs(workspaceKit.templateIds);
+    assert.isTrue(docs.ok);
+    if (!docs.ok) return;
+    assert.deepEqual(
+      docs.value.templates.map((t) => t.id),
+      workspaceKit.templateIds,
+    );
+  });
+
+  it.each(GENERATED_KIT.templates.map((template) => [template.id, template] as const))(
+    "%s: its defaults and every example build a page",
+    (_id, template) => {
+      assert.isNotEmpty(template.examples, "a template ships examples");
+      for (const options of [defaultsOf(template), ...template.examples]) {
+        const where = `${template.id} ${JSON.stringify(options)}`;
+        assert.deepEqual(validateTemplateOptions(template, options), [], where);
+        const page = workspaceKit.planPage({
+          template: { id: template.id, options: options as Record<string, unknown> },
+        });
+        if (!page.ok) return assert.fail(`${where}: ${page.error}`);
+        const html = workspaceKit.inject(page.value.html, page.value);
+        for (const name of template.kit)
+          assert.include(html, `<script data-t3kit="${name}">`, where);
+        const tag =
+          /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
+        assert.isNotNull(tag, where);
+        assert.deepEqual(JSON.parse(tag![1]!), options, where);
+        assert.include(template.html, "t3-template-options", `${template.id} reads its options`);
+      }
+    },
+  );
 });

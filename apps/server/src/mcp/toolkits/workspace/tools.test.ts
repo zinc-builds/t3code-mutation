@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import { workspaceKit } from "@t3tools/workspace-kit";
 import * as Schema from "effect/Schema";
 import { Tool } from "effect/ai";
 
@@ -23,4 +24,13 @@ it("gives every workspace tool an object input schema", () => {
 it("would catch a tool declared with empty parameters", () => {
   const empty = Tool.make("empty", { parameters: Schema.Struct({}) });
   expect(Tool.getJsonSchema(empty).type).not.toBe("object");
+});
+
+it("lists every shipped template in the build catalog and the docs tool", () => {
+  const { workspace_kit_docs: docs, workspace_mutate: mutate } = WorkspaceToolkit.tools;
+  expect(workspaceKit.templateIds.length).toBeGreaterThan(0);
+  for (const id of workspaceKit.templateIds) {
+    expect(mutate.description).toContain(`- ${id}: `);
+    expect(docs.description).toContain(id);
+  }
 });
