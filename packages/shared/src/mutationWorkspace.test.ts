@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
+// @effect-diagnostics globalTimers:off - Drives the page-side bridge, which runs on browser timers.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { HOST_CONTEXT_CHANGED_METHOD } from "./htmlRender.ts";
 import {
   injectWorkspaceBridge,
   readWorkspaceBridgeMessage,
@@ -55,9 +57,23 @@ describe("readWorkspaceBridgeMessage", () => {
     expect(readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.initialize))).toBeUndefined();
     expect(
       readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.send, { text: "Warmer" }, 2)),
-    ).toEqual({ id: 2, method: WORKSPACE_BRIDGE_METHODS.send, text: "Warmer" });
+    ).toEqual({ id: 2, method: WORKSPACE_BRIDGE_METHODS.send, text: "Warmer", files: [] });
     expect(
       readWorkspaceBridgeMessage(rpc(WORKSPACE_BRIDGE_METHODS.send, { text: "  " }, 2)),
+    ).toBeUndefined();
+  });
+
+  it("reads files sent with a message, and refuses a send whose files are not Files", () => {
+    const file = new File(["{}"], "edl.json", { type: "application/json" });
+    expect(
+      readWorkspaceBridgeMessage(
+        rpc(WORKSPACE_BRIDGE_METHODS.send, { text: "Render this", files: [file] }, 3),
+      ),
+    ).toEqual({ id: 3, method: WORKSPACE_BRIDGE_METHODS.send, text: "Render this", files: [file] });
+    expect(
+      readWorkspaceBridgeMessage(
+        rpc(WORKSPACE_BRIDGE_METHODS.send, { text: "Render this", files: [{ name: "x" }] }, 3),
+      ),
     ).toBeUndefined();
   });
 
@@ -177,5 +193,159 @@ describe("isWorkspaceRestoreToolItem", () => {
     expect(isWorkspaceRestoreToolItem({ toolName: "mcp__t3-code__workspace_mutate", output })).toBe(
       false,
     );
+  });
+});
+
+/**
+ * Runs the injected bridge against a stand-in window whose parent records what
+ * the page posts, so its behavior can be driven the way the host drives it.
+ */
+function loadBridge() {
+  const script = /<script>([\s\S]*)<\/script>/.exec(injectWorkspaceBridge(""))![1]!;
+  const posted: Array<{ id?: string; method: string; params: Record<string, unknown> }> = [];
+  const windowListeners = new Map<string, Array<(event: unknown) => void>>();
+  const listen =
+    (listeners: Map<string, Array<(event: unknown) => void>>) =>
+    (type: string, listener: (event: unknown) => void) => {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    };
+  const parent = { postMessage: (message: (typeof posted)[number]) => posted.push(message) };
+  const page: { parent: typeof parent; addEventListener: unknown; t3?: { workspace?: unknown } } = {
+    parent,
+    addEventListener: listen(windowListeners),
+  };
+  const document = { addEventListener: listen(new Map()), querySelector: () => null };
+  // Runs the bridge source as the page would, with stand-ins for the page's globals.
+  new Function("window", "document", "URL", "requestAnimationFrame", script)(
+    page,
+    document,
+    { createObjectURL: (file: File) => `blob:${file.name}` },
+    (callback: () => void) => setTimeout(callback, 16),
+  );
+  const workspace = page.t3!.workspace as {
+    ready: () => Promise<{ state: unknown; assets: ReadonlyArray<Record<string, unknown>> }>;
+    setState: (state: unknown) => void;
+    send: (text: string, options?: { files: unknown }) => Promise<unknown>;
+    restore: () => void;
+    on: (event: string, callback: (value: unknown) => void) => () => void;
+  };
+  const fromHost = (data: unknown) => {
+    for (const listener of windowListeners.get("message") ?? []) listener({ source: parent, data });
+  };
+  const leavePage = () => {
+    for (const listener of windowListeners.get("pagehide") ?? []) listener({});
+  };
+  return { workspace, posted, fromHost, leavePage };
+}
+
+describe("workspace bridge", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stores the last state before handing the thread back or leaving the page", () => {
+    const { workspace, posted, leavePage } = loadBridge();
+    workspace.setState({ v: 1, exposure: 0.4 });
+    workspace.setState({ v: 1, exposure: 0.6 });
+    workspace.restore();
+    expect(posted.map((message) => message.method)).toEqual([
+      WORKSPACE_BRIDGE_METHODS.setState,
+      WORKSPACE_BRIDGE_METHODS.restore,
+    ]);
+    expect(posted[0]!.params).toEqual({ state: { v: 1, exposure: 0.6 } });
+
+    workspace.setState({ v: 1, exposure: 0.8 });
+    leavePage();
+    expect(posted.at(-1)).toMatchObject({
+      method: WORKSPACE_BRIDGE_METHODS.setState,
+      params: { state: { v: 1, exposure: 0.8 } },
+    });
+    // Flushed once: the debounce no longer fires a second copy.
+    vi.runAllTimers();
+    expect(posted).toHaveLength(3);
+  });
+
+  it("retries initialize after a failed load and names each asset's origin", async () => {
+    const { workspace, posted, fromHost } = loadBridge();
+    const failed = workspace.ready();
+    fromHost({ jsonrpc: "2.0", id: posted[0]!.id, error: { message: "Reconnect first." } });
+    await expect(failed).rejects.toThrow("Reconnect first.");
+
+    const retried = workspace.ready();
+    expect(posted).toHaveLength(2);
+    const clip = new File(["x"], "clip.mp4", { type: "video/mp4" });
+    const photo = new File(["x"], "photo.png", { type: "image/png" });
+    fromHost({
+      jsonrpc: "2.0",
+      id: posted[1]!.id,
+      result: {
+        state: { v: 2 },
+        assets: [
+          {
+            name: "photo.png",
+            mimeType: "image/png",
+            source: "attachment",
+            attachmentId: "a-1",
+            file: photo,
+          },
+          {
+            name: "clip.mp4",
+            mimeType: "video/mp4",
+            source: "file",
+            path: "/media/clip.mp4",
+            file: clip,
+          },
+        ],
+      },
+    });
+    const { state, assets } = await retried;
+    expect(state).toEqual({ v: 2 });
+    expect(assets).toMatchObject([
+      { source: "attachment", attachmentId: "a-1", url: "blob:photo.png" },
+      { source: "file", path: "/media/clip.mp4", url: "blob:clip.mp4" },
+    ]);
+  });
+
+  it("sends files in the same message the host reads", () => {
+    const { workspace, posted } = loadBridge();
+    void workspace.send("Render the cut", {
+      files: new Blob(['{"clips":[]}'], { type: "application/json" }),
+    });
+    const message = readWorkspaceBridgeMessage({ jsonrpc: "2.0", ...posted[0] });
+    expect(message).toMatchObject({
+      method: WORKSPACE_BRIDGE_METHODS.send,
+      text: "Render the cut",
+    });
+    const files = message !== undefined && "files" in message ? message.files : [];
+    expect(files.map((file) => [file.name, file.type])).toEqual([["export", "application/json"]]);
+  });
+
+  it("tells the page about theme changes after the variables apply, and about failed saves", () => {
+    const { workspace, fromHost } = loadBridge();
+    const themes: unknown[] = [];
+    const errors: unknown[] = [];
+    workspace.on("theme", (theme) => themes.push(theme));
+    workspace.on("state-error", (error) => errors.push(error));
+
+    fromHost({
+      jsonrpc: "2.0",
+      method: HOST_CONTEXT_CHANGED_METHOD,
+      params: { theme: "light", styles: { variables: { "--background": "#fff" } } },
+    });
+    // The theme bootstrap handles the same message after the bridge does.
+    expect(themes).toEqual([]);
+    vi.runAllTimers();
+    expect(themes).toEqual([{ appearance: "light" }]);
+
+    fromHost({
+      jsonrpc: "2.0",
+      method: WORKSPACE_BRIDGE_METHODS.stateError,
+      params: { message: "Workspace state is over 64KB." },
+    });
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe("Workspace state is over 64KB.");
   });
 });

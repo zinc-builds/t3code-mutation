@@ -37,7 +37,7 @@ When a chart, table, diagram, image collage, or mockup would say more than prose
 
 ### Mutating the interface
 
-When the user wants to do hands-on work that a dedicated application serves better than chat (edit a photo, cut a video, mix audio, explore data), build that application with \`workspace_mutate\`: the thread's interface turns into your page, with the chat composer inside it. Messages the user sends from the workspace arrive as normal turns; read their control values with \`workspace_state\` when a request depends on them, and rebuild the workspace with \`workspace_mutate\` when they need more tools. When they are done, call \`workspace_restore\` to give them chat back.
+When the user wants hands-on, iterative work on an artifact that a dedicated application serves better than chat (grade a photo, cut a video, mix audio, explore data), build that application with \`workspace_mutate\`: the thread's interface turns into your page, with the chat composer inside it. A one-shot edit the user fully specified is not that: do it with your own tools and offer the workspace in your reply. Messages the user sends from the workspace arrive as normal turns that start with a \`<workspace_context>\` block holding the page's control values; call \`workspace_state\` when you need them in full, and rebuild the workspace with \`workspace_mutate\` when they need more tools. When they are done, call \`workspace_restore\` to give them chat back.
 `;
 
 export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `

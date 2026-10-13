@@ -271,7 +271,8 @@ export const HTML_RENDER_LAYOUT_GUIDE = [
 // The bridge between a render and its client speaks the MCP Apps protocol
 // (JSON-RPC over postMessage), so the same host code can later drive upstream
 // MCP apps: https://github.com/modelcontextprotocol/ext-apps
-const HOST_CONTEXT_CHANGED_METHOD = "ui/notifications/host-context-changed";
+/** The notification that hands a mounted render a new theme; workspaces re-emit it as a page event. */
+export const HOST_CONTEXT_CHANGED_METHOD = "ui/notifications/host-context-changed";
 const OPEN_LINK_METHOD = "ui/open-link";
 const SIZE_CHANGED_METHOD = "ui/notifications/size-changed";
 

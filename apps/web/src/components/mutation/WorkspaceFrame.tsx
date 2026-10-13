@@ -33,7 +33,7 @@ export interface WorkspaceFrameProps {
   readonly composerHeight: number;
   /** Where the page's data-t3-composer slot sits, relative to the frame's top-left; null when the page has none. */
   readonly onComposerSlotChange: (rect: WorkspaceBridgeRect | null) => void;
-  readonly onSendMessage: (text: string) => Promise<void>;
+  readonly onSendMessage: (text: string, files: ReadonlyArray<File>) => Promise<void>;
   readonly onAttachFiles: (files: ReadonlyArray<File>) => void;
   readonly onRestore: () => void;
 }

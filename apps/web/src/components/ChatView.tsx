@@ -458,6 +458,7 @@ import { MutationStage } from "./mutation/MutationStage";
 import { MutationTitleBar } from "./mutation/MutationTitleBar";
 import { leaveWorkspace } from "./mutation/mutationWorkspaceStore";
 import { useMutationWorkspace } from "./mutation/useMutationWorkspace";
+import { prepareWorkspaceMessageAttachments } from "./mutation/workspaceMessageAttachments";
 import { useWorkspaceComposerPlacement } from "./mutation/useWorkspaceComposerPlacement";
 import { latestWorkspaceReply, WorkspaceReplyStrip } from "./mutation/WorkspaceReplyStrip";
 import { WorkspaceResumeBanner } from "./mutation/WorkspaceResumeBanner";
@@ -4653,23 +4654,28 @@ export default function ChatView(props: ChatViewProps) {
     },
     [composerRef, scheduleComposerFocus],
   );
-  // An MCP App's approved `ui/message`: queued like a typed message, so it
-  // never steers or interrupts a running turn.
+  // An MCP App's approved `ui/message`, or a workspace page's message with the
+  // files it sent along: queued like a typed message, so it never steers or
+  // interrupts a running turn.
   const sendAppMessage = useCallback(
-    async (text: string) => {
+    async (text: string, files: ReadonlyArray<File> = []) => {
       if (!isServerThread || activeThreadId === null) {
         throw new Error("Messages from apps need a started thread.");
       }
+      const { attachments, release } = await prepareWorkspaceMessageAttachments(
+        environmentId,
+        files,
+      );
       const result = await startThreadTurn({
         environmentId,
         input: {
           threadId: activeThreadId,
-          message: { messageId: newMessageId(), role: "user", text, attachments: [] },
+          message: { messageId: newMessageId(), role: "user", text, attachments },
           runtimeMode,
           interactionMode,
           dispatchMode: "queue",
         },
-      });
+      }).finally(release);
       if (result._tag === "Failure") {
         const error = squashAtomCommandFailure(result);
         throw error instanceof Error ? error : new Error("Could not send the app's message.");

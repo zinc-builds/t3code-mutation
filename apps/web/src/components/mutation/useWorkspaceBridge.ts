@@ -33,18 +33,25 @@ export interface WorkspaceBridgeOptions {
   readonly agentWorking: boolean;
   readonly composerHeight: number;
   readonly onComposerSlotChange: (rect: WorkspaceBridgeRect | null) => void;
-  readonly onSendMessage: (text: string) => Promise<void>;
+  /** Sends a message as the user, with the files the page sent along in the same message. */
+  readonly onSendMessage: (text: string, files: ReadonlyArray<File>) => Promise<void>;
   readonly onAttachFiles: (files: ReadonlyArray<File>) => void;
   readonly onRestore: () => void;
 }
 
-/** A file handed to the page at initialize; Files clone into its opaque origin as they are. */
-interface WorkspaceBridgeAsset {
+/**
+ * A file handed to the page at initialize; Files clone into its opaque origin
+ * as they are. Each carries what the agent knows it by, so the page can name it
+ * in what it sends back.
+ */
+type WorkspaceBridgeAsset = {
   readonly name: string;
   readonly mimeType: string;
-  readonly source: "attachment" | "file";
   readonly file: File;
-}
+} & (
+  | { readonly source: "attachment"; readonly attachmentId: string }
+  | { readonly source: "file"; readonly path: string }
+);
 
 const errorMessage = (error: unknown) =>
   error instanceof Error && error.message.trim() !== "" ? error.message : String(error);
@@ -148,6 +155,7 @@ export function useWorkspaceBridge(
           name: image.name,
           mimeType: image.mimeType,
           source: "attachment",
+          attachmentId: image.attachmentId,
           file: new File([blob], image.name, { type: image.mimeType }),
         };
       });
@@ -160,6 +168,7 @@ export function useWorkspaceBridge(
           name: asset.name,
           mimeType: blob.type,
           source: "file",
+          path: asset.path,
           file: new File([blob], asset.name, { type: blob.type }),
         };
       });
@@ -179,7 +188,7 @@ export function useWorkspaceBridge(
           if (navigator.userActivation?.isActive === false) {
             throw new Error("Messages send only from a click or key press in the workspace.");
           }
-          await current.onSendMessage(request.text);
+          await current.onSendMessage(request.text, request.files);
           return {};
         case WORKSPACE_BRIDGE_METHODS.attach:
           current.onAttachFiles(request.files);
@@ -232,6 +241,8 @@ export function useWorkspaceBridge(
             return;
           }
           const message = errorMessage(squashAtomCommandFailure(result));
+          // The page hears about every failure; the user once per distinct one.
+          post(workspaceBridgeNotification(WORKSPACE_BRIDGE_METHODS.stateError, { message }));
           if (message === lastStateFailure) return;
           lastStateFailure = message;
           toastManager.add({

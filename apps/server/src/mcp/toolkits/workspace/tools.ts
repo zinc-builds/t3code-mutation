@@ -24,7 +24,7 @@ const dependencies = [
 ];
 
 const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
-  description: `Transform this thread's interface into a workspace built for the user's task, replacing the chat view until the task is done. Use it when the user asks to do hands-on work that a dedicated professional application serves better than chat: editing a photo they attached or one on disk, cutting a video, mixing audio, exploring a dataset, laying out a design. Write the whole interface from scratch for this request. Calling it again rebuilds the workspace in place (the user's control state is kept), so iterate when the user asks for more tools. Write one self-contained document with inline <style> and <script>; remote http(s) libraries load as-is. ${WORKSPACE_PAGE_GUIDE} ${HTML_RENDER_THEME_GUIDE} After calling it, reply briefly about what you built; the user is already looking at it. When the user is finished, call ${WORKSPACE_RESTORE_TOOL_NAME}.`,
+  description: `Transform this thread's interface into a workspace built for the user's task, replacing the chat view until the task is done. Use it for hands-on, iterative work on an artifact that the user will adjust by eye over several steps, in space or in time, which a dedicated professional application serves better than chat: grading or retouching a photo they attached or one on disk, cutting a video, mixing audio, exploring a dataset, laying out a design. Do not use it for a one-shot edit the user fully specified ("make it black and white", "trim the first five seconds"): make that edit with your own tools, and offer a workspace in your reply when fine-tuning by hand would help. Write the whole interface from scratch for this request. Calling it again rebuilds the workspace in place (the user's control state is kept), so iterate when the user asks for more tools. Write one self-contained document with inline <style> and <script>; remote http(s) libraries load as-is. ${WORKSPACE_PAGE_GUIDE} ${HTML_RENDER_THEME_GUIDE} After calling it, reply briefly about what you built; the user is already looking at it. When the user is finished, call ${WORKSPACE_RESTORE_TOOL_NAME}.`,
   parameters: Schema.Struct({
     html: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000_000)).annotate({
       description: "A complete, self-contained HTML document for the workspace.",
@@ -77,7 +77,7 @@ const WorkspaceRestoreTool = Tool.make(WORKSPACE_RESTORE_TOOL_NAME, {
   .annotate(Tool.OpenWorld, false);
 
 const WorkspaceStateTool = Tool.make(WORKSPACE_STATE_TOOL_NAME, {
-  description: `Read the current control values of this thread's workspace: the last object its page stored with t3.workspace.setState. Call it before acting on a message the user sent from the workspace when the request depends on what they have set (for example "apply this to the full-resolution file").`,
+  description: `Read the current control values of this thread's workspace: the last object its page stored with t3.workspace.setState. Each message the user sends while the workspace is open already carries them in a <workspace_context> block, cut short when large; call this for the full state, or when a request depends on what they have set since (for example "apply this to the full-resolution file").`,
   // No `parameters`: an explicit Schema.Struct({}) is not a valid MCP input schema (see worktree/tools.ts).
   success: Schema.Struct({ state: Schema.Unknown }),
   failure: OrchestratorMcpFailure,
