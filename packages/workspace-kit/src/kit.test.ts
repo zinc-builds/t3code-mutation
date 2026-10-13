@@ -152,6 +152,35 @@ describe("kit request errors", () => {
     assert.include(error, "template.options.title: expected a string, got 1");
   });
 
+  it("checks the declared properties of objects inside options", () => {
+    const markers = {
+      options: {
+        markers: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { time: { type: "number", minimum: 0 }, label: { type: "string" } },
+            required: ["time"],
+          },
+        },
+      },
+    } as const;
+    assert.deepEqual(
+      validateTemplateOptions(markers, { markers: [{ time: 2, label: "Beat" }, { time: 0 }] }),
+      [],
+    );
+    assert.deepEqual(
+      validateTemplateOptions(markers, {
+        markers: [{ label: "Open" }, { time: -1, text: "x" }],
+      }),
+      [
+        "template.options.markers[0].time: required",
+        "template.options.markers[1].time: must be at least 0, got -1",
+        "template.options.markers[1].text: unknown key; expected time, label",
+      ],
+    );
+  });
+
   it("accepts a customScript bolt-on without the template declaring it", () => {
     assert.isTrue(
       kit.planPage({

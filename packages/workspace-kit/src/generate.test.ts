@@ -44,7 +44,16 @@ describe("the committed kit", () => {
 });
 
 describe("generate.mjs", () => {
-  it("reads primitives, core, and templates with normalized option specs", () => {
+  it("reads primitives, core, and templates, keeping template.json verbatim", () => {
+    const markers = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { time: { type: "number" }, label: { type: "string" } },
+        required: ["time"],
+      },
+      default: [],
+    } as const;
     const dir = kitDir({
       "primitives/develop.js": primitive("develop", "WebGL2 photo develop."),
       "primitives/links.js": primitive("links", "wire kit primitives together."),
@@ -56,8 +65,12 @@ describe("generate.mjs", () => {
         title: "Photo Develop",
         summary: "Grade one photo.",
         kit: ["develop"],
-        options: { strength: { type: "number", min: 0, max: 1, default: 0.5, label: "x" } },
-        examples: [{ strength: 1 }],
+        options: {
+          strength: { type: "number", minimum: 0, maximum: 1, default: 0.5, label: "x" },
+          markers,
+        },
+        examples: [{ strength: 1, markers: [{ time: 2, label: "Beat" }] }],
+        boltOn: { addPanel: "addPanel(title) -> HTMLElement" },
       }),
     });
     const kit = readKit(dir);
@@ -67,11 +80,59 @@ describe("generate.mjs", () => {
     );
     assert.strictEqual(kit.core, "window.t3kit = {};");
     assert.deepEqual(kit.templates[0]?.options, {
-      strength: { type: "number", minimum: 0, maximum: 1, default: 0.5 },
+      strength: { type: "number", minimum: 0, maximum: 1, default: 0.5, label: "x" },
+      markers,
     });
+    assert.deepEqual(kit.templates[0]?.boltOn, { addPanel: "addPanel(title) -> HTMLElement" });
     const module = renderKitModule(kit);
     assert.include(module, "export const GENERATED_KIT: KitSource = {");
     assert.include(module, '"html": "<!doctype html><head></head><body></body>"');
+  });
+
+  const template = (manifest: Record<string, unknown>) =>
+    kitDir({
+      "primitives/viewer.js": primitive("viewer", "image viewport."),
+      "templates/cut/template.html": "<p></p>",
+      "templates/cut/template.json": JSON.stringify({
+        id: "cut",
+        title: "Cut",
+        summary: "Cut video.",
+        ...manifest,
+      }),
+    });
+
+  it("fails on option specs T3 would misread", () => {
+    assert.throws(
+      () => readKit(template({ options: { in: { type: "number", min: 0 } } })),
+      /options\.in\.min is not JSON Schema; write minimum/,
+    );
+    assert.throws(
+      () =>
+        readKit(
+          template({
+            options: { markers: { type: "array", items: { type: "object", required: ["time"] } } },
+          }),
+        ),
+      /options\.markers\.items\.required names "time", which is not in its properties/,
+    );
+  });
+
+  it("fails on an example its own options reject", () => {
+    assert.throws(
+      () =>
+        readKit(
+          template({
+            options: {
+              markers: {
+                type: "array",
+                items: { type: "object", properties: { time: { type: "number" } } },
+              },
+            },
+            examples: [{ markers: [{ time: "3" }] }],
+          }),
+        ),
+      /examples\[0\]\.markers\[0\]\.time: expected a number/,
+    );
   });
 
   it("handles a kit without templates", () => {

@@ -1,5 +1,5 @@
 import { validateTemplateOptions } from "./templateOptions.ts";
-import type { KitPrimitive, KitSource, KitTemplate } from "./types.ts";
+import type { KitPrimitive, KitSource, KitTemplate, KitTemplateManifest } from "./types.ts";
 
 /** A kit lookup either succeeds or says exactly what to fix. */
 export type KitResult<A> =
@@ -29,13 +29,13 @@ export interface WorkspacePagePlan {
 
 export interface KitDocs {
   readonly primitives: ReadonlyArray<{ readonly name: string; readonly docs: string }>;
-  readonly templates: ReadonlyArray<Omit<KitTemplate, "html">>;
+  readonly templates: ReadonlyArray<KitTemplateManifest>;
 }
 
 const listOr = (names: ReadonlyArray<string>, none: string) =>
   names.length === 0 ? none : names.join(", ");
 
-const templateDocs = ({ html: _html, ...template }: KitTemplate) => template;
+const templateDocs = ({ html: _html, ...manifest }: KitTemplate): KitTemplateManifest => manifest;
 
 /**
  * A template's catalog line: what it is (its summary up to the first colon or
@@ -48,6 +48,13 @@ export function templateCatalogLine(summary: string): string {
   const pick = /(?:^|\s)(Pick it\b.*?\.)(?=\s|$)/.exec(text)?.[1];
   return pick === undefined || lead === pick.slice(0, -1) ? `${lead}.` : `${lead}. ${pick}`;
 }
+
+/**
+ * The tag a template reads its options from. `\u003c` keeps the JSON valid
+ * and rules out a closing tag inside it.
+ */
+export const templateOptionsTag = (options: Readonly<Record<string, unknown>>) =>
+  `<script id="t3-template-options" type="application/json">${JSON.stringify(options).replace(/</g, "\\u003c")}</script>`;
 
 // A literal `</script` inside an inline script would end it early.
 const inlineScript = (attributes: string, source: string) =>
@@ -169,12 +176,7 @@ export function makeWorkspaceKit(source: KitSource) {
         ? [inlineScript('data-t3kit="_core"', source.core)]
         : []),
       ...plan.primitives.map((p) => inlineScript(`data-t3kit="${p.name}"`, p.source)),
-      ...(plan.template === undefined
-        ? []
-        : [
-            // `\u003c` keeps the JSON valid and rules out a closing tag inside it.
-            `<script id="t3-template-options" type="application/json">${JSON.stringify(plan.template.options).replace(/</g, "\\u003c")}</script>`,
-          ]),
+      ...(plan.template === undefined ? [] : [templateOptionsTag(plan.template.options)]),
     ];
     if (scripts.length === 0) return html;
     const markup = scripts.join("");

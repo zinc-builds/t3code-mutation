@@ -11,6 +11,8 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
+import { validateTemplateOptions } from "../src/templateOptions.ts";
+
 const here = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 const outFile = NodePath.resolve(here, "../src/generated.ts");
 
@@ -74,39 +76,50 @@ function readPrimitives(kitDir) {
   return { primitives, core };
 }
 
-const SPEC_KEYS = new Set([
-  "type",
-  "enum",
-  "items",
-  "minimum",
-  "maximum",
-  "default",
-  "description",
-]);
-const SPEC_ALIASES = { min: "minimum", max: "maximum" };
-const warnings = [];
-
-/** One option's spec, reduced to the keys T3 checks (see TemplateOptionSpec). */
-function readOptionSpec(spec, where) {
+/**
+ * Checks one option's spec where T3 reads it (type, enum, range, items,
+ * properties, required; see TemplateOptionSpec) and returns it unchanged.
+ * Keys T3 does not read pass through verbatim, so agents see the whole spec.
+ */
+function checkOptionSpec(spec, where) {
   if (spec === null || typeof spec !== "object" || Array.isArray(spec)) {
     fail(`${where} must be an object.`);
   }
-  const out = {};
-  for (const [rawKey, value] of Object.entries(spec)) {
-    const key = SPEC_ALIASES[rawKey] ?? rawKey;
-    if (SPEC_KEYS.has(key)) out[key] = value;
-    else warnings.push(`${where}.${rawKey} is not checked by T3 and was left out.`);
+  for (const alias of ["min", "max"]) {
+    if (alias in spec) fail(`${where}.${alias} is not JSON Schema; write ${alias}imum.`);
   }
-  if (out.type !== undefined && !OPTION_TYPES.has(out.type)) {
+  if (spec.type !== undefined && !OPTION_TYPES.has(spec.type)) {
     fail(`${where}.type must be one of ${[...OPTION_TYPES].join(", ")}.`);
   }
-  if (out.enum !== undefined && !Array.isArray(out.enum)) fail(`${where}.enum must be an array.`);
+  if (spec.enum !== undefined && !Array.isArray(spec.enum)) fail(`${where}.enum must be an array.`);
   for (const key of ["minimum", "maximum"]) {
-    if (out[key] !== undefined && typeof out[key] !== "number")
+    if (spec[key] !== undefined && typeof spec[key] !== "number")
       fail(`${where}.${key} must be a number.`);
   }
-  if (out.items !== undefined) out.items = readOptionSpec(out.items, `${where}.items`);
-  return out;
+  if (spec.items !== undefined) checkOptionSpec(spec.items, `${where}.items`);
+  if (spec.properties !== undefined) {
+    if (
+      spec.properties === null ||
+      typeof spec.properties !== "object" ||
+      Array.isArray(spec.properties)
+    ) {
+      fail(`${where}.properties must be an object.`);
+    }
+    for (const [key, property] of Object.entries(spec.properties)) {
+      checkOptionSpec(property, `${where}.properties.${key}`);
+    }
+  }
+  if (spec.required !== undefined) {
+    if (!Array.isArray(spec.required) || !spec.required.every((key) => typeof key === "string")) {
+      fail(`${where}.required must be an array of property names.`);
+    }
+    for (const key of spec.required) {
+      if (spec.properties === undefined || !(key in spec.properties)) {
+        fail(`${where}.required names "${key}", which is not in its properties.`);
+      }
+    }
+  }
+  return spec;
 }
 
 function readTemplates(kitDir, primitiveNames) {
@@ -138,20 +151,21 @@ function readTemplates(kitDir, primitiveNames) {
       if (options === null || typeof options !== "object" || Array.isArray(options)) {
         fail(`${where}/template.json options must be an object.`);
       }
-      const specs = Object.fromEntries(
-        Object.entries(options).map(([key, spec]) => [
-          key,
-          readOptionSpec(spec, `${where}/template.json options.${key}`),
-        ]),
-      );
+      for (const [key, spec] of Object.entries(options)) {
+        checkOptionSpec(spec, `${where}/template.json options.${key}`);
+      }
       const examples = manifest.examples ?? [];
       if (!Array.isArray(examples)) fail(`${where}/template.json examples must be an array.`);
+      examples.forEach((example, index) => {
+        const problems = validateTemplateOptions({ options }, example, `examples[${index}]`);
+        if (problems.length > 0) fail(`${where}/template.json ${problems.join("; ")}.`);
+      });
+      if ("html" in manifest) fail(`${where}/template.json must not have an html key.`);
+      // The manifest as written, so fields T3 does not read (bolt-on docs, notes) reach agents.
       return {
-        id,
-        title: manifest.title,
-        summary: manifest.summary,
+        ...manifest,
         kit,
-        options: specs,
+        options,
         examples,
         html: NodeFS.readFileSync(htmlPath, "utf8"),
       };
@@ -186,7 +200,6 @@ function main() {
       core: core !== null,
       primitives: primitives.map((p) => p.name),
       templates: templates.map((t) => t.id),
-      warnings,
     }),
   );
 }

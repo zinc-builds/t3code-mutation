@@ -13,11 +13,18 @@ export const workspaceKit = makeWorkspaceKit(GENERATED_KIT);
 export {
   makeWorkspaceKit,
   templateCatalogLine,
+  templateOptionsTag,
   type KitDocs,
   type KitResult,
   type WorkspaceKit,
   type WorkspacePagePlan,
   type WorkspacePageRequest,
 } from "./kit.ts";
-export { validateTemplateOptions } from "./templateOptions.ts";
-export type { KitPrimitive, KitSource, KitTemplate, TemplateOptionSpec } from "./types.ts";
+export { TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER, validateTemplateOptions } from "./templateOptions.ts";
+export type {
+  KitPrimitive,
+  KitSource,
+  KitTemplate,
+  KitTemplateManifest,
+  TemplateOptionSpec,
+} from "./types.ts";
