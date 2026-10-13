@@ -10,6 +10,13 @@ import {
   type HtmlRenderReference,
 } from "./htmlRender.ts";
 import { MCP_APP_OUTPUT_KEY, readMcpAppReference, type McpAppReference } from "./mcpApp.ts";
+import {
+  readWorkspaceReference,
+  WORKSPACE_MUTATE_TOOL_NAME,
+  WORKSPACE_OUTPUT_KEY,
+  WORKSPACE_RESTORE_TOOL_NAME,
+  type WorkspaceReference,
+} from "./mutationWorkspace.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 
 const MAX_PARSED_BYTES = 16_384;
@@ -41,6 +48,7 @@ interface CompactToolOutput {
   status?: "rolled_back";
   htmlRender?: HtmlRenderReference;
   [MCP_APP_OUTPUT_KEY]?: McpAppReference;
+  [WORKSPACE_OUTPUT_KEY]?: WorkspaceReference;
   thread?: { threadId: string };
   threads?: Array<{ threadId?: string; status?: "rolled_back" }>;
 }
@@ -129,6 +137,8 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
     // Kept under its stored key, so the compact wire output reads back the same way.
     if (mcpApp !== undefined) output[MCP_APP_OUTPUT_KEY] = mcpApp;
+    const workspace = readWorkspaceReference(data[WORKSPACE_OUTPUT_KEY]);
+    if (workspace !== undefined) output[WORKSPACE_OUTPUT_KEY] = workspace;
     const nestedThreadId = Predicate.isObject(data.thread)
       ? boundedId(data.thread.threadId)
       : undefined;
@@ -190,6 +200,27 @@ export function htmlRenderFromToolItem(item: {
   if (resolveT3McpToolId(item.toolName) !== HTML_RENDER_TOOL_NAME) return undefined;
   const output = compactDynamicToolOutput(item.output);
   return output?.isError ? undefined : output?.htmlRender;
+}
+
+/** The workspace a completed `workspace_mutate` tool call published, if this item is one. */
+export function workspaceFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): WorkspaceReference | undefined {
+  if (resolveT3McpToolId(item.toolName) !== WORKSPACE_MUTATE_TOOL_NAME) return undefined;
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.[WORKSPACE_OUTPUT_KEY];
+}
+
+/** Whether a completed tool call handed the thread back to chat with `workspace_restore`. */
+export function isWorkspaceRestoreToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): boolean {
+  return (
+    resolveT3McpToolId(item.toolName) === WORKSPACE_RESTORE_TOOL_NAME &&
+    compactDynamicToolOutput(item.output)?.isError !== true
+  );
 }
 
 /**

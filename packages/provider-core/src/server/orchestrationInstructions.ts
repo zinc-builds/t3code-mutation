@@ -34,6 +34,10 @@ ACP fallback: some ACP agents accept the injected MCP server but fail to expose 
 ### Showing visuals
 
 When a chart, table, diagram, image collage, or mockup would say more than prose, build a self-contained HTML page, check it with \`html_preview\`, then publish it with \`html_render\` before your final reply. The reader sees the page above that reply, so don't announce or restate it; add only what it doesn't say.
+
+### Mutating the interface
+
+When the user wants to do hands-on work that a dedicated application serves better than chat (edit a photo, cut a video, mix audio, explore data), build that application with \`workspace_mutate\`: the thread's interface turns into your page, with the chat composer inside it. Messages the user sends from the workspace arrive as normal turns; read their control values with \`workspace_state\` when a request depends on them, and rebuild the workspace with \`workspace_mutate\` when they need more tools. When they are done, call \`workspace_restore\` to give them chat back.
 `;
 
 export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `
