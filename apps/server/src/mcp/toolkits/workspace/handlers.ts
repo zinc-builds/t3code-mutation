@@ -2,6 +2,7 @@ import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import * as MutationWorkspace from "../../../mutationWorkspace/MutationWorkspace.ts";
+import { workspaceMutateAdvice } from "../../../mutationWorkspace/workspaceValidation.ts";
 import * as WorkspaceState from "../../../mutationWorkspace/WorkspaceState.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -36,7 +37,7 @@ const handlers = {
     Effect.gen(function* () {
       const threadId = yield* callingThread("workspace_mutate");
       const workspace = yield* MutationWorkspace.MutationWorkspace;
-      const reference = yield* workspace
+      const { reference, validation } = yield* workspace
         .publish({
           threadId,
           html: input.html,
@@ -49,8 +50,8 @@ const handlers = {
         .pipe(Effect.mapError(toFailure));
       return {
         mutationWorkspace: reference,
-        message:
-          "The thread now shows this workspace in place of chat, with the composer inside it. Reply in a sentence or two; the user is already looking at it.",
+        validation,
+        message: workspaceMutateAdvice(validation),
       };
     }),
   ),

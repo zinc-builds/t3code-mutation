@@ -1,12 +1,26 @@
+// @effect-diagnostics nodeBuiltinImport:off -- a synchronous sha256 keys the template page memo.
+import * as NodeCrypto from "node:crypto";
+
 import type { ThreadId } from "@t3tools/contracts";
+import { hostPreviewMimeTypeFromExtension } from "@t3tools/shared/filePreview";
 import {
   injectWorkspaceBridge,
   WORKSPACE_KIT_DOCS_TOOL_NAME,
   WORKSPACE_MAX_TITLE_LENGTH,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
-import { readWorkspaceChrome } from "@t3tools/shared/mutationWorkspaceChrome";
-import { type KitDocs, type WorkspaceKit, workspaceKit } from "@t3tools/workspace-kit";
+import {
+  readWorkspaceChrome,
+  resolveWorkspaceChromeValues,
+  type WorkspaceChrome,
+} from "@t3tools/shared/mutationWorkspaceChrome";
+import {
+  type KitDocs,
+  type WorkspaceKit,
+  type WorkspacePagePlan,
+  templateOptionsTag,
+  workspaceKit,
+} from "@t3tools/workspace-kit";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +31,19 @@ import * as Schema from "effect/Schema";
 import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import { createAttachmentId } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
+import * as HeadlessChrome from "../htmlRender/headlessChrome.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
+import {
+  injectValidationHost,
+  shapeValidation,
+  skippedValidation,
+  VALIDATION_PROBLEM_PREFIXES,
+  VALIDATION_SETTLED_EXPRESSION,
+  validationAssetUrl,
+  validationHostScript,
+  type ValidationAsset,
+  type WorkspaceValidation,
+} from "./workspaceValidation.ts";
 
 export class WorkspaceAssetNotFoundError extends Schema.TaggedError<WorkspaceAssetNotFoundError>()(
   "WorkspaceAssetNotFoundError",
@@ -79,6 +105,12 @@ export interface WorkspacePublishInput {
   readonly chrome?: unknown;
 }
 
+/** A stored workspace, and what its page reported when T3 booted it. */
+export interface WorkspacePublished {
+  readonly reference: WorkspaceReference;
+  readonly validation: WorkspaceValidation;
+}
+
 /**
  * Agent-built workspaces that replace a thread's chat interface, stored as
  * thread attachments like HTML renders.
@@ -86,15 +118,45 @@ export interface WorkspacePublishInput {
 export class MutationWorkspace extends Context.Service<
   MutationWorkspace,
   {
+    /**
+     * Stores the page and, meanwhile, boots it in the preview browser to
+     * collect its errors (skipped when the browser is not installed).
+     */
     readonly publish: (
       input: WorkspacePublishInput,
-    ) => Effect.Effect<WorkspaceReference, WorkspacePublishError>;
+    ) => Effect.Effect<WorkspacePublished, WorkspacePublishError>;
     /** Primitive docs headers and template options; `names` omitted means everything. */
     readonly kitDocs: (
       names?: ReadonlyArray<string>,
     ) => Effect.Effect<KitDocs, WorkspaceKitInvalidError>;
   }
 >()("t3/mutationWorkspace/MutationWorkspace") {}
+
+const MIB = 1024 * 1024;
+// Validation hands assets to the page over the browser's pipe, so it stops at a size
+// a quick boot can carry; larger ones are left out and named in the result.
+const MAX_VALIDATION_ASSET_BYTES = 32 * MIB;
+const MAX_VALIDATION_ASSETS_BYTES = 64 * MIB;
+const VALIDATION_WIDTH = 1_280;
+// The page's own budget, from navigation to settled.
+const VALIDATION_PAGE_BUDGET = "4 seconds";
+// Everything else included: waiting for a browser slot, launching it, reading assets.
+const VALIDATION_TIMEOUT = "7 seconds";
+// Assembled template pages kept, by content hash.
+const MAX_TEMPLATE_SHELLS = 16;
+
+/** A template page assembled once: everything before and after its options tag. */
+interface TemplateShell {
+  readonly before: string;
+  readonly after: string;
+}
+
+const templateShellKey = (plan: WorkspacePagePlan) =>
+  NodeCrypto.createHash("sha256")
+    .update(plan.html)
+    .update("\0")
+    .update(plan.primitives.map((primitive) => primitive.name).join(","))
+    .digest("hex");
 
 const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -116,6 +178,111 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     if (missing.length > 0) return yield* new WorkspaceAssetNotFoundError({ paths: missing });
   });
 
+  // Kit sources go in after prepare, so they never count against the page's limits.
+  // Each injector inserts at the head start: the bridge, then the kit, then the page.
+  const assemble = (plan: WorkspacePagePlan) =>
+    htmlRender
+      .prepare(plan.html)
+      .pipe(Effect.map((prepared) => injectWorkspaceBridge(kit.inject(prepared, plan))));
+
+  // A template page differs between publishes only in its options, so everything
+  // around the options tag is assembled once per template and kit.
+  const templateShells = new Map<string, TemplateShell>();
+  const templateShell = Effect.fn("MutationWorkspace.templateShell")(function* (
+    plan: WorkspacePagePlan & { readonly template: NonNullable<WorkspacePagePlan["template"]> },
+  ) {
+    const key = templateShellKey(plan);
+    const cached = templateShells.get(key);
+    if (cached !== undefined) {
+      // Newest last, so the first key is the one to evict.
+      templateShells.delete(key);
+      templateShells.set(key, cached);
+      return cached;
+    }
+    const page = yield* assemble({ ...plan, template: { ...plan.template, options: {} } });
+    const emptyTag = templateOptionsTag({});
+    const at = page.indexOf(emptyTag);
+    if (at === -1) return yield* Effect.die(new Error("The template page lost its options tag."));
+    const shell = { before: page.slice(0, at), after: page.slice(at + emptyTag.length) };
+    templateShells.set(key, shell);
+    if (templateShells.size > MAX_TEMPLATE_SHELLS) {
+      templateShells.delete(templateShells.keys().next().value!);
+    }
+    return shell;
+  });
+
+  const assemblePage = (plan: WorkspacePagePlan) => {
+    const template = plan.template;
+    return template === undefined
+      ? assemble(plan)
+      : templateShell({ ...plan, template }).pipe(
+          Effect.map((shell) => shell.before + templateOptionsTag(template.options) + shell.after),
+        );
+  };
+
+  /** The assets validation can hand the page, served from its own origin, and the ones left out. */
+  const validationAssets = Effect.fn("MutationWorkspace.validationAssets")(function* (
+    assetPaths: ReadonlyArray<string>,
+  ) {
+    const assets: Array<ValidationAsset> = [];
+    const resources = new Map<string, HeadlessChrome.ServedResource>();
+    const omitted: Array<string> = [];
+    let total = 0;
+    for (const assetPath of assetPaths) {
+      const size = Number((yield* fileSystem.stat(assetPath)).size);
+      if (size > MAX_VALIDATION_ASSET_BYTES || total + size > MAX_VALIDATION_ASSETS_BYTES) {
+        omitted.push(assetPath);
+        continue;
+      }
+      total += size;
+      const url = validationAssetUrl(assets.length);
+      const mimeType =
+        hostPreviewMimeTypeFromExtension(path.extname(assetPath)) ?? "application/octet-stream";
+      resources.set(
+        url,
+        HeadlessChrome.servedResource(yield* fileSystem.readFile(assetPath), mimeType),
+      );
+      assets.push({ name: path.basename(assetPath), mimeType, path: assetPath, url });
+    }
+    return { assets, resources, omitted };
+  });
+
+  const validate = (input: {
+    readonly html: string;
+    readonly assetPaths: ReadonlyArray<string>;
+    readonly chrome: WorkspaceChrome | undefined;
+  }) =>
+    Effect.gen(function* () {
+      const { assets, resources, omitted } = yield* validationAssets(input.assetPaths);
+      const host = validationHostScript({
+        assets,
+        controls: input.chrome === undefined ? {} : resolveWorkspaceChromeValues(input.chrome),
+      });
+      const observation = yield* htmlRender.observe({
+        html: injectValidationHost(input.html, host),
+        width: VALIDATION_WIDTH,
+        resources,
+        problemPrefixes: VALIDATION_PROBLEM_PREFIXES,
+        settledExpression: VALIDATION_SETTLED_EXPRESSION,
+        budget: VALIDATION_PAGE_BUDGET,
+      });
+      return shapeValidation(observation, omitted);
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: VALIDATION_TIMEOUT,
+        orElse: () =>
+          Effect.succeed(
+            skippedValidation(`the preview browser did not finish within ${VALIDATION_TIMEOUT}`),
+          ),
+      }),
+      Effect.catch((cause) =>
+        Effect.logWarning("Could not validate a workspace page; publishing it unchecked.", {
+          cause,
+        }).pipe(Effect.as(skippedValidation(cause.message))),
+      ),
+      Effect.withSpan("MutationWorkspace.validate"),
+    );
+
   const publish = Effect.fn("MutationWorkspace.publish")(function* (input: WorkspacePublishInput) {
     const plan = kit.planPage({ html: input.html, kit: input.kit, template: input.template });
     if (!plan.ok) return yield* new WorkspaceKitInvalidError({ problem: plan.error });
@@ -124,10 +291,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
       return yield* new WorkspaceChromeInvalidError({ problem: chrome.error });
     }
     yield* checkAssets(input.assetPaths);
-    // Kit sources go in after prepare, so they never count against the page's limits.
-    // Each injector inserts at the head start: the bridge, then the kit, then the page.
-    const prepared = yield* htmlRender.prepare(plan.value.html);
-    const html = injectWorkspaceBridge(kit.inject(prepared, plan.value));
+    const html = yield* assemblePage(plan.value);
     // The `-html` id suffix makes the asset route serve it as a sandboxed text/html document.
     const attachmentId = createAttachmentId(input.threadId, "html");
     const filePath =
@@ -140,10 +304,16 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     if (attachmentId === null || filePath === null) {
       return yield* new WorkspaceStoreError({ cause: new Error("Invalid thread id.") });
     }
-    yield* fileSystem
-      .writeFileString(filePath, html)
-      .pipe(Effect.mapError((cause) => new WorkspaceStoreError({ cause })));
-    return {
+    const [, validation] = yield* Effect.all(
+      [
+        fileSystem
+          .writeFileString(filePath, html)
+          .pipe(Effect.mapError((cause) => new WorkspaceStoreError({ cause }))),
+        validate({ html, assetPaths: input.assetPaths, chrome: chrome?.chrome }),
+      ],
+      { concurrency: 2 },
+    );
+    const reference = {
       attachmentId,
       title: input.title.trim().slice(0, WORKSPACE_MAX_TITLE_LENGTH) || "Workspace",
       assets: input.assetPaths.map((assetPath) => ({
@@ -152,6 +322,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
       })),
       ...(chrome === undefined ? {} : { chrome: chrome.chrome }),
     } satisfies WorkspaceReference;
+    return { reference, validation } satisfies WorkspacePublished;
   });
 
   const kitDocs = (names?: ReadonlyArray<string>) => {

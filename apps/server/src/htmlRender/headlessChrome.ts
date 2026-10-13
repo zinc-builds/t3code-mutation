@@ -1,4 +1,5 @@
 import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -33,7 +34,27 @@ export interface ConsoleMessage {
   readonly text: string;
 }
 
+/** Something that went wrong while a page ran: an uncaught exception or an error it logged. */
+export interface PageProblem {
+  readonly source: "exception" | "console";
+  readonly text: string;
+}
+
+/** A file the page may fetch from its own origin, as `servedResource` encodes it. */
+export interface ServedResource {
+  readonly contentType: string;
+  /** The body as base64 bytes, ready for the pipe. */
+  readonly body: Uint8Array;
+}
+
+/** Serves `bytes` at a path of the page's own origin. */
+export const servedResource = (bytes: Uint8Array, contentType: string): ServedResource => ({
+  contentType,
+  body: Buffer.from(Buffer.from(bytes).toString("base64"), "latin1"),
+});
+
 const MAX_CONSOLE_MESSAGES = 20;
+const MAX_PAGE_PROBLEMS = 20;
 const MAX_CONSOLE_TEXT_CHARS = 500;
 const VIEWPORT_HEIGHT = 800;
 const MAX_CAPTURE_HEIGHT = 4_000;
@@ -127,27 +148,42 @@ const CONSOLE_LEVELS: Readonly<Record<string, ConsoleMessage["level"]>> = {
   assert: "error",
 };
 
+type ObservedMessage = ConsoleMessage & { readonly source: "console" | "exception" | "browser" };
+
 /** Everything the page logs, uncaught exceptions, and the browser's own load errors. */
-const consoleMessageFromEvent = (method: string, params: unknown): ConsoleMessage | undefined => {
+const consoleMessageFromEvent = (method: string, params: unknown): ObservedMessage | undefined => {
   if (method === "Runtime.consoleAPICalled") {
     const event = Option.getOrUndefined(decodeConsoleApiCalled(params));
     const level = event === undefined ? undefined : CONSOLE_LEVELS[event.type];
-    return event && level ? { level, text: event.args.map(remoteObjectText).join(" ") } : undefined;
+    return event && level
+      ? { source: "console", level, text: event.args.map(remoteObjectText).join(" ") }
+      : undefined;
   }
   if (method === "Runtime.exceptionThrown") {
     const details = Option.getOrUndefined(decodeExceptionThrown(params))?.exceptionDetails;
     return details
-      ? { level: "error", text: details.exception?.description ?? details.text }
+      ? {
+          source: "exception",
+          level: "error",
+          text: details.exception?.description ?? details.text,
+        }
       : undefined;
   }
   if (method === "Log.entryAdded") {
     const entry = Option.getOrUndefined(decodeLogEntryAdded(params))?.entry;
     return entry && (entry.level === "error" || entry.level === "warning")
-      ? { level: entry.level, text: entry.url ? `${entry.text} ${entry.url}` : entry.text }
+      ? {
+          source: "browser",
+          level: entry.level,
+          text: entry.url ? `${entry.text} ${entry.url}` : entry.text,
+        }
       : undefined;
   }
   return undefined;
 };
+
+const clip = (text: string) =>
+  text.length > MAX_CONSOLE_TEXT_CHARS ? `${text.slice(0, MAX_CONSOLE_TEXT_CHARS)}…` : text;
 
 // Resolves after web fonts load and two frames paint, so late layout lands in the capture.
 const SETTLE_EXPRESSION =
@@ -169,6 +205,18 @@ interface PageEvents {
   loaded: Deferred.Deferred<void, BrowserFailure> | undefined;
   readonly consoleMessages: Array<ConsoleMessage>;
   omittedConsoleMessages: number;
+  /** Other files the page's origin serves, by path. */
+  readonly resources: ReadonlyMap<string, ServedResource>;
+  /** Console messages at any level that start with one of these are problems too. */
+  readonly problemPrefixes: ReadonlyArray<string>;
+  readonly problems: Array<PageProblem>;
+  omittedProblems: number;
+}
+
+/** What `openPage` serves and watches beyond the page itself. */
+interface PageOptions {
+  readonly resources?: ReadonlyMap<string, ServedResource>;
+  readonly problemPrefixes?: ReadonlyArray<string>;
 }
 
 /**
@@ -181,6 +229,12 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
   readonly executable: string;
   readonly noSandbox: boolean;
   readonly profileDirectory: string;
+  /**
+   * WebGL through SwiftShader, Chrome's CPU renderer, for pages that only
+   * boot with it (kit primitives develop photos in WebGL2). Without it the
+   * browser runs with no GPU at all, which is cheaper.
+   */
+  readonly webgl?: boolean;
 }) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const proxyPort = yield* publicProxy.pipe(
@@ -198,7 +252,9 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
           "--remote-debugging-pipe",
           "--no-first-run",
           "--no-default-browser-check",
-          "--disable-gpu",
+          ...(input.webgl === true
+            ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+            : ["--disable-gpu"]),
           "--hide-scrollbars",
           "--mute-audio",
           "--block-new-web-contents",
@@ -259,13 +315,13 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       ),
     ).pipe(Effect.asVoid);
 
-  // Serves the page. Its body is shared bytes between two small JSON halves,
-  // queued together, so loading a page of up to 25 MiB at several widths never
-  // copies it on this side.
-  const fulfillPage = (sessionId: string, requestId: string, body: Uint8Array) =>
+  // Serves the page or a resource. Its body is shared bytes between two small
+  // JSON halves, queued together, so loading a page of up to 25 MiB at several
+  // widths never copies it on this side.
+  const fulfill = (sessionId: string, requestId: string, body: Uint8Array, contentType: string) =>
     Queue.offerAll(outgoing, [
       textEncoder.encode(
-        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":200,"responseHeaders":[{"name":"Content-Type","value":"text/html; charset=utf-8"}],"body":"`,
+        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":200,"responseHeaders":[{"name":"Content-Type","value":${JSON.stringify(contentType)}}],"body":"`,
       ),
       body,
       textEncoder.encode('"}}\0'),
@@ -299,7 +355,13 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       const body = page.body;
       const url = paused.request.url.split("#", 1)[0]!;
       if (url === PAGE_URL && body !== undefined) {
-        return fulfillPage(sessionId, paused.requestId, body);
+        return fulfill(sessionId, paused.requestId, body, "text/html; charset=utf-8");
+      }
+      const resource = url.startsWith(`${PAGE_ORIGIN}/`)
+        ? page.resources.get(url.slice(PAGE_ORIGIN.length))
+        : undefined;
+      if (resource !== undefined) {
+        return fulfill(sessionId, paused.requestId, resource.body, resource.contentType);
       }
       // A frame inside the page may show another site; Local Network Access
       // still covers it. The main frame and T3's own origin serve nothing else.
@@ -317,16 +379,26 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
     }
     const consoleMessage = consoleMessageFromEvent(message.method, message.params);
     if (!consoleMessage) return Effect.void;
+    const text = clip(consoleMessage.text.replaceAll(PAGE_URL, PAGE_NAME));
+    // Problems are kept apart, so a chatty page cannot crowd them out.
+    const problemSource =
+      consoleMessage.source === "exception"
+        ? "exception"
+        : consoleMessage.source === "console" &&
+            (consoleMessage.level === "error" ||
+              page.problemPrefixes.some((prefix) => consoleMessage.text.startsWith(prefix)))
+          ? "console"
+          : undefined;
+    if (problemSource !== undefined) {
+      if (page.problems.length < MAX_PAGE_PROBLEMS) {
+        page.problems.push({ source: problemSource, text });
+      } else page.omittedProblems += 1;
+    }
     if (page.consoleMessages.length >= MAX_CONSOLE_MESSAGES) {
       page.omittedConsoleMessages += 1;
       return Effect.void;
     }
-    const text = consoleMessage.text.replaceAll(PAGE_URL, PAGE_NAME);
-    page.consoleMessages.push({
-      level: consoleMessage.level,
-      text:
-        text.length > MAX_CONSOLE_TEXT_CHARS ? `${text.slice(0, MAX_CONSOLE_TEXT_CHARS)}…` : text,
-    });
+    page.consoleMessages.push({ level: consoleMessage.level, text });
     return Effect.void;
   };
 
@@ -398,7 +470,7 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
     });
 
   /** A fresh page at `width`; each `load` navigates it and measures the settled layout. */
-  const openPage = Effect.fnUntraced(function* (width: number) {
+  const openPage = Effect.fnUntraced(function* (width: number, options: PageOptions = {}) {
     const { targetId } = yield* send(
       "Target.createTarget",
       { url: "about:blank" },
@@ -416,6 +488,10 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       loaded: undefined,
       consoleMessages: [],
       omittedConsoleMessages: 0,
+      resources: options.resources ?? new Map(),
+      problemPrefixes: options.problemPrefixes ?? [],
+      problems: [],
+      omittedProblems: 0,
     };
     pages.set(sessionId, events);
     yield* send("Page.enable", {}, Ignored, sessionId);
@@ -452,8 +528,8 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       sessionId,
     );
 
-    /** Loads a page from `pageBody`, so callers loading it often encode it once. */
-    const load = Effect.fnUntraced(function* (body: Uint8Array, urlFragment: string) {
+    /** Navigates to a page from `pageBody` and waits for its load event. */
+    const open = Effect.fnUntraced(function* (body: Uint8Array, urlFragment: string) {
       const loaded = yield* Deferred.make<void, BrowserFailure>();
       events.body = body;
       events.loaded = loaded;
@@ -467,6 +543,11 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
         return yield* new HtmlRenderBrowserError({ reason: "the page could not be opened" });
       }
       yield* Deferred.await(loaded);
+    });
+
+    /** Loads a page from `pageBody`, so callers loading it often encode it once. */
+    const load = Effect.fnUntraced(function* (body: Uint8Array, urlFragment: string) {
+      yield* open(body, urlFragment);
       yield* send(
         "Runtime.evaluate",
         { expression: SETTLE_EXPRESSION, awaitPromise: true },
@@ -505,13 +586,33 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
             },
           ];
 
+    /** Loads a page, then waits for the promise `settledExpression` evaluates to. */
+    const observe = Effect.fnUntraced(function* (
+      body: Uint8Array,
+      urlFragment: string,
+      settledExpression: string,
+    ) {
+      yield* open(body, urlFragment);
+      yield* send(
+        "Runtime.evaluate",
+        { expression: settledExpression, awaitPromise: true },
+        Ignored,
+        sessionId,
+      );
+    });
+
+    const problems = (): { problems: ReadonlyArray<PageProblem>; omitted: number } => ({
+      problems: [...events.problems],
+      omitted: events.omittedProblems,
+    });
+
     // Frees the page in the browser once it is no longer needed.
     const close = send("Target.closeTarget", { targetId }, Ignored).pipe(
       Effect.ensuring(Effect.sync(() => pages.delete(sessionId))),
       Effect.ignore,
     );
 
-    return { load, screenshot, consoleMessages, close };
+    return { load, observe, screenshot, consoleMessages, problems, close };
   });
 
   return { openPage };
@@ -596,4 +697,40 @@ export const measureHtmlHeights = Effect.fn("headlessChrome.measureHtmlHeights")
       ),
     { concurrency: MEASURE_CONCURRENCY },
   );
+}, Effect.scoped);
+
+/**
+ * Loads `html`, with WebGL, and reports what went wrong while it booted: uncaught
+ * exceptions, console errors, and console messages starting with one of
+ * `problemPrefixes`. The page may fetch `resources` from its own origin. It
+ * gets `budget` from navigation to load and to settle (`settledExpression`
+ * evaluates to a promise); whatever it reported by then is the answer.
+ */
+export const observeHtmlPage = Effect.fn("headlessChrome.observeHtmlPage")(function* (input: {
+  readonly executable: string;
+  readonly noSandbox: boolean;
+  readonly html: string;
+  readonly width: number;
+  readonly urlFragment: string;
+  readonly resources: ReadonlyMap<string, ServedResource>;
+  readonly problemPrefixes: ReadonlyArray<string>;
+  readonly settledExpression: string;
+  readonly budget: Duration.Input;
+}) {
+  const path = yield* Path.Path;
+  const directory = yield* scratchDirectory;
+  const browser = yield* launchBrowser({
+    executable: input.executable,
+    noSandbox: input.noSandbox,
+    profileDirectory: path.join(directory, "profile"),
+    webgl: true,
+  });
+  const page = yield* browser.openPage(input.width, {
+    resources: input.resources,
+    problemPrefixes: input.problemPrefixes,
+  });
+  const settled = yield* page
+    .observe(pageBody(input.html), input.urlFragment, input.settledExpression)
+    .pipe(Effect.timeoutOption(input.budget));
+  return { ...page.problems(), settled: Option.isSome(settled) };
 }, Effect.scoped);

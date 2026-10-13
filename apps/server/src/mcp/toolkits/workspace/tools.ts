@@ -30,7 +30,7 @@ const dependencies = [
 const WORKSPACE_BUILD_GUIDE = `Build it the fastest way that fits, in this order. 1) A template, when one matches the task: pass template: {id, options} and no html; it is a complete pro app ready in seconds, and options.customScript (JS run with (t3template, options)) bolts on anything it lacks. 2) Otherwise kit primitives plus glue: pass kit: [names] and write only the layout and wiring in html; T3 injects each primitive as window.t3kit.<name> before your scripts, at no cost to your output. 3) Only when neither covers the task, write the whole interface from scratch. Call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with the names you will use for their exact APIs and options before writing glue; never hand-roll what a primitive does.\n${workspaceKit.catalog}`;
 
 const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
-  description: `Transform this thread's interface into a workspace built for the user's task, replacing the chat view until the task is done. Use it for hands-on, iterative work on an artifact that the user will adjust by eye over several steps, in space or in time, which a dedicated professional application serves better than chat: grading or retouching a photo they attached or one on disk, cutting a video, mixing audio, exploring a dataset, laying out a design. Do not use it for a one-shot edit the user fully specified ("make it black and white", "trim the first five seconds"): make that edit with your own tools, and offer a workspace in your reply when fine-tuning by hand would help. ${WORKSPACE_BUILD_GUIDE}\nCalling it again rebuilds the workspace in place (the user's control state is kept), so iterate when the user asks for more tools. A page you write is one self-contained document with inline <style> and <script>; remote http(s) libraries load as-is. ${WORKSPACE_PAGE_GUIDE} ${HTML_RENDER_THEME_GUIDE} After calling it, reply briefly about what you built; the user is already looking at it. When the user is finished, call ${WORKSPACE_RESTORE_TOOL_NAME}. Declare the app's toolbar, sidebar, and inspector with \`chrome\` so T3 renders them natively and the page only needs its canvas or timeline.`,
+  description: `Transform this thread's interface into a workspace built for the user's task, replacing the chat view until the task is done. Use it for hands-on, iterative work on an artifact that the user will adjust by eye over several steps, in space or in time, which a dedicated professional application serves better than chat: grading or retouching a photo they attached or one on disk, cutting a video, mixing audio, exploring a dataset, laying out a design. Do not use it for a one-shot edit the user fully specified ("make it black and white", "trim the first five seconds"): make that edit with your own tools, and offer a workspace in your reply when fine-tuning by hand would help. ${WORKSPACE_BUILD_GUIDE}\nCalling it again rebuilds the workspace in place (the user's control state is kept), so iterate when the user asks for more tools. A page you write is one self-contained document with inline <style> and <script>; remote http(s) libraries load as-is. ${WORKSPACE_PAGE_GUIDE} ${HTML_RENDER_THEME_GUIDE} T3 boots the published page itself and returns what broke in the result's validation, so do not screenshot or test it yourself; when validation lists errors, fix them with another call. After calling it, reply briefly about what you built; the user is already looking at it. When the user is finished, call ${WORKSPACE_RESTORE_TOOL_NAME}. Declare the app's toolbar, sidebar, and inspector with \`chrome\` so T3 renders them natively and the page only needs its canvas or timeline.`,
   parameters: Schema.Struct({
     html: Schema.optional(
       Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000_000)),
@@ -74,6 +74,21 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
       assets: Schema.Array(Schema.Struct({ path: Schema.String, name: Schema.String })),
       chrome: Schema.optional(Schema.Unknown),
     }),
+    validation: Schema.Struct({
+      ok: Schema.Boolean,
+      errors: Schema.Array(
+        Schema.Struct({
+          source: Schema.Literals(["customScript", "exception", "console"]),
+          message: Schema.String,
+        }),
+      ),
+      moreErrors: Schema.optional(Schema.Number),
+      skipped: Schema.optional(Schema.String),
+      omittedAssets: Schema.optional(Schema.Array(Schema.String)),
+    }).annotate({
+      description:
+        "What the page reported when T3 booted it with your assets for a few seconds: uncaught exceptions, console errors, and a template's customScript failures. ok means none were seen; skipped says why the page was not checked.",
+    }),
     message: Schema.String,
   }),
   failure: OrchestratorMcpFailure,
@@ -95,15 +110,19 @@ const WorkspaceKitDocsTool = Tool.make(WORKSPACE_KIT_DOCS_TOOL_NAME, {
   }),
   success: Schema.Struct({
     primitives: Schema.Array(Schema.Struct({ name: Schema.String, docs: Schema.String })),
+    // Each template's manifest as written: fields beyond these reach the agent too.
     templates: Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        title: Schema.String,
-        summary: Schema.String,
-        kit: Schema.Array(Schema.String),
-        options: Schema.Record(Schema.String, Schema.Unknown),
-        examples: Schema.Array(Schema.Unknown),
-      }),
+      Schema.StructWithRest(
+        Schema.Struct({
+          id: Schema.String,
+          title: Schema.String,
+          summary: Schema.String,
+          kit: Schema.Array(Schema.String),
+          options: Schema.Record(Schema.String, Schema.Unknown),
+          examples: Schema.Array(Schema.Unknown),
+        }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
     ),
   }),
   failure: OrchestratorMcpFailure,
