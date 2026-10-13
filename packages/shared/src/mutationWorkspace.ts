@@ -10,6 +10,13 @@
  * Apps, under its own `t3/workspace/*` methods.
  */
 
+import {
+  readStoredWorkspaceChrome,
+  WORKSPACE_CHROME_BRIDGE_METHODS,
+  WORKSPACE_CHROME_BRIDGE_SCRIPT,
+  type WorkspaceChrome,
+} from "./mutationWorkspaceChrome.ts";
+
 export const WORKSPACE_MUTATE_TOOL_NAME = "workspace_mutate";
 export const WORKSPACE_RESTORE_TOOL_NAME = "workspace_restore";
 export const WORKSPACE_STATE_TOOL_NAME = "workspace_state";
@@ -34,6 +41,8 @@ export interface WorkspaceReference {
   readonly attachmentId: string;
   readonly title: string;
   readonly assets: ReadonlyArray<WorkspaceAssetReference>;
+  /** The native chrome the agent declared (mutationWorkspaceChrome.ts); absent for a bare page. */
+  readonly chrome?: WorkspaceChrome;
 }
 
 function readAsset(value: unknown): WorkspaceAssetReference | undefined {
@@ -46,7 +55,7 @@ function readAsset(value: unknown): WorkspaceAssetReference | undefined {
 
 export function readWorkspaceReference(value: unknown): WorkspaceReference | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const { attachmentId, title, assets } = value as Record<string, unknown>;
+  const { attachmentId, title, assets, chrome } = value as Record<string, unknown>;
   if (
     typeof attachmentId !== "string" ||
     attachmentId.length === 0 ||
@@ -62,14 +71,17 @@ export function readWorkspaceReference(value: unknown): WorkspaceReference | und
     return read === undefined ? [] : [read];
   });
   if (readAssets.length !== assets.length) return undefined;
+  const readChrome = readStoredWorkspaceChrome(chrome);
   return {
     attachmentId,
     title: title.trim().slice(0, WORKSPACE_MAX_TITLE_LENGTH) || "Workspace",
     assets: readAssets,
+    ...(readChrome === undefined ? {} : { chrome: readChrome }),
   };
 }
 
 export function workspaceReferencesEqual(left: WorkspaceReference, right: WorkspaceReference) {
+  // Chrome, like the page, is fixed per attachment, so the attachment id covers it.
   return (
     left.attachmentId === right.attachmentId &&
     left.title === right.title &&
@@ -102,6 +114,7 @@ export const WORKSPACE_BRIDGE_METHODS = {
   composerSize: "t3/workspace/composer-size",
   /** Notification from the host: whether the agent is working. */
   agentStatus: "t3/workspace/agent-status",
+  ...WORKSPACE_CHROME_BRIDGE_METHODS,
 } as const;
 
 export interface WorkspaceBridgeRect {
@@ -239,7 +252,8 @@ download:function(blob,name){var f=blob instanceof File?blob:new File([blob],nam
 restore:function(){notify(M.restore);},
 on:function(name,cb){(listeners[name]=listeners[name]||[]).push(cb);return function(){listeners[name]=(listeners[name]||[]).filter(function(x){return x!==cb;});};}
 };
-})();`;
+})();
+${WORKSPACE_CHROME_BRIDGE_SCRIPT}`;
 
 /** Inserts the bridge at the start of the document head, before the page's own scripts. */
 export function injectWorkspaceBridge(html: string): string {

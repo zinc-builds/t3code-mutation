@@ -12,6 +12,7 @@ const INVALID_REQUEST_ERRORS = new Set([
   "HtmlRenderImageTooLargeError",
   "HtmlRenderPageTooLargeError",
   "WorkspaceAssetNotFoundError",
+  "WorkspaceChromeInvalidError",
 ]);
 
 // Every workspace error message is built on the server and tells the agent what to do next.
@@ -40,6 +41,7 @@ const handlers = {
           html: input.html,
           title: input.title,
           assetPaths: input.assets ?? [],
+          chrome: input.chrome,
         })
         .pipe(Effect.mapError(toFailure));
       return {
