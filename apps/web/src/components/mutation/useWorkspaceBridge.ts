@@ -10,6 +10,7 @@ import {
   type WorkspaceBridgeRequest,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
+import { workspacePageState } from "@t3tools/shared/mutationWorkspaceChrome";
 import { type RefObject, useEffect, useRef } from "react";
 
 import { resolveAssetUrl } from "~/assets/assetUrls";
@@ -20,6 +21,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
 import { toastManager } from "../ui/toast";
+import { setWorkspaceChromePageState } from "./workspaceChromeStore";
 
 export interface WorkspaceBridgeOptions {
   readonly environmentId: EnvironmentId;
@@ -165,7 +167,8 @@ export function useWorkspaceBridge(
       });
       const [storedState, assets] = await Promise.all([state, Promise.all([...images, ...files])]);
       // The server answers null before the page stored anything.
-      return { state: storedState ?? undefined, assets };
+      // A workspace with chrome stores { controls, page }; the page sees only its part.
+      return { state: workspacePageState(storedState ?? undefined) ?? undefined, assets };
     };
 
     const run = async (request: WorkspaceBridgeRequest) => {
@@ -223,7 +226,9 @@ export function useWorkspaceBridge(
     };
 
     const saveState = (state: unknown) => {
-      const { environmentId, threadId } = latest.current.options;
+      const { environmentId, threadId, workspace } = latest.current.options;
+      // The chrome session stores it beside the control values.
+      if (setWorkspaceChromePageState(workspace.attachmentId, state)) return;
       void latest.current
         .updateState({ environmentId, input: { threadId, state: state ?? null } })
         .then((result) => {

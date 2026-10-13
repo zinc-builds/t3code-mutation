@@ -975,7 +975,7 @@ w.on=function(name,cb){if(name!=="controls"&&name!=="command")return on(name,cb)
 w.controls=function(){return controls!==undefined?Promise.resolve(controls):new Promise(function(r){var off=w.on("controls",function(v){off();r(v);});});};
 w.setChrome=function(patch){return new Promise(function(resolve,reject){var id="c"+(++n);pending[id]={resolve:resolve,reject:reject};post({jsonrpc:"2.0",id:id,method:M.setChrome,params:{patch:patch}});});};
 window.addEventListener("keydown",function(e){if(e.repeat||e.isComposing)return;var t=e.target,k=e.key;
-setTimeout(function(){if(e.defaultPrevented)return;var editable=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));if(editable&&!e.metaKey&&!e.ctrlKey)return;
+setTimeout(function(){if(e.defaultPrevented)return;var editable=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));if(editable)return;
 post({jsonrpc:"2.0",method:M.key,params:{key:k,code:e.code,meta:e.metaKey,ctrl:e.ctrlKey,alt:e.altKey,shift:e.shiftKey}});},0);});
 })();`;
 
