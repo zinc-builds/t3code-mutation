@@ -13,6 +13,7 @@ const INVALID_REQUEST_ERRORS = new Set([
   "HtmlRenderPageTooLargeError",
   "WorkspaceAssetNotFoundError",
   "WorkspaceChromeInvalidError",
+  "WorkspaceKitInvalidError",
 ]);
 
 // Every workspace error message is built on the server and tells the agent what to do next.
@@ -39,6 +40,8 @@ const handlers = {
         .publish({
           threadId,
           html: input.html,
+          template: input.template,
+          kit: input.kit,
           title: input.title,
           assetPaths: input.assets ?? [],
           chrome: input.chrome,
@@ -59,6 +62,12 @@ const handlers = {
         restored: true,
         message: "The thread is back in its chat interface.",
       };
+    }),
+  ),
+  workspace_kit_docs: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      return yield* workspace.kitDocs(input.names).pipe(Effect.mapError(toFailure));
     }),
   ),
   workspace_state: McpToolAccess.readsAsCaller(() =>

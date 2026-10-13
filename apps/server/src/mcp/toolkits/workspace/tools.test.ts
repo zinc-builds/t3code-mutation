@@ -10,6 +10,7 @@ import { WorkspaceToolkit } from "./tools.ts";
 it("gives every workspace tool an object input schema", () => {
   const tools = Object.values(WorkspaceToolkit.tools);
   expect(tools.map((tool) => tool.name).toSorted()).toEqual([
+    "workspace_kit_docs",
     "workspace_mutate",
     "workspace_restore",
     "workspace_state",

@@ -446,6 +446,9 @@ export function summarizeT3ToolCalls(
     case "workspace-state":
       label = phrase("Read", "read", `workspace controls ${times}`);
       break;
+    case "workspace-kit-docs":
+      label = phrase("Read", "read", `workspace kit docs ${times}`);
+      break;
     case "capabilities":
       label = phrase("Checked", "check", `orchestration capabilities ${times}`);
       break;

@@ -67,7 +67,8 @@ export type T3McpToolSummaryAction =
   | "html-render"
   | "workspace-mutate"
   | "workspace-restore"
-  | "workspace-state";
+  | "workspace-state"
+  | "workspace-kit-docs";
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
@@ -338,6 +339,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   workspace_mutate: tool(["Build", "Building", "Built", "a workspace"], "workspace-mutate"),
   workspace_restore: tool(["Return", "Returning", "Returned", "to chat"], "workspace-restore"),
   workspace_state: tool(["Read", "Reading", "Read", "workspace controls"], "workspace-state"),
+  workspace_kit_docs: tool(["Read", "Reading", "Read", "workspace kit docs"], "workspace-kit-docs"),
 };
 
 /**

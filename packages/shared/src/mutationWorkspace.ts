@@ -21,6 +21,7 @@ import {
 export const WORKSPACE_MUTATE_TOOL_NAME = "workspace_mutate";
 export const WORKSPACE_RESTORE_TOOL_NAME = "workspace_restore";
 export const WORKSPACE_STATE_TOOL_NAME = "workspace_state";
+export const WORKSPACE_KIT_DOCS_TOOL_NAME = "workspace_kit_docs";
 
 /** Key the `workspace_mutate` result carries its reference under. */
 export const WORKSPACE_OUTPUT_KEY = "mutationWorkspace";
