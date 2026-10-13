@@ -12104,7 +12104,10 @@ export default function ChatView(props: ChatViewProps) {
               </AlertDialogPopup>
             </AlertDialog>
 
-            <ThreadDetailsPanel {...threadDetailsPanelProps} />
+            {/* A mutation workspace owns the whole view; thread details come back with chat. */}
+            {mutationWorkspace === null ? (
+              <ThreadDetailsPanel {...threadDetailsPanelProps} />
+            ) : null}
 
             {pullRequestDialogState ? (
               <PullRequestThreadDialog
