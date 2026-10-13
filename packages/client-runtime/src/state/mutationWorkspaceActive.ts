@@ -1,3 +1,11 @@
+/**
+ * Which mutation workspace a thread shows, derived from its turn items: the
+ * agent's newest `workspace_mutate` or `workspace_restore` call, overridden by
+ * the user's own choice (back to chat, or reopening an older workspace) until
+ * the agent acts again. Shared by every client that hosts workspaces.
+ */
+import type { ChatAttachment } from "@t3tools/contracts";
+import { imageMimeType } from "@t3tools/shared/image";
 import {
   WORKSPACE_MUTATE_TOOL_NAME,
   workspaceReferencesEqual,
@@ -5,8 +13,6 @@ import {
 } from "@t3tools/shared/mutationWorkspace";
 import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 import { isWorkspaceRestoreToolItem, workspaceFromToolItem } from "@t3tools/shared/toolOutput";
-
-import { isImageAttachment, type ChatAttachment } from "../../types";
 
 /** The fields of a turn item that mutation workspaces read. */
 export interface WorkspaceTurnItem {
@@ -110,6 +116,14 @@ export function latestWorkspaceEvent(
   return null;
 }
 
+/** The override that records the user's choice against the thread's newest workspace call. */
+export function workspaceOverride(
+  items: ReadonlyArray<{ readonly item: WorkspaceTurnItem }>,
+  open: ItemWorkspace | null,
+): WorkspaceOverride {
+  return { eventId: latestWorkspaceEvent(items)?.itemId ?? null, open };
+}
+
 /** The workspace the thread shows: the user's choice until the agent acts again. */
 export function resolveActiveWorkspace(
   latest: WorkspaceEvent | null,
@@ -135,6 +149,10 @@ export function itemWorkspacesEqual(left: ItemWorkspace | null, right: ItemWorks
   if (left === null || right === null) return left === right;
   return left.itemId === right.itemId && workspaceReferencesEqual(left.workspace, right.workspace);
 }
+
+// A legacy `file` carrying a picture is still a picture; an unknown type is not.
+const isImageAttachment = (attachment: ChatAttachment) =>
+  attachment.type === "image" || (attachment.type === "file" && imageMimeType(attachment) !== null);
 
 /** Images the user attached in the thread, oldest first. */
 export function threadImagesFromTurnItems(

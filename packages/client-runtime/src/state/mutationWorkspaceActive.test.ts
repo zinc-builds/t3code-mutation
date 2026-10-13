@@ -7,7 +7,7 @@ import {
   runningWorkspaceMutations,
   threadImagesFromTurnItems,
   type WorkspaceTurnItem,
-} from "./activeWorkspace";
+} from "./mutationWorkspaceActive.ts";
 
 const workspace = (attachmentId: string, title = "Photo editor") => ({
   attachmentId,
