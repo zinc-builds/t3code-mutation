@@ -10,7 +10,7 @@ Hosts own the decisions a page cannot be trusted with. `send` is honoured only d
 
 ## The Kit Is Baked In
 
-The server is bundled and cannot read kit files at runtime, so primitives and templates live in the generated [`packages/workspace-kit/src/generated.ts`](../../packages/workspace-kit/src/generated.ts). Edit the kit sources and rerun `node packages/workspace-kit/scripts/generate.mjs <kitDir>`, never the generated file. The generator rejects malformed templates and every example's options, and `template.json` is kept verbatim so bolt-on docs reach agents through `workspace_kit_docs`. The catalog in the `workspace_mutate` description rides in every session's tool list, so its per-entry size is tested.
+The server is bundled and cannot read kit files at runtime, so primitives and templates live in the generated [`packages/workspace-kit/src/generated.ts`](../../packages/workspace-kit/src/generated.ts). Edit the kit sources in [`packages/workspace-kit/kit`](../../packages/workspace-kit/kit) (primitives, templates and their contracts) and rerun `node packages/workspace-kit/scripts/generate.mjs`, never the generated file. The generator rejects malformed templates and every example's options, and `template.json` is kept verbatim so bolt-on docs reach agents through `workspace_kit_docs`. The catalog in the `workspace_mutate` description rides in every session's tool list, so its per-entry size is tested.
 
 A template's `"chrome": true` means its page projects its toolbar into T3's native chrome at runtime. The client only accepts `setChrome` for a workspace published with a manifest, so the kit plan seeds an empty one (`{}`) when the agent passes none.
 

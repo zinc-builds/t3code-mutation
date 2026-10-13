@@ -1,0 +1,2222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D Viewer</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 38px minmax(0, 1fr) 24px;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0 6px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .spacer {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover {
+        background: var(--muted);
+        border-color: var(--input);
+      }
+      .btn[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+        border-color: var(--accent);
+      }
+      .btn[aria-pressed="true"] kbd {
+        color: var(--accent-foreground);
+        border-color: var(--accent-foreground);
+      }
+      .bar .fld > span:first-child {
+        width: auto;
+      }
+      .btn-primary,
+      .btn-primary:hover {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .seg {
+        display: inline-flex;
+        flex: 0 0 auto;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        overflow: hidden;
+      }
+      .seg-btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 0;
+        border-right: 1px solid var(--border);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .seg-btn:last-child {
+        border-right: 0;
+      }
+      .seg-btn:hover {
+        background: var(--muted);
+      }
+      .seg-btn[aria-pressed="true"] {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .seg-btn[aria-pressed="true"] kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+      .btn:focus-visible,
+      .seg-btn:focus-visible,
+      .sel-sm:focus-visible,
+      .inp:focus-visible,
+      .row:focus-visible,
+      .chip:focus-visible,
+      .cmd li:focus-visible,
+      .eye:focus-visible,
+      .tree:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .sel-sm {
+        height: 22px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 6px);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 4px;
+        font-size: 11px;
+        min-width: 0;
+        max-width: 150px;
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr) 320px;
+        min-height: 0;
+      }
+      .outliner {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-height: 0;
+        min-width: 0;
+        border-right: 1px solid var(--border);
+      }
+      .pane-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        height: 28px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+      }
+      .muted {
+        color: var(--muted-foreground);
+        font-weight: 400;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .tree {
+        list-style: none;
+        margin: 0;
+        padding: 4px 0;
+        overflow-y: auto;
+        min-height: 0;
+        outline: none;
+        scrollbar-width: thin;
+      }
+      .tree:focus-visible {
+        box-shadow: inset 0 0 0 2px var(--ring);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 24px;
+        padding-right: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .row:hover {
+        background: var(--muted);
+      }
+      .row[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .row.is-hidden .row-name {
+        opacity: 0.5;
+        font-style: italic;
+      }
+      .chip-k {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        width: 28px;
+        flex: 0 0 auto;
+        color: var(--muted-foreground);
+      }
+      .row[aria-selected="true"] .chip-k {
+        color: var(--accent-foreground);
+      }
+      .sw {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        flex: 0 0 auto;
+        border: 1px solid var(--border);
+      }
+      .row-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .eye {
+        height: 18px;
+        padding: 0 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--muted-foreground);
+        font-size: 10px;
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      .row[aria-selected="true"] .eye {
+        color: var(--accent-foreground);
+        border-color: var(--accent-foreground);
+      }
+
+      .viewport {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+      #viewport-root {
+        position: absolute;
+        inset: 0;
+      }
+      /* options.background: the theme surface framing the viewport (scene3d clears its canvas to --background). */
+      .viewport[data-bg="card"] {
+        background: var(--card);
+      }
+      .viewport[data-bg="muted"] {
+        background: var(--muted);
+      }
+      .viewport[data-bg="card"] #viewport-root,
+      .viewport[data-bg="muted"] #viewport-root {
+        inset: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-left: 1px solid var(--border);
+      }
+      .panels {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 28px;
+        padding: 0 10px;
+        cursor: pointer;
+        font-weight: 600;
+        user-select: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "+";
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+      }
+      .panel[open] > summary::after {
+        content: "\2212";
+      }
+      .panel-body {
+        padding: 4px 10px 10px;
+        min-width: 0;
+      }
+      .empty {
+        margin: 0;
+        padding: 12px 10px;
+        color: var(--muted-foreground);
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: 62px repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        align-items: center;
+      }
+      .lbl {
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .fld {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        min-width: 0;
+        margin: 4px 0;
+      }
+      .fld > span:first-child {
+        width: 52px;
+        flex: 0 0 auto;
+      }
+      .fld .sel-sm {
+        color: var(--foreground);
+      }
+      .fld-grow {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .inp {
+        height: 24px;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 0 6px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 6px);
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .inp:disabled {
+        opacity: 0.5;
+      }
+      .split {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .kind {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        border: 1px solid var(--border);
+        flex: 0 0 auto;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 2px 12px;
+        margin: 0 0 8px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .kv dt {
+        color: var(--muted-foreground);
+      }
+      .kv dd {
+        margin: 0;
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .history-body {
+        position: relative;
+        height: 220px;
+        padding: 0;
+      }
+      #history {
+        position: absolute;
+        inset: 0;
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-width: 320px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .composer:empty {
+        padding: 0;
+        border-top: 0;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .status .hints {
+        margin-left: auto;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .status #status-sel {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+
+      .cmd-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+      }
+      .cmd-scrim {
+        position: absolute;
+        inset: 0;
+        background: var(--background);
+        opacity: 0.7;
+      }
+      .cmd {
+        position: absolute;
+        top: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(560px, calc(100% - 24px));
+        background: var(--popover);
+        color: var(--foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        outline: none;
+      }
+      .cmd input {
+        width: 100%;
+        box-sizing: border-box;
+        height: 40px;
+        padding: 0 12px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        outline: none;
+      }
+      .cmd ul {
+        list-style: none;
+        margin: 0;
+        padding: 4px;
+        max-height: 360px;
+        overflow-y: auto;
+      }
+      .cmd li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 5px 8px;
+        border-radius: calc(var(--radius) - 4px);
+        cursor: pointer;
+      }
+      .cmd li[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .cmd li .hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .cmd li[aria-selected="true"] .hint {
+        color: var(--accent-foreground);
+      }
+      .cmd .none {
+        padding: 10px 8px;
+        color: var(--muted-foreground);
+        cursor: default;
+      }
+
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          grid-template-rows: auto auto auto;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 10px;
+        }
+        .spacer {
+          display: none;
+        }
+        .tools {
+          flex: 1 1 100%;
+          flex-wrap: wrap;
+          min-width: 0;
+        }
+        .tools:empty {
+          display: none;
+        }
+        .status .hints {
+          flex-wrap: wrap;
+        }
+        .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .outliner {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          max-height: 220px;
+        }
+        .viewport {
+          height: 60vh;
+        }
+        .inspector {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .panels {
+          overflow: visible;
+        }
+        .composer {
+          min-width: 0;
+        }
+        .status {
+          white-space: normal;
+          flex-wrap: wrap;
+          padding: 6px 10px;
+        }
+        .status .hints {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">3D Viewer</h1>
+        <div class="seg" role="group" aria-label="Transform mode">
+          <button
+            class="seg-btn"
+            type="button"
+            data-mode="move"
+            aria-pressed="true"
+            title="Move (W)"
+          >
+            Move <kbd>W</kbd>
+          </button>
+          <button
+            class="seg-btn"
+            type="button"
+            data-mode="rotate"
+            aria-pressed="false"
+            title="Rotate (E)"
+          >
+            Rotate <kbd>E</kbd>
+          </button>
+          <button
+            class="seg-btn"
+            type="button"
+            data-mode="scale"
+            aria-pressed="false"
+            title="Scale (R)"
+          >
+            Scale <kbd>R</kbd>
+          </button>
+        </div>
+        <button class="btn" id="tog-grid" type="button" aria-pressed="true" title="Grid (G)">
+          Grid <kbd>G</kbd>
+        </button>
+        <button class="btn" id="tog-axes" type="button" aria-pressed="true" title="Axes (X)">
+          Axes <kbd>X</kbd>
+        </button>
+        <label class="fld"
+          ><span>Snap</span
+          ><select class="sel-sm" id="snap" aria-label="Snap step">
+            <option value="0">Off</option>
+            <option value="0.1">0.1 · 5°</option>
+            <option value="0.5">0.5 · 15°</option>
+            <option value="1">1 · 45°</option>
+          </select></label
+        >
+        <span class="spacer"></span>
+        <div class="tools" id="extra-tools"></div>
+        <div class="tools">
+          <button class="btn" id="btn-add" type="button" title="Add node (A)">
+            Add <kbd>A</kbd>
+          </button>
+          <button
+            class="btn"
+            id="btn-load"
+            type="button"
+            title="Load the first .glb or .gltf asset (O)"
+          >
+            Load GLB <kbd>O</kbd>
+          </button>
+          <button class="btn" id="btn-turn" type="button" title="Render turntable sheet (Shift+R)">
+            Turntable <kbd>⇧R</kbd>
+          </button>
+          <button
+            class="btn btn-primary"
+            id="btn-export"
+            type="button"
+            title="Export the view as PNG (Shift+E)"
+          >
+            Export PNG <kbd>⇧E</kbd>
+          </button>
+          <button class="btn" id="btn-cmd" type="button" title="Commands">
+            Commands <kbd id="mod-key">⌘K</kbd>
+          </button>
+        </div>
+      </header>
+
+      <div class="work" id="work">
+        <aside class="outliner" aria-label="Outliner">
+          <div class="pane-head"><span>Outliner</span><span class="muted" id="count"></span></div>
+          <div>
+            <ul class="tree" id="tree" role="listbox" tabindex="0" aria-label="Scene nodes"></ul>
+            <p class="empty" id="tree-empty" hidden>
+              Empty scene. Press <kbd>A</kbd> to add a node.
+            </p>
+          </div>
+        </aside>
+
+        <section class="viewport" id="viewport" aria-label="3D viewport">
+          <div id="viewport-root"></div>
+        </section>
+
+        <aside class="inspector" aria-label="Inspector">
+          <div class="panels" id="panels">
+            <p class="empty" id="f-empty">
+              Nothing selected. Click a node in the outliner or the viewport, or press
+              <kbd>A</kbd> to add one.
+            </p>
+
+            <details class="panel" data-panel="object" id="panel-object" open>
+              <summary>Object</summary>
+              <div class="panel-body">
+                <label class="fld"
+                  ><span>Name</span
+                  ><input
+                    class="inp fld-grow"
+                    id="f-name"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Node name"
+                /></label>
+                <div class="split">
+                  <label class="fld"
+                    ><input id="f-visible" type="checkbox" aria-label="Visible" />
+                    <span>Visible</span></label
+                  >
+                  <span class="kind" id="f-kind"></span>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" data-panel="transform" id="panel-transform" open>
+              <summary>Transform</summary>
+              <div class="panel-body grid3">
+                <span class="lbl">Position</span>
+                <input
+                  class="inp"
+                  type="number"
+                  step="0.1"
+                  data-field="position"
+                  data-axis="0"
+                  aria-label="Position X"
+                />
+                <input
+                  class="inp"
+                  type="number"
+                  step="0.1"
+                  data-field="position"
+                  data-axis="1"
+                  aria-label="Position Y"
+                />
+                <input
+                  class="inp"
+                  type="number"
+                  step="0.1"
+                  data-field="position"
+                  data-axis="2"
+                  aria-label="Position Z"
+                />
+                <span class="lbl">Rotation</span>
+                <input
+                  class="inp"
+                  type="number"
+                  step="1"
+                  data-field="rotation"
+                  data-axis="0"
+                  aria-label="Rotation X degrees"
+                />
+                <input
+                  class="inp"
+                  type="number"
+                  step="1"
+                  data-field="rotation"
+                  data-axis="1"
+                  aria-label="Rotation Y degrees"
+                />
+                <input
+                  class="inp"
+                  type="number"
+                  step="1"
+                  data-field="rotation"
+                  data-axis="2"
+                  aria-label="Rotation Z degrees"
+                />
+                <span class="lbl">Scale</span>
+                <input
+                  class="inp"
+                  type="number"
+                  step="0.1"
+                  data-field="scale"
+                  data-axis="0"
+                  aria-label="Scale X"
+                />
+                <input
+                  class="inp"
+                  type="number"
+                  step="0.1"
+                  data-field="scale"
+                  data-axis="1"
+                  aria-label="Scale Y"
+                />
+                <input
+                  class="inp"
+                  type="number"
+                  step="0.1"
+                  data-field="scale"
+                  data-axis="2"
+                  aria-label="Scale Z"
+                />
+              </div>
+            </details>
+
+            <details class="panel" data-panel="surface" id="panel-surface" open>
+              <summary>Material</summary>
+              <div class="panel-body">
+                <label class="fld"
+                  ><span>Color</span><span class="swatch" id="f-color-sw"></span
+                  ><input
+                    class="inp fld-grow"
+                    id="f-color"
+                    type="text"
+                    spellcheck="false"
+                    aria-label="Material color"
+                /></label>
+                <div class="split">
+                  <label class="fld"
+                    ><span>Rough</span
+                    ><input
+                      class="inp"
+                      id="f-rough"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      aria-label="Roughness"
+                      style="width: 84px"
+                  /></label>
+                  <label class="fld"
+                    ><span>Metal</span
+                    ><input
+                      class="inp"
+                      id="f-metal"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      aria-label="Metalness"
+                      style="width: 84px"
+                  /></label>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" data-panel="light" id="panel-light" open>
+              <summary>Light</summary>
+              <div class="panel-body">
+                <label class="fld"
+                  ><span>Type</span
+                  ><select class="sel-sm fld-grow" id="f-ltype" aria-label="Light type">
+                    <option value="ambient">Ambient</option>
+                    <option value="directional">Directional</option>
+                    <option value="point">Point</option>
+                  </select></label
+                >
+                <label class="fld"
+                  ><span>Color</span><span class="swatch" id="f-lcolor-sw"></span
+                  ><input
+                    class="inp fld-grow"
+                    id="f-lcolor"
+                    type="text"
+                    spellcheck="false"
+                    aria-label="Light color"
+                /></label>
+                <div class="split">
+                  <label class="fld"
+                    ><span>Intensity</span
+                    ><input
+                      class="inp"
+                      id="f-lint"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      aria-label="Light intensity"
+                      style="width: 96px"
+                  /></label>
+                  <label class="fld" id="f-lrange-row"
+                    ><span>Range</span
+                    ><input
+                      class="inp"
+                      id="f-lrange"
+                      type="number"
+                      min="0"
+                      step="1"
+                      aria-label="Point light range"
+                      placeholder="none"
+                      style="width: 96px"
+                  /></label>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" data-panel="scene" open>
+              <summary>Scene</summary>
+              <div class="panel-body">
+                <dl class="kv">
+                  <dt>Azimuth</dt>
+                  <dd id="cam-az">0°</dd>
+                  <dt>Elevation</dt>
+                  <dd id="cam-el">0°</dd>
+                  <dt>Distance</dt>
+                  <dd id="cam-dist">0</dd>
+                  <dt>Field</dt>
+                  <dd id="cam-fov">0°</dd>
+                </dl>
+                <div class="split">
+                  <button class="btn" id="btn-frame-all" type="button">Frame All</button>
+                  <button class="btn" id="btn-reset-view" type="button">Reset View</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" data-panel="turntable" open>
+              <summary>Turntable</summary>
+              <div class="panel-body">
+                <div class="split">
+                  <label class="fld"
+                    ><span>Frames</span
+                    ><select class="sel-sm" id="tt-frames" aria-label="Turntable frames">
+                      <option value="8">8</option>
+                      <option value="12">12</option>
+                      <option value="24">24</option>
+                    </select></label
+                  >
+                  <label class="fld"
+                    ><span>Width</span
+                    ><select class="sel-sm" id="tt-size" aria-label="Frame width">
+                      <option value="512" selected>512 px</option>
+                      <option value="1024">1024 px</option>
+                    </select></label
+                  >
+                </div>
+                <div class="split">
+                  <button class="btn btn-primary" id="btn-turn-panel" type="button">
+                    Render Turntable <kbd>⇧R</kbd>
+                  </button>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" data-panel="history" open>
+              <summary>History</summary>
+              <div class="panel-body history-body"><div id="history"></div></div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+
+      <footer class="status" role="status">
+        <span id="status-main">Ready</span>
+        <span id="status-mode"></span>
+        <span id="status-sel"></span>
+        <span id="meta"></span>
+        <span class="hints">
+          <span><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> mode</span>
+          <span><kbd>A</kbd> add</span>
+          <span><kbd>Del</kbd> delete</span>
+          <span><kbd>F</kbd> frame</span>
+          <span><kbd>[</kbd><kbd>]</kbd> cycle</span>
+          <span><kbd>I</kbd> name</span>
+        </span>
+      </footer>
+    </div>
+
+    <div class="cmd-layer" id="cmd" hidden>
+      <div class="cmd-scrim" data-close></div>
+      <div class="cmd" id="cmd-dialog" role="dialog" aria-label="Commands" tabindex="-1">
+        <input
+          id="cmd-input"
+          type="text"
+          placeholder="Type a command or node name"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <ul id="cmd-list" role="listbox" aria-label="Commands"></ul>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+        const MOD_TEXT = MAC ? "⌘" : "Ctrl+";
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const isVec3 = (v) =>
+          Array.isArray(v) && v.length === 3 && v.every((x) => Number.isFinite(x));
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const isTyping = (el) =>
+          Boolean(el) && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+        const safeName = (s) => String(s).replace(/[^\w.-]+/g, "_");
+        const num = (x) => (Number.isFinite(x) ? String(Math.round(x * 1000) / 1000) : "");
+        const SHAPE_LABEL = {
+          box: "Box",
+          sphere: "Sphere",
+          plane: "Plane",
+          cylinder: "Cylinder",
+          torus: "Torus",
+        };
+        const MESH_LABEL = { ...SHAPE_LABEL, custom: "Mesh" }; // custom = imported glTF geometry
+        const SHAPE_ARITY = { box: 3, sphere: 1, plane: 2, cylinder: 2, torus: 2 };
+        const LIGHT_LABEL = {
+          ambient: "Ambient Light",
+          directional: "Directional Light",
+          point: "Point Light",
+        };
+        const CHIP = {
+          custom: "MSH",
+          box: "BOX",
+          sphere: "SPH",
+          plane: "PLN",
+          cylinder: "CYL",
+          torus: "TOR",
+          ambient: "AMB",
+          directional: "DIR",
+          point: "PNT",
+        };
+        const MODE_LABEL = { move: "Move", rotate: "Rotate", scale: "Scale" };
+        const CAMERA_KEYS = ["target", "azimuth", "elevation", "distance", "fov"];
+        const SNAP_STEPS = { 0: [0, 0], 0.1: [0.1, 5], 0.5: [0.5, 15], 1: [1, 45] };
+        const DEFAULT_CAMERA = {
+          target: [0, 0, 0],
+          azimuth: 35,
+          elevation: 25,
+          distance: 12,
+          fov: 40,
+        };
+        const CHART_COLORS = [
+          "var(--chart-1)",
+          "var(--chart-2)",
+          "var(--chart-3)",
+          "var(--chart-4)",
+          "var(--chart-5)",
+          "var(--chart-6)",
+        ];
+        const DEFAULT_SCENE = [
+          {
+            name: "Floor",
+            shape: "plane",
+            size: [8, 8],
+            color: "var(--muted)",
+            roughness: 0.9,
+            metalness: 0,
+          },
+          {
+            name: "Cube",
+            shape: "box",
+            position: [-1.2, 0.5, 0],
+            color: "var(--chart-1)",
+            roughness: 0.5,
+            metalness: 0,
+          },
+          {
+            name: "Sphere",
+            shape: "sphere",
+            position: [1.1, 0.5, 0.4],
+            color: "var(--chart-2)",
+            roughness: 0.2,
+            metalness: 0.6,
+          },
+          { name: "Key Light", light: "directional", rotation: [-45, 30, 0], intensity: 1.2 },
+        ];
+        const SPAWN = {
+          box: { label: "Box", key: "b", node: { mesh: { shape: "box" } } },
+          sphere: { label: "Sphere", key: "s", node: { mesh: { shape: "sphere" } } },
+          plane: { label: "Plane", key: "p", node: { mesh: { shape: "plane", size: [4, 4] } } },
+          cylinder: { label: "Cylinder", key: "y", node: { mesh: { shape: "cylinder" } } },
+          torus: { label: "Torus", key: "t", node: { mesh: { shape: "torus" } } },
+          point: {
+            label: "Point Light",
+            key: "l",
+            node: { light: { type: "point", color: "#ffffff", intensity: 1, range: 12 } },
+          },
+          directional: {
+            label: "Directional Light",
+            key: "d",
+            node: {
+              light: { type: "directional", color: "#ffffff", intensity: 1 },
+              rotation: [-45, 30, 0],
+            },
+          },
+          ambient: {
+            label: "Ambient Light",
+            key: "n",
+            node: { light: { type: "ambient", color: "#ffffff", intensity: 0.3 } },
+          },
+        };
+        const VERBS = [
+          ["position", "Move"],
+          ["rotation", "Rotate"],
+          ["scale", "Scale"],
+          ["material", "Material"],
+          ["light", "Light"],
+          ["name", "Rename"],
+          ["visible", "Visibility"],
+        ];
+        const DEFAULT_VEC = { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+        // Keys the template uses itself: bolt-on shortcuts must avoid these.
+        const RESERVED = [
+          "a",
+          "o",
+          "w",
+          "e",
+          "r",
+          "g",
+          "x",
+          "f",
+          "i",
+          "v",
+          "b",
+          "s",
+          "p",
+          "y",
+          "t",
+          "l",
+          "d",
+          "n",
+          "[",
+          "]",
+          "escape",
+          "delete",
+          "backspace",
+          "mod+d",
+          "mod+k",
+          "mod+z",
+          "mod+shift+z",
+          "shift+r",
+          "shift+e",
+        ];
+        // Keys the scene3d canvas handles itself while it has focus.
+        const SCENE_KEYS = new Set([
+          "w",
+          "e",
+          "r",
+          "g",
+          "x",
+          "f",
+          "[",
+          "]",
+          "delete",
+          "backspace",
+          "escape",
+        ]);
+
+        // ---- Options ----------------------------------------------------------------
+        const okCamera = (v) =>
+          isPlain(v) &&
+          Object.keys(v).every((k) => CAMERA_KEYS.includes(k)) &&
+          (v.target === undefined || isVec3(v.target)) &&
+          ["azimuth", "elevation", "distance", "fov"].every(
+            (k) => v[k] === undefined || Number.isFinite(v[k]),
+          );
+        const okSceneItem = (it) => {
+          if (!isPlain(it)) return false;
+          const isShape = Object.hasOwn(SHAPE_LABEL, it.shape);
+          const isLight = Object.hasOwn(LIGHT_LABEL, it.light);
+          if (isShape === isLight) return false;
+          if (it.name !== undefined && typeof it.name !== "string") return false;
+          if (!["position", "rotation", "scale"].every((k) => it[k] === undefined || isVec3(it[k])))
+            return false;
+          if (
+            it.size !== undefined &&
+            !(
+              isShape &&
+              Array.isArray(it.size) &&
+              it.size.length === SHAPE_ARITY[it.shape] &&
+              it.size.every((x) => Number.isFinite(x) && x > 0)
+            )
+          )
+            return false;
+          if (it.color !== undefined && (typeof it.color !== "string" || it.color.trim() === ""))
+            return false;
+          if (
+            isShape &&
+            !["roughness", "metalness"].every(
+              (k) => it[k] === undefined || (Number.isFinite(it[k]) && it[k] >= 0 && it[k] <= 1),
+            )
+          )
+            return false;
+          if (
+            isLight &&
+            it.intensity !== undefined &&
+            !(Number.isFinite(it.intensity) && it.intensity >= 0)
+          )
+            return false;
+          if (it.range !== undefined && !(Number.isFinite(it.range) && it.range > 0)) return false;
+          return true;
+        };
+        const BACKGROUNDS = ["background", "card", "muted"];
+        const SPEC = {
+          title: { default: "3D Viewer", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          scene: {
+            default: DEFAULT_SCENE,
+            ok: (v) => Array.isArray(v) && v.length <= 200 && v.every(okSceneItem),
+          },
+          background: { default: "background", ok: (v) => BACKGROUNDS.includes(v) },
+          camera: { default: {}, ok: okCamera },
+          grid: { default: true, ok: (v) => typeof v === "boolean" },
+          axes: { default: true, ok: (v) => typeof v === "boolean" },
+          turntableFrames: { default: 12, ok: (v) => Number.isInteger(v) && v >= 4 && v <= 24 },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("3d-viewer: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(
+                `3d-viewer: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          return out;
+        }
+        const OPTS = readOptions();
+        OPTS.camera = { ...DEFAULT_CAMERA, ...OPTS.camera };
+        // Saved state only restores when the starting options are the same ones it was made from.
+        const STATE_KEY = JSON.stringify({ scene: OPTS.scene, camera: OPTS.camera });
+
+        // ---- Node model ---------------------------------------------------------------
+        const kindKey = (n) => n.mesh?.shape ?? n.light?.type ?? "group";
+        const kindLabel = (n) => MESH_LABEL[n.mesh?.shape] ?? LIGHT_LABEL[n.light?.type] ?? "Group";
+        const nodeName = (n) => n.name ?? kindLabel(n);
+        function toNode(it, i) {
+          const node = {
+            id: `item-${i + 1}`,
+            name: it.name ?? `${it.shape ? SHAPE_LABEL[it.shape] : LIGHT_LABEL[it.light]} ${i + 1}`,
+            position: it.position ?? [0, 0, 0],
+            rotation: it.rotation ?? [0, 0, 0],
+            scale: it.scale ?? [1, 1, 1],
+          };
+          if (it.shape) {
+            node.mesh = { shape: it.shape };
+            if (it.size) node.mesh.size = it.size;
+            node.material = {
+              color: it.color ?? CHART_COLORS[i % CHART_COLORS.length],
+              roughness: it.roughness ?? 0.5,
+              metalness: it.metalness ?? 0,
+            };
+          } else {
+            node.light = {
+              type: it.light,
+              color: it.color ?? "#ffffff",
+              intensity: it.intensity ?? 1,
+            };
+            if (it.light === "point" && it.range !== undefined) node.light.range = it.range;
+          }
+          return node;
+        }
+        function orderedNodes(nodes) {
+          const ids = new Set(nodes.map((n) => n.id));
+          const kids = new Map();
+          const roots = [];
+          for (const n of nodes) {
+            if (n.parent && ids.has(n.parent)) {
+              if (!kids.has(n.parent)) kids.set(n.parent, []);
+              kids.get(n.parent).push(n);
+            } else roots.push(n);
+          }
+          const out = [];
+          const walk = (n, depth) => {
+            out.push({ node: n, depth });
+            for (const c of kids.get(n.id) ?? []) walk(c, depth + 1);
+          };
+          roots.forEach((r) => walk(r, 0));
+          return out;
+        }
+        function changedKeys(a, b) {
+          const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+          return [...keys].filter(
+            (k) => k !== "id" && JSON.stringify(a[k]) !== JSON.stringify(b[k]),
+          );
+        }
+        // The undo label for a change between two node lists, computed from what moved, appeared or vanished.
+        function describeChange(prev, next) {
+          if (JSON.stringify(prev) === JSON.stringify(next)) return null;
+          const pm = new Map(prev.map((n) => [n.id, n]));
+          const nm = new Map(next.map((n) => [n.id, n]));
+          const added = next.filter((n) => !pm.has(n.id));
+          const removed = prev.filter((n) => !nm.has(n.id));
+          if (added.length === 1 && removed.length === 0) return `Add ${nodeName(added[0])}`;
+          if (removed.length === 1 && added.length === 0) return `Delete ${nodeName(removed[0])}`;
+          if (added.length || removed.length) return "Edit Scene";
+          const changed = next.filter((n) => JSON.stringify(n) !== JSON.stringify(pm.get(n.id)));
+          if (changed.length === 0) return "Edit";
+          const keys = changed.flatMap((n) => changedKeys(pm.get(n.id), n));
+          const verb = VERBS.find(([k]) => keys.includes(k))?.[1] ?? "Edit";
+          return changed.length === 1
+            ? `${verb} ${nodeName(changed[0])}`
+            : `${verb} ${changed.length} Nodes`;
+        }
+
+        // ---- Runtime wiring state ---------------------------------------------------------
+        let scene = null;
+        let history = null;
+        let historyLink = null;
+        let assets = [];
+        let booted = false;
+        let committed = []; // node list at the last undo step, the base for the next label
+        let idleTimer = 0;
+        let persistTimer = 0;
+        let turning = false;
+        let exporting = false;
+        let palette = { mode: "search", items: [], index: 0, returnFocus: null };
+        const extraCommands = [];
+
+        const showError = (err) => rt.reportError(err);
+        function act(fn) {
+          try {
+            const r = fn();
+            if (r && typeof r.then === "function") r.then(null, showError);
+          } catch (err) {
+            showError(err);
+          }
+        }
+        const selectedNode = () => {
+          const v = scene.get();
+          return v.nodes.find((n) => n.id === v.selected) ?? null;
+        };
+        const glbAssets = () =>
+          assets.filter(
+            (a) => /\.(glb|gltf)$/i.test(a.name || "") || /model\/gltf/.test(a.mimeType || ""),
+          );
+        const setStatus = (text) => {
+          $("status-main").textContent = text;
+        };
+        const setIfIdle = (input, value) => {
+          if (document.activeElement !== input) input.value = value;
+        };
+
+        // ---- Undo steps ------------------------------------------------------------------
+        function getState() {
+          const v = scene.get();
+          return { nodes: v.nodes, selected: v.selected };
+        }
+        function applyState(state) {
+          scene.set({ nodes: state.nodes, selected: state.selected ?? null });
+          committed = scene.get().nodes;
+          renderAll();
+        }
+        function commitNow(label) {
+          clearTimeout(idleTimer);
+          idleTimer = 0;
+          historyLink.commit(label);
+          committed = scene.get().nodes;
+        }
+        function scheduleSceneCommit() {
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            idleTimer = 0;
+            const label = describeChange(committed, scene.get().nodes);
+            if (label) commitNow(label);
+          }, 350);
+        }
+        function editNode(id, patch, label) {
+          try {
+            scene.update(id, patch);
+          } catch (err) {
+            renderAll();
+            throw err;
+          }
+          renderAll();
+          commitNow(label);
+        }
+
+        // Values for presets and setValues: the undoable scene plus the view settings.
+        const VALUE_KEYS = ["nodes", "selected", "camera", "grid", "axes", "snap"];
+        function getValues() {
+          const v = scene.get();
+          return {
+            nodes: v.nodes,
+            selected: v.selected,
+            camera: v.camera,
+            grid: v.grid,
+            axes: v.axes,
+            snap: v.snap,
+          };
+        }
+        function setValues(partial, label) {
+          if (!isPlain(partial)) throw new TypeError("3d-viewer: setValues needs an object");
+          for (const k of Object.keys(partial)) {
+            if (!VALUE_KEYS.includes(k))
+              throw new Error(`3d-viewer: setValues does not take "${k}"`);
+          }
+          scene.set(partial);
+          renderAll();
+          commitNow(label ?? "Set Values");
+          return getValues();
+        }
+
+        // ---- Persistence (per viewer, through the workspace) ------------------------------
+        function persistState() {
+          const v = scene.get();
+          return {
+            v: 1,
+            key: STATE_KEY,
+            history: history.get(),
+            controls: rt.state(),
+            view: { camera: v.camera, grid: v.grid, axes: v.axes, snap: v.snap, mode: v.mode },
+          };
+        }
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => ws.setState(persistState()), 300);
+        }
+
+        // ---- Rendering --------------------------------------------------------------------
+        function el(tag, cls, text) {
+          const node = document.createElement(tag);
+          if (cls) node.className = cls;
+          if (text !== undefined) node.textContent = text;
+          return node;
+        }
+        function renderTree() {
+          const v = scene.get();
+          const rows = orderedNodes(v.nodes).map(({ node, depth }) =>
+            treeRow(node, depth, v.selected),
+          );
+          $("tree").replaceChildren(...rows);
+          $("tree-empty").hidden = rows.length > 0;
+          $("count").textContent = `${v.nodes.length}`;
+        }
+        function treeRow(node, depth, selectedId) {
+          const li = el("li", "row");
+          li.setAttribute("role", "option");
+          li.dataset.id = node.id;
+          li.setAttribute("aria-selected", String(node.id === selectedId));
+          li.style.paddingLeft = `${8 + depth * 14}px`;
+          if (node.visible === false) li.classList.add("is-hidden");
+          const chip = el("span", "chip-k", CHIP[kindKey(node)] ?? "GRP");
+          li.append(chip);
+          const color = node.material?.color ?? node.light?.color;
+          if (color) {
+            const sw = el("span", "sw");
+            sw.style.background = color;
+            li.append(sw);
+          }
+          li.append(el("span", "row-name", nodeName(node)));
+          const eye = el("button", "eye", node.visible === false ? "Show" : "Hide");
+          eye.type = "button";
+          eye.title = "Toggle visibility (V)";
+          eye.setAttribute(
+            "aria-label",
+            `${node.visible === false ? "Show" : "Hide"} ${nodeName(node)}`,
+          );
+          eye.addEventListener("click", (e) => {
+            e.stopPropagation();
+            act(() => toggleVisible(node.id));
+          });
+          li.append(eye);
+          li.addEventListener("click", () => act(() => select(node.id)));
+          li.addEventListener("dblclick", () =>
+            act(() => {
+              select(node.id);
+              focusName();
+            }),
+          );
+          return li;
+        }
+        function renderInspector() {
+          const v = scene.get();
+          const node = v.nodes.find((n) => n.id === v.selected) ?? null;
+          $("f-empty").hidden = Boolean(node);
+          $("panel-object").hidden = !node;
+          $("panel-transform").hidden = !node;
+          $("panel-surface").hidden = !(node && node.mesh);
+          $("panel-light").hidden = !(node && node.light);
+          if (!node) return;
+          setIfIdle($("f-name"), node.name ?? "");
+          $("f-visible").checked = node.visible !== false;
+          $("f-kind").textContent = `${kindLabel(node)} · ${node.id}`;
+          for (const inp of document.querySelectorAll("[data-field]")) {
+            const vec = node[inp.dataset.field] ?? DEFAULT_VEC[inp.dataset.field];
+            setIfIdle(inp, num(vec[Number(inp.dataset.axis)]));
+          }
+          if (node.mesh) {
+            const m = node.material ?? {};
+            setIfIdle($("f-color"), m.color ?? "");
+            $("f-color-sw").style.background = m.color ?? "transparent";
+            setIfIdle($("f-rough"), num(m.roughness ?? 0.5));
+            setIfIdle($("f-metal"), num(m.metalness ?? 0));
+          }
+          if (node.light) {
+            const L = node.light;
+            $("f-ltype").value = L.type;
+            setIfIdle($("f-lcolor"), L.color ?? "#ffffff");
+            $("f-lcolor-sw").style.background = L.color ?? "transparent";
+            setIfIdle($("f-lint"), num(L.intensity ?? 1));
+            $("f-lrange-row").hidden = L.type !== "point";
+            setIfIdle($("f-lrange"), L.range === undefined || L.range === null ? "" : num(L.range));
+          }
+        }
+        function renderCamera() {
+          const c = scene.get().camera;
+          $("cam-az").textContent = `${num(c.azimuth)}°`;
+          $("cam-el").textContent = `${num(c.elevation)}°`;
+          $("cam-dist").textContent = num(c.distance);
+          $("cam-fov").textContent = `${num(c.fov)}°`;
+        }
+        function renderChrome() {
+          const v = scene.get();
+          for (const b of document.querySelectorAll("[data-mode]"))
+            b.setAttribute("aria-pressed", String(b.dataset.mode === v.mode));
+          $("tog-grid").setAttribute("aria-pressed", String(Boolean(v.grid)));
+          $("tog-axes").setAttribute("aria-pressed", String(Boolean(v.axes)));
+          $("snap").value =
+            Object.keys(SNAP_STEPS).find((k) => SNAP_STEPS[k][0] === v.snap.move) ?? "0";
+        }
+        function renderStatus() {
+          const v = scene.get();
+          const node = selectedNode();
+          const snapKey =
+            Object.keys(SNAP_STEPS).find((k) => SNAP_STEPS[k][0] === v.snap.move) ?? "0";
+          $("status-mode").textContent =
+            `${MODE_LABEL[v.mode]} · Grid ${v.grid ? "on" : "off"} · Axes ${v.axes ? "on" : "off"} · Snap ${snapKey === "0" ? "off" : snapKey}`;
+          const kind = node && kindLabel(node) !== nodeName(node) ? ` · ${kindLabel(node)}` : "";
+          $("status-sel").textContent = node
+            ? `${nodeName(node)}${kind} · at ${(node.position ?? DEFAULT_VEC.position).map(num).join(", ")}`
+            : "Nothing selected";
+          const glb = glbAssets().length;
+          const lights = v.nodes.filter((n) => n.light).length;
+          $("meta").textContent =
+            `${v.nodes.length} ${v.nodes.length === 1 ? "node" : "nodes"} · ${lights} ${lights === 1 ? "light" : "lights"} · ${glb === 0 ? "no glTF asset" : `${glb} glTF asset${glb === 1 ? "" : "s"}`}`;
+          $("btn-load").disabled = glbAssets().length === 0;
+        }
+        function renderAll() {
+          if (!scene) return;
+          renderTree();
+          renderInspector();
+          renderCamera();
+          renderChrome();
+          renderStatus();
+        }
+
+        // ---- Commands -----------------------------------------------------------------------
+        function select(id) {
+          scene.set({ selected: id ?? null });
+          renderAll();
+          $("tree").querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+        }
+        function deselect() {
+          if (scene.get().selected !== null) select(null);
+        }
+        function cycle(delta) {
+          const ids = orderedNodes(scene.get().nodes).map((x) => x.node.id);
+          if (ids.length === 0) return;
+          const cur = ids.indexOf(scene.get().selected);
+          const next =
+            cur < 0
+              ? delta > 0
+                ? ids[0]
+                : ids[ids.length - 1]
+              : ids[(cur + delta + ids.length) % ids.length];
+          select(next);
+        }
+        function selectEdge(last) {
+          const ids = orderedNodes(scene.get().nodes).map((x) => x.node.id);
+          if (ids.length) select(last ? ids[ids.length - 1] : ids[0]);
+        }
+        function setMode(mode) {
+          scene.set({ mode });
+          renderChrome();
+          renderStatus();
+        }
+        function toggleGrid() {
+          scene.set({ grid: !scene.get().grid });
+          renderAll();
+          persist();
+        }
+        function toggleAxes() {
+          scene.set({ axes: !scene.get().axes });
+          renderAll();
+          persist();
+        }
+        function setSnap(key) {
+          const [move, rotate] = SNAP_STEPS[key];
+          scene.set({ snap: { move, rotate } });
+          renderAll();
+          persist();
+        }
+        function frameSelected() {
+          scene.frame();
+        }
+        function frameAll() {
+          const sel = scene.get().selected;
+          if (sel !== null) scene.set({ selected: null });
+          scene.frame();
+          if (sel !== null) scene.set({ selected: sel });
+          renderAll();
+        }
+        function resetView() {
+          scene.set({ camera: clone(OPTS.camera) });
+          renderCamera();
+          persist();
+        }
+        function spawn(kind) {
+          const spec = SPAWN[kind];
+          const v = scene.get();
+          const t = v.camera.target;
+          const isLight = Boolean(spec.node.light);
+          const sameKind = v.nodes.filter((n) => kindKey(n) === kind).length;
+          const meshes = v.nodes.filter((n) => n.mesh).length;
+          const name = `${spec.label} ${sameKind + 1}`;
+          const node = {
+            name,
+            ...clone(spec.node),
+            position: isLight ? [t[0], t[1] + 2, t[2]] : [t[0], t[1], t[2]],
+          };
+          if (!isLight)
+            node.material = {
+              color: CHART_COLORS[meshes % CHART_COLORS.length],
+              roughness: 0.5,
+              metalness: 0,
+            };
+          const id = scene.add(node);
+          scene.set({ selected: id });
+          renderAll();
+          commitNow(`Add ${name}`);
+        }
+        function deleteSelected() {
+          const node = selectedNode();
+          if (!node) return;
+          scene.remove(node.id);
+          scene.set({ selected: null });
+          renderAll();
+          commitNow(`Delete ${nodeName(node)}`);
+        }
+        function duplicateSelected() {
+          const node = selectedNode();
+          if (!node) return;
+          const copy = clone(node);
+          delete copy.id;
+          copy.name = `${nodeName(node)} Copy`;
+          if (copy.position)
+            copy.position = [copy.position[0] + 1, copy.position[1], copy.position[2]];
+          const id = scene.add(copy);
+          scene.set({ selected: id });
+          renderAll();
+          commitNow(`Duplicate ${nodeName(node)}`);
+        }
+        function toggleVisible(id) {
+          const node = scene.get().nodes.find((n) => n.id === id);
+          if (!node) return;
+          const visible = node.visible === false;
+          editNode(id, { visible }, `${visible ? "Show" : "Hide"} ${nodeName(node)}`);
+        }
+        function focusName() {
+          if (!selectedNode()) return;
+          $("f-name").focus();
+          $("f-name").select();
+        }
+        async function loadAsset(asset) {
+          const blob = asset.file ?? (await (await fetch(asset.url)).blob());
+          const name = asset.name ?? "model.glb";
+          const root = await scene.load(blob, { name: name.replace(/\.(glb|gltf)$/i, "") });
+          scene.set({ selected: root });
+          scene.frame(root);
+          commitNow(`Load ${name}`);
+        }
+
+        // ---- Export and turntable ----------------------------------------------------------
+        async function deliver(files) {
+          for (const f of files) {
+            await ws.attach(f);
+            await ws.download(f, f.name);
+          }
+          return files;
+        }
+        // Bolt-on image stages run on every exported PNG (the view and the turntable sheet), never on the live viewport.
+        const STAGE_REFERENCE_WIDTH = 1024;
+        const encodePng = (canvas) =>
+          new Promise((resolve, reject) =>
+            canvas.toBlob(
+              (b) =>
+                b ? resolve(b) : reject(new Error("3d-viewer: the PNG could not be encoded")),
+              "image/png",
+            ),
+          );
+        async function stagedPng(blob, info) {
+          if (!rt.hasImageStages()) return blob;
+          const bmp = await createImageBitmap(blob);
+          const canvas = document.createElement("canvas");
+          canvas.width = bmp.width;
+          canvas.height = bmp.height;
+          canvas.getContext("2d").drawImage(bmp, 0, 0);
+          bmp.close();
+          rt.runImageStages(canvas, {
+            scale: canvas.width / STAGE_REFERENCE_WIDTH,
+            phase: "export",
+            info,
+          });
+          return encodePng(canvas);
+        }
+        async function exportView() {
+          if (exporting) throw new Error("3d-viewer: an export is already running");
+          exporting = true;
+          setStatus("Exporting view");
+          try {
+            const blob = await stagedPng(await scene.exportBlob({ type: "image/png" }), {
+              kind: "view",
+            });
+            return await deliver([
+              new File([blob], `${safeName(OPTS.title)}-view.png`, { type: "image/png" }),
+            ]);
+          } finally {
+            setStatus("Ready");
+            exporting = false;
+          }
+        }
+        async function renderTurntable() {
+          if (turning) throw new Error("3d-viewer: a turntable render is already running");
+          turning = true;
+          const frames = Number($("tt-frames").value);
+          const size = Number($("tt-size").value);
+          const cam0 = clone(scene.get().camera);
+          const box = $("viewport-root").getBoundingClientRect();
+          const h = Math.round((size * box.height) / box.width);
+          const cols = Math.ceil(Math.sqrt(frames));
+          const rows = Math.ceil(frames / cols);
+          const sheet = document.createElement("canvas");
+          sheet.width = cols * size;
+          sheet.height = rows * h;
+          const ctx = sheet.getContext("2d");
+          try {
+            for (let i = 0; i < frames; i++) {
+              setStatus(`Turntable frame ${i + 1} of ${frames}`);
+              scene.set({ camera: { azimuth: (cam0.azimuth + (360 * i) / frames) % 360 } });
+              const blob = await scene.exportBlob({ type: "image/png", width: size, height: h });
+              const bmp = await createImageBitmap(blob);
+              ctx.drawImage(bmp, (i % cols) * size, Math.floor(i / cols) * h, size, h);
+              bmp.close();
+            }
+            rt.runImageStages(sheet, {
+              scale: sheet.width / STAGE_REFERENCE_WIDTH,
+              phase: "export",
+              info: { kind: "turntable", frames, cols, rows },
+            });
+            const sheetBlob = await encodePng(sheet);
+            return await deliver([
+              new File([sheetBlob], `${safeName(OPTS.title)}-turntable.png`, { type: "image/png" }),
+            ]);
+          } finally {
+            scene.set({ camera: cam0 });
+            renderCamera();
+            setStatus("Ready");
+            turning = false;
+          }
+        }
+
+        // ---- Palette (search and key-driven add menu) ----------------------------------------
+        function getCommands() {
+          const v = scene.get();
+          const list = [
+            ...Object.entries(SPAWN).map(([kind, s]) => ({
+              label: `Add ${s.label}`,
+              hint: s.key,
+              run: () => spawn(kind),
+            })),
+            { label: "Move Mode", hint: "W", run: () => setMode("move") },
+            { label: "Rotate Mode", hint: "E", run: () => setMode("rotate") },
+            { label: "Scale Mode", hint: "R", run: () => setMode("scale") },
+            { label: "Toggle Grid", hint: "G", run: toggleGrid },
+            { label: "Toggle Axes", hint: "X", run: toggleAxes },
+            { label: "Frame Selected", hint: "F", run: frameSelected },
+            { label: "Frame All", run: frameAll },
+            { label: "Duplicate Selected", hint: `${MOD_TEXT}D`, run: duplicateSelected },
+            { label: "Delete Selected", hint: "Del", run: deleteSelected },
+            { label: "Deselect", hint: "Esc", run: deselect },
+            { label: "Reset View", run: resetView },
+            { label: "Render Turntable", hint: "⇧R", run: renderTurntable },
+            { label: "Export View PNG", hint: "⇧E", run: exportView },
+            { label: "Undo", hint: `${MOD_TEXT}Z`, run: () => history.undo() },
+            { label: "Redo", hint: `${MOD_TEXT}⇧Z`, run: () => history.redo() },
+            ...glbAssets().map((a) => ({ label: `Load ${a.name}`, run: () => loadAsset(a) })),
+            ...v.nodes.map((n) => ({ label: `Select ${nodeName(n)}`, run: () => select(n.id) })),
+            ...extraCommands,
+          ];
+          return list;
+        }
+        const addItems = () =>
+          Object.entries(SPAWN).map(([kind, s]) => ({
+            label: s.label,
+            hint: s.key,
+            key: s.key,
+            run: () => spawn(kind),
+          }));
+        function filteredItems() {
+          const q = $("cmd-input").value.trim().toLowerCase();
+          return palette.items.filter((it) => !q || it.label.toLowerCase().includes(q));
+        }
+        function renderPalette() {
+          const list = filteredItems();
+          palette.index = Math.min(palette.index, Math.max(0, list.length - 1));
+          const rows = list.map((it, i) => {
+            const li = el("li", "", it.label);
+            li.setAttribute("role", "option");
+            li.setAttribute("aria-selected", String(i === palette.index));
+            if (it.hint) {
+              const hint = el("span", "hint", it.hint);
+              li.append(hint);
+            }
+            li.addEventListener("click", () => runItem(it));
+            return li;
+          });
+          if (rows.length === 0) rows.push(el("li", "none", "No matches"));
+          $("cmd-list").replaceChildren(...rows);
+        }
+        function openPalette(mode, items) {
+          palette = { mode, items, index: 0, returnFocus: document.activeElement };
+          $("cmd").hidden = false;
+          $("cmd-input").hidden = mode === "keys";
+          $("cmd-input").value = "";
+          $("cmd-dialog").setAttribute("aria-label", mode === "keys" ? "Add node" : "Commands");
+          renderPalette();
+          if (mode === "search") $("cmd-input").focus();
+          else $("cmd-dialog").focus();
+        }
+        function closePalette() {
+          $("cmd").hidden = true;
+          const back = palette.returnFocus;
+          if (back && back.isConnected) back.focus();
+        }
+        function runItem(it) {
+          closePalette();
+          act(() => it.run());
+        }
+
+        // ---- Keyboard ----------------------------------------------------------------------
+        function keyOf(e) {
+          const parts = [];
+          if (e.metaKey || e.ctrlKey) parts.push("mod");
+          if (e.shiftKey) parts.push("shift");
+          if (e.altKey) parts.push("alt");
+          parts.push(e.key.toLowerCase());
+          return parts.join("+");
+        }
+        const SHORTCUTS = {
+          a: () => openPalette("keys", addItems()),
+          o: () => {
+            const first = glbAssets()[0];
+            if (!first) throw new Error("3d-viewer: no .glb or .gltf asset is attached");
+            return loadAsset(first);
+          },
+          w: () => setMode("move"),
+          e: () => setMode("rotate"),
+          r: () => setMode("scale"),
+          g: toggleGrid,
+          x: toggleAxes,
+          f: frameSelected,
+          "[": () => cycle(-1),
+          "]": () => cycle(1),
+          escape: deselect,
+          delete: deleteSelected,
+          backspace: deleteSelected,
+          "mod+d": duplicateSelected,
+          "shift+r": renderTurntable,
+          "shift+e": exportView,
+          i: focusName,
+        };
+        document.addEventListener("keydown", (e) => {
+          if (!$("cmd").hidden || !scene) return;
+          const key = keyOf(e);
+          if (key === "mod+k") {
+            e.preventDefault();
+            openPalette("search", getCommands());
+            return;
+          }
+          if (isTyping(e.target)) return;
+          if ($("viewport-root").contains(e.target) && SCENE_KEYS.has(key)) return;
+          const fn = SHORTCUTS[key];
+          if (!fn) return;
+          e.preventDefault();
+          act(fn);
+        });
+        $("cmd").addEventListener("keydown", (e) => {
+          const handled = (fn) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fn();
+          };
+          const list = filteredItems();
+          if (e.key === "Escape") return handled(closePalette);
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            return handled(() => {
+              const n = list.length;
+              if (n) palette.index = (palette.index + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+              renderPalette();
+            });
+          }
+          if (e.key === "Enter") {
+            const it = list[palette.index];
+            if (it) handled(() => runItem(it));
+            return undefined;
+          }
+          if (
+            palette.mode === "keys" &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.altKey &&
+            e.key.length === 1
+          ) {
+            const it = palette.items.find((x) => x.key === e.key.toLowerCase());
+            if (it) handled(() => runItem(it));
+          }
+          return undefined;
+        });
+        $("cmd-input").addEventListener("input", () => {
+          palette.index = 0;
+          renderPalette();
+        });
+        $("cmd").querySelector("[data-close]").addEventListener("click", closePalette);
+
+        $("tree").addEventListener("keydown", (e) => {
+          const ids = orderedNodes(scene.get().nodes).map((x) => x.node.id);
+          const sel = selectedNode();
+          if (e.key === "ArrowDown") cycle(1);
+          else if (e.key === "ArrowUp") cycle(-1);
+          else if (e.key === "Home") selectEdge(false);
+          else if (e.key === "End") selectEdge(true);
+          else if (e.key === "Enter") focusName();
+          else if (e.key.toLowerCase() === "v" && sel && ids.includes(sel.id))
+            toggleVisible(sel.id);
+          else return;
+          e.preventDefault();
+          e.stopPropagation();
+        });
+
+        // ---- Inspector edits --------------------------------------------------------------
+        const FIELD_VERB = { position: "Move", rotation: "Rotate", scale: "Scale" };
+        for (const inp of document.querySelectorAll("[data-field]")) {
+          inp.addEventListener("change", () =>
+            act(() => {
+              const node = selectedNode();
+              if (!node) return;
+              const field = inp.dataset.field;
+              const x = Number(inp.value);
+              if (inp.value.trim() === "" || !Number.isFinite(x)) {
+                renderInspector();
+                return;
+              }
+              const vec = [...(node[field] ?? DEFAULT_VEC[field])];
+              vec[Number(inp.dataset.axis)] = x;
+              editNode(node.id, { [field]: vec }, `${FIELD_VERB[field]} ${nodeName(node)}`);
+            }),
+          );
+        }
+        $("f-name").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (!node) return;
+            const name = $("f-name").value.trim();
+            if (name === "") {
+              renderInspector();
+              return;
+            }
+            editNode(node.id, { name }, `Rename ${nodeName(node)}`);
+          }),
+        );
+        $("f-visible").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (!node) return;
+            const visible = $("f-visible").checked;
+            editNode(node.id, { visible }, `${visible ? "Show" : "Hide"} ${nodeName(node)}`);
+          }),
+        );
+        $("f-color").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (node)
+              editNode(
+                node.id,
+                { material: { color: $("f-color").value.trim() } },
+                `Color ${nodeName(node)}`,
+              );
+          }),
+        );
+        $("f-rough").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (node)
+              editNode(
+                node.id,
+                { material: { roughness: Number($("f-rough").value) } },
+                `Roughness ${nodeName(node)}`,
+              );
+          }),
+        );
+        $("f-metal").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (node)
+              editNode(
+                node.id,
+                { material: { metalness: Number($("f-metal").value) } },
+                `Metalness ${nodeName(node)}`,
+              );
+          }),
+        );
+        $("f-ltype").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (node)
+              editNode(
+                node.id,
+                { light: { type: $("f-ltype").value } },
+                `Light Type ${nodeName(node)}`,
+              );
+          }),
+        );
+        $("f-lcolor").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (node)
+              editNode(
+                node.id,
+                { light: { color: $("f-lcolor").value.trim() } },
+                `Light Color ${nodeName(node)}`,
+              );
+          }),
+        );
+        $("f-lint").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (node)
+              editNode(
+                node.id,
+                { light: { intensity: Number($("f-lint").value) } },
+                `Intensity ${nodeName(node)}`,
+              );
+          }),
+        );
+        $("f-lrange").addEventListener("change", () =>
+          act(() => {
+            const node = selectedNode();
+            if (!node) return;
+            const raw = $("f-lrange").value.trim();
+            editNode(
+              node.id,
+              { light: { range: raw === "" ? null : Number(raw) } },
+              `Range ${nodeName(node)}`,
+            );
+          }),
+        );
+
+        // ---- Header and panel buttons -------------------------------------------------------
+        for (const b of document.querySelectorAll("[data-mode]"))
+          b.addEventListener("click", () => act(() => setMode(b.dataset.mode)));
+        $("tog-grid").addEventListener("click", () => act(toggleGrid));
+        $("tog-axes").addEventListener("click", () => act(toggleAxes));
+        $("snap").addEventListener("change", () => act(() => setSnap($("snap").value)));
+        $("btn-add").addEventListener("click", () => act(() => openPalette("keys", addItems())));
+        $("btn-load").addEventListener("click", () =>
+          act(() => {
+            const first = glbAssets()[0];
+            if (!first) throw new Error("3d-viewer: no .glb or .gltf asset is attached");
+            return loadAsset(first);
+          }),
+        );
+        $("btn-turn").addEventListener("click", () => act(renderTurntable));
+        $("btn-turn-panel").addEventListener("click", () => act(renderTurntable));
+        $("btn-export").addEventListener("click", () => act(exportView));
+        $("btn-cmd").addEventListener("click", () =>
+          act(() => openPalette("search", getCommands())),
+        );
+        $("btn-frame-all").addEventListener("click", () => act(frameAll));
+        $("btn-reset-view").addEventListener("click", () => act(resetView));
+        $("mod-key").textContent = MAC ? "⌘K" : "Ctrl+K";
+
+        // ---- Runtime (window.t3template) ------------------------------------------------------
+        const panelsEl = $("panels");
+        const rt = t3kit.templateRuntime.create({
+          id: "3d-viewer",
+          pipeline: "image", // image stages run on the exported PNGs (view and turntable sheet), not on the live WebGL view
+          // 'top': before the Scene panel (in view on load). 'bottom': after History.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            if (position === "top")
+              panelsEl.insertBefore(section, panelsEl.querySelector('[data-panel="scene"]'));
+            else panelsEl.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getValues(),
+          setValues: (partial, label) => setValues(partial, label),
+          addPreset: (name, values) =>
+            history.savePreset(name, { ...getState(), ...pickState(values) }),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => exportView(),
+          reservedKeys: RESERVED,
+          onCommand: (label, run, hint) => extraCommands.push({ label, run, hint }),
+          onBoltOnChange() {
+            renderAll();
+            persist();
+          },
+        });
+        function pickState(values) {
+          const out = {};
+          for (const k of ["nodes", "selected"])
+            if (values && values[k] !== undefined) out[k] = values[k];
+          return out;
+        }
+
+        // ---- Boot ---------------------------------------------------------------------------
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) &&
+            saved.v === 1 &&
+            saved.key === STATE_KEY &&
+            isPlain(saved.history) &&
+            isPlain(saved.view)
+              ? saved
+              : null;
+          assets = ready.assets ?? [];
+          const active = restored ? restored.history.entries[restored.history.index].state : null;
+          const initialNodes = OPTS.scene.map((it, i) => toNode(it, i));
+          const view = restored
+            ? restored.view
+            : {
+                camera: OPTS.camera,
+                grid: OPTS.grid,
+                axes: OPTS.axes,
+                snap: { move: 0, rotate: 0 },
+                mode: "move",
+              };
+
+          scene = t3kit.scene3d.create($("viewport-root"), {
+            nodes: active ? active.nodes : initialNodes,
+            selected: active ? active.selected : null,
+            camera: view.camera,
+            grid: view.grid,
+            axes: view.axes,
+            snap: view.snap,
+            mode: view.mode,
+            controls: false,
+          });
+          committed = scene.get().nodes;
+          history = t3kit.history.create($("history"), {
+            title: "Steps",
+            label: "Open",
+            state: getState(),
+          });
+          if (restored) history.set(restored.history);
+          historyLink = rt.linkHistory(history, getState, applyState, {
+            commit: (label) => commitNow(label),
+          });
+
+          scene.on("change", () => {
+            renderAll();
+            scheduleSceneCommit();
+          });
+          scene.on("select", () => renderAll());
+          scene.on("camera", () => {
+            renderCamera();
+            persist();
+          });
+          history.on("change", () => {
+            persist();
+            rt.emitChange();
+            renderAll();
+          });
+          rt.publish({
+            instances: { scene, history },
+            saved: restored ? restored.controls : undefined,
+          });
+          booted = true;
+          if (!restored) {
+            const first = glbAssets()[0];
+            if (first) await loadAsset(first);
+          }
+          renderAll();
+          persist();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        function seedTurntableFrames() {
+          const select = $("tt-frames");
+          const value = String(OPTS.turntableFrames);
+          if (![...select.options].some((o) => o.value === value)) {
+            const opt = new Option(value, value);
+            const after =
+              [...select.options].find((o) => Number(o.value) > OPTS.turntableFrames) ?? null;
+            select.insertBefore(opt, after);
+          }
+          select.value = value;
+        }
+        seedTurntableFrames();
+        if (OPTS.background !== "background") $("viewport").dataset.bg = OPTS.background;
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

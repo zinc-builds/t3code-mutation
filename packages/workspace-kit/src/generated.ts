@@ -1,5 +1,5 @@
 // Generated; do not edit. Regenerate with
-//   node packages/workspace-kit/scripts/generate.mjs <kitDir>
+//   node packages/workspace-kit/scripts/generate.mjs   (sources: packages/workspace-kit/kit)
 import type { KitSource } from "./types.ts";
 
 export const GENERATED_KIT: KitSource = {

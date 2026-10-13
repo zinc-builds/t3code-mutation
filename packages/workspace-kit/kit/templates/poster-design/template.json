@@ -1,0 +1,129 @@
+{
+  "id": "poster-design",
+  "title": "Poster Design",
+  "summary": "Poster and social graphic designer: a layers canvas with a photo background, rich text layers (system font stacks, weight, size, tracking, alignment), rectangle and ellipse shapes, centre-snapping guides and centre alignment, artboard presets (A4 300 dpi, 1080x1350, 1920x1080) that rescale the layout, brand colour swatches, one shared undo history, a Proof mode that shows bolt-on effects, and full-resolution PNG or JPEG export. Pick it for any poster, flyer, banner or social graphic built from text, shapes and a photo.",
+  "kit": ["layers", "history", "links", "template-runtime"],
+  "chrome": false,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Poster",
+      "description": "Header title, also the eyebrow text on the artboard and the prefix of exported file names."
+    },
+    "artboard": {
+      "type": "string",
+      "enum": ["a4", "1080x1350", "1920x1080"],
+      "default": "1080x1350",
+      "description": "Artboard preset: a4 = A4 print at 300 dpi (2480 x 3508), 1080x1350 = Instagram portrait, 1920x1080 = HD landscape."
+    },
+    "headline": {
+      "type": "string",
+      "default": "Summer Sale",
+      "description": "Headline text on the artboard. Use a newline for a line break."
+    },
+    "palette": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+      },
+      "minItems": 1,
+      "maxItems": 8,
+      "default": ["#1d3557", "#f1faee", "#e63946", "#a8dadc", "#457b9d"],
+      "description": "Brand colours as #rrggbb. Order: background, headline, accent, eyebrow. All of them appear as swatches in Brand Colours."
+    },
+    "backgroundImage": {
+      "type": "string",
+      "default": "",
+      "description": "Attached photo used as the background, by file name. \"\" uses the first photo, \"none\" uses a plain colour."
+    },
+    "fontStack": {
+      "type": "string",
+      "enum": ["system-sans", "system-serif", "system-mono", "condensed", "rounded"],
+      "default": "system-sans",
+      "description": "System font stack for the headline and the eyebrow."
+    },
+    "exportFormat": {
+      "type": "string",
+      "enum": ["png", "jpeg"],
+      "default": "png",
+      "description": "File type of the Export button at full artboard resolution."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, image stages, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Spring Sale",
+      "artboard": "a4",
+      "headline": "Spring\nSale",
+      "fontStack": "system-serif",
+      "palette": ["#2d4a22", "#fdf6e3", "#e07a5f", "#f2cc8f"]
+    },
+    {
+      "title": "Coming Soon",
+      "artboard": "1080x1350",
+      "headline": "Coming\nSoon",
+      "fontStack": "condensed",
+      "backgroundImage": "none",
+      "exportFormat": "jpeg",
+      "palette": ["#0b132b", "#f8f9fa", "#ffb703", "#8ecae6"]
+    },
+    {
+      "title": "Launch Week",
+      "artboard": "1920x1080",
+      "headline": "Launch Week",
+      "fontStack": "rounded",
+      "palette": ["#14213d", "#fca311", "#e5e5e5", "#ffffff"]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the poster is built and the first proof has rendered. Stages draw on the flattened poster in Proof mode (press P) and on the full-resolution export. They do not draw on the live Edit canvas, so check a look in Proof. Add controls, then an image stage that reads them. Control values persist with the edit; options.controls ({ id: value }) sets starting values, and a saved edit wins over it. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. Each control edit is one undo step, named after the control.",
+      "addImageStage(id, (ctx, controls) => void, { at? }): edit ctx.canvas in place with ctx.context (2D; getImageData works). ctx = { canvas, context, width, height, scale, phase, copy(), random(seed?) }. width/height are the canvas size: the Proof (up to 1080 px wide) or the full artboard on export. scale = width / Proof width: multiply pixel sizes (line width, font size, margins) by it. phase = 'preview' | 'export'. random(seed?) -> seeded () => [0, 1), the same pattern on every render. Stages run in the order added.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'g' | 'shift+g' | 'mod+g', title? }) -> button in the header tools row.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element. 'top' = first in the inspector, above Artboard; 'bottom' = after Keys, the last built-in panel. The same title returns the same panel.",
+      "getValues() -> { artboard, palette, bgName, bg, scene, headline, controls }. scene = { width, height, background, layers } with layers bottom..top, the same shape as t3kit.layers get(); the background photo is held in bg (its layer props) and bgName, not in scene.layers.",
+      "setValues({ artboard?: 'a4'|'1080x1350'|'1920x1080', palette?: ['#rrggbb', ...], headline?: string, backgroundImage?: photo name | null, controls? }, label?) -> Promise<values>. Strict: unknown keys throw. An artboard change rescales the layers. palette feeds the Brand Colours swatches only; it does not recolour layers. Each call is one undo step.",
+      "export() -> Promise<{ files: [{ name, type, size, width, height }] }>: runs the Export button at full artboard resolution (the file goes to t3.workspace.attach and download) and throws on failure.",
+      "instances: { layers, history }. layers is the t3kit.layers instance; history is the t3kit.history instance that owns undo (Mod+Z goes to it, not to layers' own stack). Direct layers calls do not emit change and record no step, so use setValues for template-level edits and let it record the step."
+    ],
+    "reservedShortcuts": [
+      "t",
+      "r",
+      "o",
+      "p",
+      "e",
+      "alt+h",
+      "alt+v",
+      "alt+c",
+      "alt+1",
+      "alt+2",
+      "alt+3",
+      "alt+4",
+      "alt+5",
+      "alt+6",
+      "alt+7",
+      "alt+8",
+      "mod+z",
+      "mod+shift+z",
+      "mod+y",
+      "mod+d",
+      "mod+[",
+      "mod+]",
+      "delete",
+      "backspace",
+      "escape"
+    ],
+    "example": "// Finish: grain, a white frame and a photo credit, drawn on the Proof and the full-resolution export.\nt3template.addControl({ id: 'grain', label: 'Grain', type: 'slider', min: 0, max: 0.4, step: 0.01, default: 0, panel: 'Finish' });\nt3template.addControl({ id: 'frame', label: 'Frame', type: 'toggle', default: false, panel: 'Finish' });\nt3template.addControl({ id: 'credit', label: 'Credit', type: 'text', placeholder: 'Photo credit', default: '', panel: 'Finish' });\nt3template.addImageStage('finish', ({ context, width, height, scale, random }, c) => {\n  if (c.grain > 0) {\n    const rnd = random('grain');\n    const px = context.getImageData(0, 0, width, height);\n    const d = px.data;\n    for (let i = 0; i < d.length; i += 4) {\n      const n = (rnd() - 0.5) * 255 * c.grain;\n      d[i] += n;\n      d[i + 1] += n;\n      d[i + 2] += n;\n    }\n    context.putImageData(px, 0, 0);\n  }\n  if (c.frame) {\n    const m = 40 * scale;\n    context.lineWidth = 6 * scale;\n    context.strokeStyle = 'rgba(255, 255, 255, 0.9)';\n    context.strokeRect(m, m, width - 2 * m, height - 2 * m);\n  }\n  if (c.credit) {\n    context.font = `500 ${Math.round(22 * scale)}px system-ui, sans-serif`;\n    context.fillStyle = 'rgba(255, 255, 255, 0.85)';\n    context.textBaseline = 'bottom';\n    context.fillText(c.credit, 64 * scale, height - 64 * scale);\n  }\n});\nt3template.addToolbarButton('Clear Finish', () => t3template.setValues({ controls: { grain: 0, frame: false, credit: '' } }, 'Clear Finish'), { title: 'Reset grain, frame and credit' });\n"
+  }
+}

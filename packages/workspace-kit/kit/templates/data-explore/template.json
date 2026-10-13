@@ -1,0 +1,158 @@
+{
+  "id": "data-explore",
+  "title": "Data Explore",
+  "summary": "Keyboard-first explorer for a CSV or JSON dataset: a dense datagrid with per-column filters, two linked charts (each draws the grid's filtered rows; brush a range or a category and the grid and the other chart narrow to it), column stats, a Group By table that filters on click, undo history with presets, and a command palette (Cmd+K). Exports the filtered CSV and one PNG per chart. Pick it for any tabular data question: explore, slice, count, compare.",
+  "kit": ["datagrid", "chart", "history", "links", "template-runtime"],
+  "chrome": false,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Explore",
+      "description": "Header title."
+    },
+    "charts": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "minItems": 0,
+      "maxItems": 2,
+      "default": [],
+      "description": "Up to two charts, left to right. Each { type: bar|line|area|scatter|histogram (default bar), x: column (required), y?: number column (omit to count rows), series?: column (one group per value), aggregate?: count|sum|mean|min|max (default by type) }. Empty = two automatic charts: a bar of the first category with 2-50 values (split by a second category with 2-6), and a histogram of the first number column."
+    },
+    "filters": {
+      "type": "object",
+      "default": {},
+      "description": "Starting grid filters, { column: text } in datagrid syntax: 'ber' contains, '=Berlin' exact, '>5' '<=5' '2..9' for numbers, '2026-06..2026-08' for dates."
+    },
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Visible column ids in display order; every other column is hidden. Empty = all columns in file order."
+    },
+    "sort": {
+      "type": "object",
+      "description": "Starting sort, { id: column, dir: 'asc' | 'desc' }. Omit for file order."
+    },
+    "pivot": {
+      "type": "object",
+      "default": {
+        "by": null,
+        "value": null,
+        "agg": "count"
+      },
+      "description": "Starting Group By table, { by: column, value: number column or null for row counts, agg: count|sum|mean|min|max }."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Trips by City",
+      "charts": [
+        {
+          "type": "bar",
+          "x": "city",
+          "series": "bike_type"
+        }
+      ]
+    },
+    {
+      "title": "Long E-Bike Rides",
+      "filters": {
+        "bike_type": "=ebike",
+        "duration_min": ">=20"
+      },
+      "sort": {
+        "id": "duration_min",
+        "dir": "desc"
+      },
+      "columns": [
+        "trip_id",
+        "started_at",
+        "city",
+        "station",
+        "duration_min",
+        "distance_km",
+        "fare_usd"
+      ],
+      "charts": [
+        {
+          "type": "histogram",
+          "x": "duration_min"
+        },
+        {
+          "type": "line",
+          "x": "started_at"
+        }
+      ]
+    },
+    {
+      "title": "Fare by Station",
+      "charts": [
+        {
+          "type": "bar",
+          "x": "station",
+          "y": "fare_usd",
+          "aggregate": "mean"
+        }
+      ],
+      "pivot": {
+        "by": "station",
+        "value": "fare_usd",
+        "agg": "mean"
+      }
+    },
+    {
+      "title": "Distance Versus Duration",
+      "charts": [
+        {
+          "type": "scatter",
+          "x": "distance_km",
+          "y": "duration_min"
+        }
+      ],
+      "columns": ["trip_id", "city", "distance_km", "duration_min"]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code) after the dataset has loaded and the grid and charts exist. Read and drive the data through t3template.instances: grid (t3kit.datagrid: get, set, view, row, stats, select) and charts (t3kit.chart instances, one per chart, in order). Charts are linked: each draws the rows the grid's filters keep, except its own brush; the template manages chart rows, so change filters through the grid, not chart.set({ rows }). grid.set and chart.set are silent: call t3template.refresh() after them so the readouts, filter chips, stats and Group By table update. Every control edit is one undo step. Errors log '[t3template] customScript error: ...' and show in a dismissible banner. This is a data template (pipeline 'data'): addImageStage, addShaderStage, EDL hooks and addAudioFilter throw; bolt on through controls, panels, toolbar buttons, presets and the grid.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. User edits run every hook and re-render; onChange runs on user edits only, not on load. Every control edit is one undo step.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes; the same title returns the same panel). 'top' = after Active Filters and Column Stats, before Group By (first in view on load); 'bottom' = after History.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'shift+m' (any key not in reservedShortcuts), title? }) -> button (also listed in the command palette, Cmd+K).   refresh() re-renders the readouts, chips, stats and Group By table after silent grid or chart changes.",
+      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: the filtered CSV (visible columns, filtered rows) and one PNG per chart, sent to t3.workspace.attach and downloaded. The same as the Export button; it throws on failure.",
+      "getValues() -> { filters: { column: text }, sort: { id, dir } | null, charts: [{ type, x, y, series, aggregate }], pivot: { by, value, agg }, controls }.   setValues({ filters?, sort?, charts?, pivot? }, label?) -> Promise<values>: strict, so unknown keys and unknown columns throw. filters replaces the whole object; sort replaces; charts[i] merges into chart i (changing its x clears that chart's brush); pivot merges. One undo step.",
+      "addPreset(name, { filters?, sort?, charts?, pivot? }) / applyPreset(name): a preset is a full view, as setValues takes it. Presets and history steps also hold column order and brushes.   on('change', cb(values)) -> off.",
+      "instances: { grid (t3kit.datagrid; grid.get().filters is the live filter object, grid.view() the filtered source row indices, grid.match(filters) the rows any filter object keeps), charts (t3kit.chart instances, index 0 = first chart; a getter, so it follows dataset switches), history (t3kit.history) }."
+    ],
+    "reservedShortcuts": [
+      "e",
+      "x",
+      "t",
+      "i",
+      "g",
+      "/",
+      "p",
+      "[",
+      "]",
+      "1",
+      "2",
+      "mod+k",
+      "mod+z",
+      "mod+shift+z"
+    ],
+    "example": "t3template.addControl({ id: 'minMinutes', label: 'Min Minutes', type: 'slider', min: 0, max: 60, step: 1, default: 0, panel: 'Trip Filter', onChange(v, t) { const filters = { ...t.instances.grid.get().filters }; if (v > 0) filters.duration_min = '>=' + v; else delete filters.duration_min; t.instances.grid.set({ filters }); t.refresh(); } });\nt3template.addPreset('Long Trips', { filters: { duration_min: '>=20' }, sort: { id: 'duration_min', dir: 'desc' }, pivot: { by: 'city', value: 'duration_min', agg: 'mean' } });\nt3template.addToolbarButton('Min 10 Minutes', (t) => t.setValues({ filters: { ...t.getValues().filters, duration_min: '>=10' } }, 'Min 10 Minutes'), { shortcut: 'shift+m' });"
+  }
+}

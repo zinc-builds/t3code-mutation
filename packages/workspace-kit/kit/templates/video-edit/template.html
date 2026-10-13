@@ -1,0 +1,2310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video Edit</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.45 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      .app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        min-height: 0;
+      }
+      .top {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 44px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+      }
+      .top h1 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 40vw;
+      }
+      .tc {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .grow {
+        flex: 1;
+      }
+      .status {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .toolbar {
+        display: flex;
+        gap: 6px;
+      }
+      .toolbar:empty {
+        display: none;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--card);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: var(--muted);
+      }
+      .btn:focus-visible,
+      .mtime:focus-visible,
+      .mdel:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .btn.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .btn.primary:hover {
+        background: var(--primary);
+        opacity: 0.9;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .btn[aria-pressed="true"] {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .btn.sm {
+        height: 22px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      .stage {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+      }
+      .left {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: minmax(180px, 1fr) 268px auto;
+        border-right: 1px solid var(--border);
+      }
+      .monitor {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: var(--muted);
+      }
+      .player {
+        position: absolute;
+        inset: 0;
+      }
+      .timeline {
+        min-width: 0;
+        min-height: 0;
+        padding: 8px 8px 0;
+      }
+      .source {
+        min-width: 0;
+        min-height: 0;
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+      }
+      .source-head {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 26px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+      }
+      .source-head b {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .source-head .name {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .source-head .hint {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .wave {
+        height: 150px;
+        min-width: 0;
+        padding: 6px 8px 8px;
+      }
+      .inspector {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        background: var(--card);
+      }
+      .card {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+        min-height: 22px;
+      }
+      .card h2,
+      .panel > summary {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .clip-title {
+        font-weight: 600;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .clip-meta {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        margin: 2px 0 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 82px minmax(0, 1fr) 64px;
+        align-items: center;
+        gap: 8px;
+        margin: 5px 0;
+      }
+      .row > span {
+        color: var(--muted-foreground);
+      }
+      .row-mute {
+        grid-template-columns: 82px minmax(0, 1fr) 52px 52px;
+      }
+      .row-mute .btn {
+        padding: 0;
+      }
+      .row output {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      input[type="range"] {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      input[type="range"]:disabled {
+        opacity: 0.4;
+      }
+      .looks {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 4px;
+        margin: 10px 0 6px;
+      }
+      .looks .btn {
+        padding: 0;
+      }
+      .sub {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        margin: 10px 0 4px;
+      }
+      .presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .preset-wrap[hidden] {
+        display: none;
+      }
+      .list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .media {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 8px;
+        align-items: center;
+        padding: 3px 0;
+      }
+      .media .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .media .dur {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .marker {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr) 26px;
+        gap: 6px;
+        align-items: center;
+        margin: 4px 0;
+      }
+      .marker input[type="text"] {
+        height: 26px;
+        min-width: 0;
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+      }
+      .mtime {
+        height: 26px;
+        padding: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        cursor: pointer;
+      }
+      .mdel {
+        height: 26px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        cursor: pointer;
+      }
+      .mtime:hover,
+      .mdel:hover {
+        background: var(--muted);
+      }
+      .empty {
+        color: var(--muted-foreground);
+        padding: 4px 0;
+      }
+      .history-card {
+        padding: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .history-host {
+        height: 220px;
+      }
+      .panel {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg);
+        margin-right: 3px;
+      }
+      .panel:not([open]) > summary::after {
+        transform: rotate(-45deg);
+      }
+      .panel-body {
+        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .composer {
+        width: 100%;
+        min-width: 320px;
+        flex: none;
+        margin-top: auto;
+      }
+      .app.native .page-chrome {
+        display: none;
+      }
+      @media (max-width: 900px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          min-height: 100vh;
+        }
+        .stage {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .left {
+          grid-template-rows: 56vh 268px auto;
+          border-right: 0;
+        }
+        .inspector {
+          overflow: visible;
+        }
+        .source-head .hint {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="top">
+        <h1 id="title">Video Edit</h1>
+        <span class="tc" id="tc">00:00.00 / 00:00.00</span>
+        <span class="grow"></span>
+        <span class="status" id="status" aria-live="polite"></span>
+        <div class="toolbar page-chrome" id="toolbar"></div>
+        <button
+          class="btn page-chrome"
+          id="still"
+          type="button"
+          title="Export the frame at the playhead as a full-size PNG (Shift+E)"
+        >
+          Still
+        </button>
+        <button
+          class="btn primary page-chrome"
+          id="export"
+          type="button"
+          title="Attach the edit decision list and its ffmpeg render script (E)"
+        >
+          Export
+        </button>
+      </header>
+      <main class="stage">
+        <section class="left" id="left">
+          <div class="monitor" id="monitor"><div class="player" id="player"></div></div>
+          <div class="timeline" id="timeline"></div>
+          <div class="source">
+            <div class="source-head">
+              <b>Source</b>
+              <span class="name" id="sourceName"></span>
+              <span class="grow"></span>
+              <span class="hint"
+                >Drag a selection to set the clip's in and out · [ ] speed · E export</span
+              >
+            </div>
+            <div class="wave" id="waveform"></div>
+          </div>
+        </section>
+        <aside class="inspector" id="inspector"></aside>
+      </main>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+
+        // ---- Options and constants -------------------------------------------------
+        const DEFAULTS = {
+          title: "Video Edit",
+          look: "neutral",
+          in: 0,
+          out: 0,
+          clips: [],
+          splits: [],
+          markers: [],
+          customScript: "",
+          controls: {},
+        };
+        const LOOKS = {
+          neutral: { brightness: 0, contrast: 0, saturation: 0, temp: 0 },
+          moody: { brightness: -12, contrast: 18, saturation: -25, temp: -12 },
+          film: { brightness: 4, contrast: 10, saturation: -12, temp: 14, look: "vintage" },
+          vivid: { brightness: 6, contrast: 22, saturation: 35, temp: 0, look: "punch" },
+        };
+        const LOOK_NAMES = Object.keys(LOOKS);
+        const NEUTRAL = LOOKS.neutral;
+        const COLOR_KEYS = [
+          ["brightness", "Brightness"],
+          ["contrast", "Contrast"],
+          ["saturation", "Saturation"],
+          ["temp", "Temperature"],
+        ];
+        // The player's CSS filter for each colour.look, as ordered filter operations (mirrors t3kit.player LOOKS).
+        const PLAYER_LOOK_OPS = {
+          warm: [["sepia", 0.18]],
+          cool: [["hue", -12]],
+          vintage: [
+            ["sepia", 0.35],
+            ["contrast", 0.95],
+          ],
+          punch: [
+            ["contrast", 1.15],
+            ["saturate", 1.25],
+          ],
+          mono: [["grayscale", 1]],
+        };
+        const FPS = 30;
+        const SPEED_MIN = 0.25,
+          SPEED_MAX = 4,
+          SPEED_STEP = 0.25,
+          MIN_CLIP = 0.1;
+        const VOL_MIN = -48,
+          VOL_MAX = 0; // the player caps gain at 0 dB, so the export does too
+        const THUMBS = 8,
+          PEAK_RATE = 50;
+        const CLIP_KEYS = [
+          "in",
+          "out",
+          "start",
+          "speed",
+          "volumeDb",
+          "muted",
+          "color",
+          "look",
+          "label",
+        ];
+
+        // ---- Small helpers ---------------------------------------------------------
+        const $ = (id) => document.getElementById(id);
+        const el = (tag, cls, text) => {
+          const n = document.createElement(tag);
+          if (cls) n.className = cls;
+          if (text !== undefined) n.textContent = text;
+          return n;
+        };
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        const r3 = (v) => Math.round(v * 1000) / 1000;
+        const r6 = (v) => Math.round(v * 1e6) / 1e6;
+        const num = (v) =>
+          Number(v)
+            .toFixed(4)
+            .replace(/\.?0+$/, "") || "0";
+        const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+        const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+        const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const fmtT = (t) => {
+          const s = Math.max(0, t);
+          const m = Math.floor(s / 60);
+          return `${String(m).padStart(2, "0")}:${(s - m * 60).toFixed(2).padStart(5, "0")}`;
+        };
+        const fmtSpeed = (v) => `${v.toFixed(2)}×`;
+        const fmtDb = (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
+        const fmtSigned = (v) => `${v > 0 ? "+" : ""}${Math.round(v)}`;
+        const shellQuote = (s) => `"${String(s).replace(/(["\\$`])/g, "\\$1")}"`;
+        const slug = (s) =>
+          String(s)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "edit";
+        const played = (c) => (c.out - c.in) / c.speed;
+
+        // ---- Shared state ----------------------------------------------------------
+        const files = {}; // source name -> File
+        const probes = {}; // source name -> { duration, width, height }
+        const peakCache = new Map();
+        const thumbKeys = new Map();
+        const exact = new Map(); // clip id -> last source { in, out, speed }, so view round trips stay exact
+        const presets = new Map();
+        const ui = {};
+        let opts = null;
+        let api = null;
+        let rt = null;
+        let timeline = null,
+          adapter = null,
+          player = null,
+          playerLink = null;
+        let waveform = null,
+          history = null,
+          historyLink = null;
+        let selectedId = null,
+          shownClipId = null;
+        let wfSrc = null,
+          wfReady = false;
+        let lastEditKey = "";
+        let mediaToken = 0,
+          mediaTimer = 0,
+          mirrorTimer = 0,
+          saveTimer = 0,
+          wfTimer = 0;
+
+        // ---- Options ---------------------------------------------------------------
+        function pickOption(raw, key, ok) {
+          if (raw[key] === undefined) return structuredClone(DEFAULTS[key]);
+          if (ok(raw[key])) return raw[key];
+          console.warn(
+            `video-edit: option "${key}" is invalid, using ${JSON.stringify(DEFAULTS[key])}`,
+          );
+          return structuredClone(DEFAULTS[key]);
+        }
+        const isNonNeg = (v) => isNum(v) && v >= 0;
+        const markersOk = (v) =>
+          Array.isArray(v) &&
+          v.every(
+            (m) =>
+              isObj(m) &&
+              isNonNeg(m.time) &&
+              (m.label === undefined || typeof m.label === "string"),
+          );
+        const CLIP_OPTION_KEYS = ["source", "in", "out", "label", "speed", "look"];
+        const clipsOk = (v) =>
+          Array.isArray(v) &&
+          v.every(
+            (c) =>
+              isObj(c) &&
+              Object.keys(c).every((k) => CLIP_OPTION_KEYS.includes(k)) &&
+              (c.source === undefined || typeof c.source === "string") &&
+              (c.in === undefined || isNonNeg(c.in)) &&
+              (c.out === undefined || isNonNeg(c.out)) &&
+              (c.label === undefined || typeof c.label === "string") &&
+              (c.speed === undefined ||
+                (isNum(c.speed) && c.speed >= SPEED_MIN && c.speed <= SPEED_MAX)) &&
+              (c.look === undefined || LOOK_NAMES.includes(c.look)),
+          );
+        const splitsOk = (v) => Array.isArray(v) && v.every(isNonNeg);
+        function readOptions() {
+          const raw = JSON.parse(
+            document.getElementById("t3-template-options")?.textContent || "{}",
+          );
+          return {
+            title: pickOption(raw, "title", (v) => typeof v === "string" && v.trim() !== ""),
+            look: pickOption(raw, "look", (v) => LOOK_NAMES.includes(v)),
+            in: pickOption(raw, "in", isNonNeg),
+            out: pickOption(raw, "out", isNonNeg),
+            clips: pickOption(raw, "clips", clipsOk),
+            splits: pickOption(raw, "splits", splitsOk),
+            markers: pickOption(raw, "markers", markersOk),
+            customScript: pickOption(raw, "customScript", (v) => typeof v === "string"),
+            controls: pickOption(raw, "controls", isObj),
+          };
+        }
+
+        // ---- Media probing and analysis --------------------------------------------
+        function probe(file) {
+          return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const v = document.createElement("video");
+            v.preload = "metadata";
+            v.muted = true;
+            v.onloadedmetadata = () => {
+              URL.revokeObjectURL(url);
+              if (!Number.isFinite(v.duration) || v.duration <= 0)
+                reject(new Error(`Video Edit: cannot read the duration of ${file.name}`));
+              else resolve({ duration: v.duration, width: v.videoWidth, height: v.videoHeight });
+            };
+            v.onerror = () => {
+              URL.revokeObjectURL(url);
+              reject(new Error(`Video Edit: cannot decode ${file.name}`));
+            };
+            v.src = url;
+          });
+        }
+
+        function peaksFor(src) {
+          if (!peakCache.has(src)) peakCache.set(src, computePeaks(src));
+          return peakCache.get(src);
+        }
+
+        async function computePeaks(src) {
+          const ctx = new AudioContext();
+          let buffer;
+          try {
+            buffer = await ctx.decodeAudioData(await files[src].arrayBuffer());
+          } catch (err) {
+            throw new Error(
+              `Video Edit: cannot decode the audio of ${src} (every source needs a sound track): ${err.message}`,
+            );
+          } finally {
+            await ctx.close();
+          }
+          const bucket = Math.max(1, Math.floor(buffer.sampleRate / PEAK_RATE));
+          const n = Math.ceil(buffer.length / bucket);
+          const chans = [];
+          for (let i = 0; i < buffer.numberOfChannels; i++) chans.push(buffer.getChannelData(i));
+          const out = new Float32Array(n);
+          let max = 0;
+          for (let i = 0; i < n; i++) {
+            let m = 0;
+            const s0 = i * bucket;
+            const s1 = Math.min(buffer.length, s0 + bucket);
+            for (const ch of chans) for (let s = s0; s < s1; s++) m = Math.max(m, Math.abs(ch[s]));
+            out[i] = m;
+            max = Math.max(max, m);
+          }
+          if (max > 0) for (let i = 0; i < n; i++) out[i] /= max;
+          return out;
+        }
+
+        // ---- EDL model -------------------------------------------------------------
+        // Source EDL (what get(), history, state and export use):
+        //   { tracks: [{ id:'V1', kind:'video', name:'Picture', clips:[{ id, src, label, in, out, start, speed, volumeDb, muted, color }] }],
+        //     playhead, markers, range }   in/out are source seconds; a clip plays (out - in) / speed timeline seconds.
+        // The timeline primitive has no speed, so it gets a view EDL in speed-normalised seconds (in/speed, out/speed,
+        // srcDuration/speed). Trims, splits and thumbnails then stay proportional at any speed. A locked 'Sound' track
+        // mirrors 'Picture' and carries the waveform.
+
+        function newClip(id, src, inS, outS, start, color) {
+          return {
+            id,
+            src,
+            label: src.replace(/\.[^.]+$/, ""),
+            in: inS,
+            out: outS,
+            start,
+            speed: 1,
+            volumeDb: 0,
+            muted: false,
+            color: { ...color },
+          };
+        }
+
+        // The starting cut list: options.clips (any order, any source, repeats allowed) or every attached video, with
+        // in/out on the first. Clips butt end to end; options.splits then cut at those edit seconds.
+        function plannedClips(videos) {
+          const names = videos.map((a) => a.name);
+          const plan = [];
+          opts.clips.forEach((c, i) => {
+            const src = c.source ?? names[0];
+            if (!files[src]) {
+              console.warn(
+                `video-edit: clips[${i}].source "${src}" is not an attached video (${names.join(", ")}), skipped`,
+              );
+              return;
+            }
+            const dur = probes[src].duration;
+            const inS = c.in ?? 0;
+            const outS = c.out ? Math.min(c.out, dur) : dur;
+            if (inS > dur - MIN_CLIP || outS - inS < MIN_CLIP) {
+              console.warn(
+                `video-edit: clips[${i}] (${inS}..${c.out ?? "end"} s) does not fit ${src} (${r3(dur)} s), skipped`,
+              );
+              return;
+            }
+            plan.push({
+              src,
+              in: inS,
+              out: outS,
+              label: c.label,
+              speed: c.speed ?? 1,
+              look: c.look ?? opts.look,
+            });
+          });
+          if (opts.clips.length && !plan.length)
+            console.warn(
+              'video-edit: no entry of "clips" fits the attached videos; using every attached video',
+            );
+          if (plan.length) return plan;
+          return videos.map((a, i) => {
+            const dur = probes[a.name].duration;
+            let inS = 0;
+            let outS = dur;
+            if (i === 0) {
+              if (opts.in > dur - MIN_CLIP)
+                console.warn(`video-edit: option "in" (${opts.in}) is past the clip end, clamped`);
+              inS = clamp(opts.in, 0, dur - MIN_CLIP);
+              if (opts.out > 0) {
+                if (opts.out > inS + MIN_CLIP) outS = Math.min(opts.out, dur);
+                else
+                  console.warn(
+                    `video-edit: option "out" (${opts.out}) must come after "in" (${inS}), using the clip end`,
+                  );
+              }
+            }
+            return { src: a.name, in: inS, out: outS, speed: 1, look: opts.look };
+          });
+        }
+
+        function splitAt(clips, t) {
+          const c = clips.find(
+            (x) => t > x.start + MIN_CLIP - 1e-9 && t < x.start + played(x) - MIN_CLIP + 1e-9,
+          );
+          if (!c) {
+            console.warn(
+              `video-edit: split at ${t} s is not inside a clip (at least ${MIN_CLIP} s from its edges), skipped`,
+            );
+            return;
+          }
+          const cut = r6(c.in + (t - c.start) * c.speed);
+          const tail = { ...c, color: { ...c.color }, in: cut, start: r6(t) };
+          c.out = cut;
+          clips.splice(clips.indexOf(c) + 1, 0, tail);
+        }
+
+        function freshEdl(videos) {
+          const clips = [];
+          let cursor = 0;
+          for (const p of plannedClips(videos)) {
+            const c = newClip("", p.src, p.in, p.out, r6(cursor), LOOKS[p.look]);
+            c.speed = p.speed;
+            if (p.label) c.label = p.label;
+            clips.push(c);
+            cursor += played(c);
+          }
+          for (const t of [...new Set(opts.splits)].sort((a, b) => a - b)) splitAt(clips, t);
+          clips.forEach((c, i) => {
+            c.id = `c${i + 1}`;
+          });
+          const markers = [];
+          opts.markers.forEach((m, i) => {
+            if (m.time > cursor + 1e-6)
+              console.warn(
+                `video-edit: marker at ${m.time} s is past the end of the edit (${r3(cursor)} s), skipped`,
+              );
+            else
+              markers.push({ id: `m${i + 1}`, time: m.time, label: m.label ?? `Marker ${i + 1}` });
+          });
+          return {
+            tracks: [{ id: "V1", kind: "video", name: "Picture", clips }],
+            playhead: 0,
+            markers,
+            range: null,
+          };
+        }
+
+        function restorable(edl) {
+          const t = edl?.tracks?.[0];
+          return Boolean(
+            t &&
+            t.id === "V1" &&
+            Array.isArray(t.clips) &&
+            t.clips.length &&
+            Array.isArray(edl.markers) &&
+            t.clips.every((c) => files[c.src] && isNum(c.in) && isNum(c.out) && isNum(c.speed)),
+          );
+        }
+
+        function toView(src) {
+          const vclips = src.tracks[0].clips.map((c) => {
+            exact.set(c.id, { in: c.in, out: c.out, speed: c.speed });
+            return {
+              id: c.id,
+              src: c.src,
+              label: c.label,
+              in: c.in / c.speed,
+              out: c.out / c.speed,
+              start: c.start,
+              speed: c.speed,
+              volumeDb: c.volumeDb,
+              muted: Boolean(c.muted),
+              color: c.color,
+              srcDuration: probes[c.src].duration / c.speed,
+            };
+          });
+          const aclips = vclips.map((v) => ({
+            id: `${v.id}-a`,
+            src: v.src,
+            label: v.label,
+            in: v.in,
+            out: v.out,
+            start: v.start,
+            srcDuration: v.srcDuration,
+          }));
+          return {
+            tracks: [
+              { id: "V1", kind: "video", name: "Picture", clips: vclips },
+              { id: "A1", kind: "audio", name: "Sound", locked: true, clips: aclips },
+            ],
+            playhead: src.playhead,
+            markers: src.markers,
+            range: src.range ?? null,
+          };
+        }
+
+        // View seconds back to source seconds; an unchanged edge keeps its exact source value.
+        function srcEdge(v, edge) {
+          const prev = exact.get(v.id);
+          if (prev && prev.speed === v.speed && Math.abs(prev[edge] / prev.speed - v[edge]) < 1e-6)
+            return prev[edge];
+          return Math.min(probes[v.src].duration, r6(v[edge] * v.speed));
+        }
+
+        function toSource(view) {
+          const v1 = view.tracks.find((t) => t.id === "V1");
+          return {
+            tracks: [
+              {
+                id: "V1",
+                kind: "video",
+                name: "Picture",
+                clips: v1.clips.map((v) => ({
+                  id: v.id,
+                  src: v.src,
+                  label: v.label,
+                  in: srcEdge(v, "in"),
+                  out: srcEdge(v, "out"),
+                  start: v.start,
+                  speed: v.speed,
+                  volumeDb: v.volumeDb,
+                  muted: Boolean(v.muted),
+                  color: v.color,
+                })),
+              },
+            ],
+            playhead: view.playhead,
+            markers: view.markers,
+            range: view.range,
+          };
+        }
+
+        // The edit itself, without the playhead: what history steps, saves and change events compare.
+        const editOf = (src) => ({ tracks: src.tracks, markers: src.markers, range: src.range });
+        const mirrorKey = (view) =>
+          JSON.stringify(
+            view.tracks.map((t) =>
+              t.clips.map((c) => [c.id.replace(/-a$/, ""), c.src, c.in, c.out, c.start]),
+            ),
+          );
+
+        // Wraps the timeline so links.playerTimeline and history see the source EDL.
+        function makeAdapter(tl) {
+          const changeSubs = new Set();
+          tl.on("change", (view) => {
+            const [v, a] = JSON.parse(mirrorKey(view));
+            if (JSON.stringify(v) !== JSON.stringify(a)) scheduleMirror();
+            const src = toSource(view);
+            for (const cb of [...changeSubs]) cb(src);
+          });
+          return {
+            get: () => toSource(tl.get()),
+            set: (src) => tl.set(toView(src)),
+            on(event, cb) {
+              if (event !== "change") return tl.on(event, cb);
+              changeSubs.add(cb);
+              return () => changeSubs.delete(cb);
+            },
+            seek: (t) => tl.seek(t),
+            play: (rate) => tl.play(rate),
+            pause: () => tl.pause(),
+            setTransport: (h) => tl.setTransport(h),
+          };
+        }
+
+        function clipsOf(src) {
+          return src.tracks[0].clips;
+        }
+
+        function clampClip(c) {
+          const dur = probes[c.src].duration;
+          c.speed = clamp(c.speed, SPEED_MIN, SPEED_MAX);
+          c.in = clamp(c.in, 0, dur - MIN_CLIP);
+          c.out = clamp(c.out, c.in + MIN_CLIP, dur);
+          c.volumeDb = clamp(c.volumeDb, VOL_MIN, VOL_MAX);
+          c.start = Math.max(0, c.start);
+        }
+
+        function currentClip() {
+          const clips = clipsOf(adapter.get());
+          if (selectedId) {
+            const hit = clips.find((c) => c.id === selectedId);
+            if (hit) return hit;
+          }
+          const at = player.clipAt(player.time());
+          return (
+            (at && clips.find((c) => c.id === at.id)) ||
+            clips.slice().sort((a, b) => a.start - b.start)[0]
+          );
+        }
+
+        // ---- Edit operations -------------------------------------------------------
+        // Every template-side edit goes through applyEdl. A length change ripples the clips after the edited one.
+        function rippleEdit(src, id, fn) {
+          const clips = clipsOf(src);
+          const c = clips.find((x) => x.id === id);
+          if (!c) throw new Error(`Video Edit: no clip "${id}"`);
+          const oldLen = played(c);
+          const oldEnd = c.start + oldLen;
+          const oldStart = c.start;
+          fn(c);
+          clampClip(c);
+          const delta = played(c) - oldLen;
+          if (c.start === oldStart && Math.abs(delta) > 1e-6) {
+            for (const o of clips)
+              if (o !== c && o.start >= oldEnd - 1e-6) o.start = r6(Math.max(0, o.start + delta));
+          }
+          const sorted = clips.slice().sort((a, b) => a.start - b.start);
+          for (let i = 1; i < sorted.length; i++) {
+            const prev = sorted[i - 1];
+            if (sorted[i].start < prev.start + played(prev) - 1e-3)
+              throw new Error(`Video Edit: clip "${sorted[i].id}" would overlap "${prev.id}"`);
+          }
+        }
+
+        function editClip(fn) {
+          const current = currentClip();
+          if (!current) return;
+          const src = adapter.get();
+          rippleEdit(src, current.id, fn);
+          applyEdl(src);
+        }
+
+        function setMarkers(update, label) {
+          const src = adapter.get();
+          update(src);
+          applyEdl(src);
+          commit(label);
+        }
+
+        function addMarker() {
+          setMarkers((src) => {
+            const ids = new Set(src.markers.map((m) => m.id));
+            let n = src.markers.length + 1;
+            while (ids.has(`m${n}`)) n++;
+            src.markers.push({
+              id: `m${n}`,
+              time: r3(player.time()),
+              label: `Marker ${src.markers.length + 1}`,
+            });
+          }, "Add Marker");
+        }
+
+        function appendClip(name) {
+          const src = adapter.get();
+          const clips = clipsOf(src);
+          const end = clips.reduce((t, c) => Math.max(t, c.start + played(c)), 0);
+          const ids = new Set(clips.map((c) => c.id));
+          let n = clips.length + 1;
+          while (ids.has(`c${n}`)) n++;
+          clips.push(newClip(`c${n}`, name, 0, probes[name].duration, r6(end), LOOKS[opts.look]));
+          applyEdl(src);
+          timeline.fit();
+          commit(`Append ${name}`);
+        }
+
+        function stepSpeed(dir) {
+          const c = currentClip();
+          if (!c) return;
+          const next = clamp(
+            Math.round((c.speed + dir * SPEED_STEP) / SPEED_STEP) * SPEED_STEP,
+            SPEED_MIN,
+            SPEED_MAX,
+          );
+          if (next === c.speed) return;
+          editClip((x) => {
+            x.speed = next;
+          });
+          commit(`Speed ${fmtSpeed(next)}`);
+        }
+
+        function applyEdl(src) {
+          adapter.set(src);
+          playerLink.sync();
+          refresh();
+        }
+
+        function commit(label) {
+          historyLink.commit(label);
+        }
+
+        function scheduleMirror() {
+          clearTimeout(mirrorTimer);
+          mirrorTimer = setTimeout(() => {
+            mirrorTimer = 0;
+            adapter.set(adapter.get());
+            scheduleMedia();
+          }, 0);
+        }
+
+        function scheduleMedia() {
+          clearTimeout(mediaTimer);
+          mediaTimer = setTimeout(paintMedia, 120);
+        }
+
+        function scheduleSave() {
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(() => {
+            saveTimer = 0;
+            window.t3.workspace.setState({
+              v: 1,
+              edl: editOf(adapter.get()),
+              history: history.get(),
+              controls: rt.state(),
+            });
+          }, 300);
+        }
+
+        // Redraws everything that depends on the edit; emits 'change' only when the edit itself changed.
+        function refresh() {
+          renderInspector();
+          const key = JSON.stringify(editOf(adapter.get()));
+          if (key === lastEditKey) return;
+          lastEditKey = key;
+          infoMemo = null;
+          if (api) rt.refresh(); // overlay timing and frame size follow the edit
+          renderMarkers();
+          updateWaveform();
+          scheduleMedia();
+          scheduleSave();
+          emitChange();
+        }
+
+        function emitChange() {
+          if (api) rt.emitChange();
+        }
+
+        // ---- Thumbnails and waveforms on the timeline ------------------------------
+        async function paintMedia() {
+          const token = ++mediaToken;
+          for (const c of clipsOf(adapter.get())) {
+            const key = JSON.stringify([c.src, c.in, c.out, c.speed, c.color]);
+            if (thumbKeys.get(c.id) === key) continue;
+            const len = played(c);
+            const frames = [];
+            for (let k = 0; k < THUMBS; k++) {
+              frames.push(
+                await player.frame(c.start + ((k + 0.5) * len) / THUMBS, { maxSide: 160 }),
+              );
+              if (token !== mediaToken) return;
+            }
+            await timeline.setThumbnails(c.id, frames);
+            const peaks = await peaksFor(c.src);
+            if (token !== mediaToken) return;
+            if (timeline.get().tracks[1].clips.some((x) => x.id === `${c.id}-a`)) {
+              timeline.setWaveform(`${c.id}-a`, peaks, {
+                in: 0,
+                out: probes[c.src].duration / c.speed,
+              });
+            }
+            thumbKeys.set(c.id, key);
+          }
+        }
+
+        // ---- Source waveform (trims the current clip) ------------------------------
+        function updateWaveform() {
+          const c = currentClip();
+          ui.sourceName.textContent = c ? `${c.src} · ${fmtT(c.in)} – ${fmtT(c.out)}` : "";
+          if (!c) return;
+          if (c.src !== wfSrc) {
+            wfSrc = c.src;
+            wfReady = false;
+            const src = c.src;
+            waveform.setMedia(files[src]).then(() => {
+              if (wfSrc === src) {
+                wfReady = true;
+                syncWaveSelection();
+              }
+            });
+          } else if (wfReady) {
+            syncWaveSelection();
+          }
+        }
+
+        function syncWaveSelection() {
+          const c = currentClip();
+          if (!c || c.src !== wfSrc) return;
+          waveform.set({ selection: { start: c.in, end: c.out } });
+        }
+
+        function onWaveChange({ selection }) {
+          if (!wfReady || !selection || selection.end - selection.start < MIN_CLIP) return;
+          const c = currentClip();
+          if (!c || c.src !== wfSrc) return;
+          if (Math.abs(selection.start - c.in) < 1e-3 && Math.abs(selection.end - c.out) < 1e-3)
+            return;
+          editClip((x) => {
+            x.in = selection.start;
+            x.out = selection.end;
+          });
+          clearTimeout(wfTimer);
+          wfTimer = setTimeout(() => commit("Trim"), 400);
+        }
+
+        // ---- Inspector -------------------------------------------------------------
+        function cardHead(title, right) {
+          const h = el("div", "card-head");
+          h.append(el("h2", null, title));
+          if (right) h.append(right);
+          return h;
+        }
+
+        function button(label, cls, onClick, title) {
+          const b = el("button", cls, label);
+          b.type = "button";
+          if (title) b.title = title;
+          b.addEventListener("click", onClick);
+          return b;
+        }
+
+        function slider(parent, label, min, max, step, fmt, onInput, onCommit) {
+          const row = el("div", "row");
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = String(min);
+          input.max = String(max);
+          input.step = String(step);
+          input.setAttribute("aria-label", label);
+          const output = el("output");
+          input.addEventListener("input", () => onInput(Number(input.value)));
+          input.addEventListener("change", () => onCommit(Number(input.value)));
+          row.append(el("span", null, label), input, output);
+          parent.append(row);
+          return { input, output, fmt, row };
+        }
+
+        function setSlider(s, value, enabled) {
+          s.input.value = String(value);
+          s.input.disabled = !enabled;
+          s.output.textContent = s.fmt(value);
+        }
+
+        // The layout is fixed (Picture + locked Sound), so track adding, track mute/lock and the timeline's own undo are
+        // hidden: undo lives in History, and extra tracks would be dropped on the next sync. The timeline re-renders its
+        // track headers when tracks change, so hiding is re-applied on DOM changes.
+        const TIMELINE_HIDDEN = /^(\+ Video|\+ Audio|Undo|Redo|Mute|Lock)$/;
+        function hideTimelineChrome() {
+          const hide = () => {
+            for (const b of ui.timeline.querySelectorAll("button")) {
+              if (b.style.display !== "none" && TIMELINE_HIDDEN.test(b.textContent.trim()))
+                b.style.display = "none";
+            }
+          };
+          hide();
+          new MutationObserver(hide).observe(ui.timeline, { childList: true, subtree: true });
+        }
+
+        function buildInspector(videos) {
+          const root = ui.inspector;
+
+          const clip = el("section", "card");
+          clip.append(cardHead("Clip"));
+          ui.clipTitle = el("div", "clip-title");
+          ui.clipMeta = el("div", "clip-meta");
+          clip.append(ui.clipTitle, ui.clipMeta);
+          ui.speed = slider(
+            clip,
+            "Speed",
+            SPEED_MIN,
+            SPEED_MAX,
+            0.05,
+            fmtSpeed,
+            (v) =>
+              editClip((c) => {
+                c.speed = v;
+              }),
+            (v) => commit(`Speed ${fmtSpeed(v)}`),
+          );
+          ui.speed.input.title = "Speed ([ and ] step by 0.25×)";
+          ui.volume = slider(
+            clip,
+            "Volume",
+            VOL_MIN,
+            VOL_MAX,
+            0.5,
+            fmtDb,
+            (v) =>
+              editClip((c) => {
+                c.volumeDb = v;
+              }),
+            (v) => commit(`Volume ${fmtDb(v)}`),
+          );
+          ui.mute = button(
+            "Mute",
+            "btn sm",
+            () => {
+              const c = currentClip();
+              if (!c) return;
+              editClip((x) => {
+                x.muted = !c.muted;
+              });
+              commit(c.muted ? "Unmute Clip" : "Mute Clip");
+            },
+            "Mute this clip",
+          );
+          ui.volume.row.classList.add("row-mute");
+          ui.volume.row.append(ui.mute);
+          const looks = el("div", "looks");
+          ui.looks = {};
+          for (const name of LOOK_NAMES) {
+            const b = button(
+              cap(name),
+              "btn",
+              () => {
+                editClip((c) => {
+                  c.color = { ...LOOKS[name] };
+                });
+                commit(`Look ${cap(name)}`);
+              },
+              `${cap(name)} look`,
+            );
+            looks.append(b);
+            ui.looks[name] = b;
+          }
+          clip.append(looks);
+          ui.color = {};
+          for (const [key, label] of COLOR_KEYS) {
+            ui.color[key] = slider(
+              clip,
+              label,
+              -100,
+              100,
+              1,
+              fmtSigned,
+              (v) =>
+                editClip((c) => {
+                  c.color = { ...NEUTRAL, ...c.color, [key]: v };
+                }),
+              (v) => commit(`${label} ${fmtSigned(v)}`),
+            );
+          }
+          ui.presetWrap = el("div", "preset-wrap");
+          ui.presetWrap.hidden = true;
+          ui.presets = el("div", "presets");
+          ui.presetWrap.append(el("div", "sub", "Presets"), ui.presets);
+          clip.append(ui.presetWrap);
+
+          const media = el("section", "card");
+          media.append(cardHead("Media"));
+          const list = el("ul", "list");
+          for (const a of videos) {
+            const li = el("li", "media");
+            const name = el("span", "name", a.name);
+            name.title = a.name;
+            li.append(
+              name,
+              el("span", "dur", fmtT(probes[a.name].duration)),
+              button(
+                "Append",
+                "btn sm",
+                () => appendClip(a.name),
+                `Add ${a.name} to the end of the edit`,
+              ),
+            );
+            list.append(li);
+          }
+          media.append(list);
+
+          const marks = el("section", "card");
+          ui.markerList = el("ul", "list");
+          marks.append(
+            cardHead(
+              "Markers",
+              button("Add at Playhead", "btn sm", addMarker, "Add a marker at the playhead (M)"),
+            ),
+            ui.markerList,
+          );
+
+          const hist = el("section", "history-card");
+          ui.history = el("div", "history-host");
+          hist.append(ui.history);
+
+          ui.composer = el("div", "composer");
+          ui.composer.setAttribute("data-t3-composer", "");
+
+          root.append(clip, media, marks, hist, ui.composer);
+        }
+
+        function matchLook(col) {
+          const same = (a, b) =>
+            COLOR_KEYS.every(([k]) => (a[k] ?? 0) === (b[k] ?? 0)) &&
+            (a.look ?? null) === (b.look ?? null);
+          return LOOK_NAMES.find((n) => same(LOOKS[n], col)) ?? null;
+        }
+
+        function renderInspector() {
+          const c = currentClip();
+          shownClipId = c ? c.id : null;
+          const on = Boolean(c);
+          ui.clipTitle.textContent = c ? (c.label ?? c.src) : "No clip";
+          ui.clipMeta.textContent = c
+            ? `Source ${fmtT(c.in)} – ${fmtT(c.out)} · ${played(c).toFixed(2)} s`
+            : "Append a clip from Media to start editing";
+          setSlider(ui.speed, on ? c.speed : 1, on);
+          setSlider(ui.volume, on ? c.volumeDb : 0, on);
+          ui.mute.disabled = !on;
+          ui.mute.setAttribute("aria-pressed", String(Boolean(c?.muted)));
+          ui.mute.textContent = c?.muted ? "Muted" : "Mute";
+          ui.volume.input.disabled = !on || Boolean(c?.muted);
+          for (const [key] of COLOR_KEYS)
+            setSlider(ui.color[key], on ? (c.color[key] ?? 0) : 0, on);
+          const active = on ? matchLook(c.color) : null;
+          for (const name of LOOK_NAMES) {
+            ui.looks[name].disabled = !on;
+            ui.looks[name].setAttribute("aria-pressed", String(active === name));
+          }
+        }
+
+        function renderPresets() {
+          ui.presets.replaceChildren();
+          ui.presetWrap.hidden = presets.size === 0;
+          for (const name of presets.keys()) {
+            ui.presets.append(
+              button(
+                name,
+                "btn sm",
+                () => api.applyPreset(name),
+                `Apply preset ${name} to the current clip`,
+              ),
+            );
+          }
+        }
+
+        function renderMarkers() {
+          const list = ui.markerList;
+          list.replaceChildren();
+          const ms = adapter
+            .get()
+            .markers.slice()
+            .sort((a, b) => a.time - b.time);
+          if (!ms.length) {
+            list.append(el("li", "empty", "No markers. Press M or use Add at Playhead."));
+            return;
+          }
+          for (const m of ms) {
+            const li = el("li", "marker");
+            const time = button(fmtT(m.time), "mtime", () => player.seek(m.time), "Seek to marker");
+            const label = document.createElement("input");
+            label.type = "text";
+            label.value = m.label ?? "";
+            label.placeholder = "Label";
+            label.setAttribute("aria-label", "Marker label");
+            label.addEventListener("change", () => {
+              if (label.value === (m.label ?? "")) return;
+              setMarkers((src) => {
+                src.markers.find((x) => x.id === m.id).label = label.value;
+              }, "Rename Marker");
+            });
+            const del = button(
+              "×",
+              "mdel",
+              () => {
+                setMarkers((src) => {
+                  src.markers = src.markers.filter((x) => x.id !== m.id);
+                }, "Delete Marker");
+              },
+              "Delete marker",
+            );
+            li.append(time, label, del);
+            list.append(li);
+          }
+        }
+
+        // ---- Export ----------------------------------------------------------------
+        // The player colours with a CSS filter chain; each step maps to an exact RGB matrix or LUT in ffmpeg.
+        function colourOps(col) {
+          const c = { ...NEUTRAL, ...col };
+          const ops = [];
+          const k = (v) => clamp(v, -100, 100) / 100;
+          if (c.brightness) ops.push(["brightness", 1 + k(c.brightness)]);
+          if (c.contrast) ops.push(["contrast", 1 + k(c.contrast)]);
+          if (c.saturation) ops.push(["saturate", 1 + k(c.saturation)]);
+          if (c.temp > 0) ops.push(["sepia", k(c.temp) * 0.3]);
+          if (c.temp < 0) ops.push(["hue", k(c.temp) * 15]);
+          if (c.look) {
+            if (!PLAYER_LOOK_OPS[c.look])
+              throw new Error(`Video Edit: no ffmpeg mapping for look "${c.look}"`);
+            ops.push(...PLAYER_LOOK_OPS[c.look]);
+          }
+          return ops;
+        }
+
+        function mixer(m) {
+          const n = ["rr", "rg", "rb", "gr", "gg", "gb", "br", "bg", "bb"];
+          return `colorchannelmixer=${m.map((v, i) => `${n[i]}=${num(v)}`).join(":")}`;
+        }
+
+        function opFilter([op, a]) {
+          if (op === "brightness") return mixer([a, 0, 0, 0, a, 0, 0, 0, a]);
+          if (op === "contrast") {
+            const off = 127.5 * (1 - a);
+            const e = `val*${num(a)}${off >= 0 ? "+" : "-"}${num(Math.abs(off))}`;
+            return `lutrgb=r=${e}:g=${e}:b=${e}`;
+          }
+          if (op === "saturate") {
+            return mixer([
+              0.213 + 0.787 * a,
+              0.715 - 0.715 * a,
+              0.072 - 0.072 * a,
+              0.213 - 0.213 * a,
+              0.715 + 0.285 * a,
+              0.072 - 0.072 * a,
+              0.213 - 0.213 * a,
+              0.715 - 0.715 * a,
+              0.072 + 0.928 * a,
+            ]);
+          }
+          if (op === "grayscale") {
+            const g = 1 - a;
+            return mixer([
+              0.2126 + 0.7874 * g,
+              0.7152 - 0.7152 * g,
+              0.0722 - 0.0722 * g,
+              0.2126 - 0.2126 * g,
+              0.7152 + 0.2848 * g,
+              0.0722 - 0.0722 * g,
+              0.2126 - 0.2126 * g,
+              0.7152 - 0.7152 * g,
+              0.0722 + 0.9278 * g,
+            ]);
+          }
+          if (op === "sepia") {
+            const g = 1 - a;
+            return mixer([
+              0.393 + 0.607 * g,
+              0.769 - 0.769 * g,
+              0.189 - 0.189 * g,
+              0.349 - 0.349 * g,
+              0.686 + 0.314 * g,
+              0.168 - 0.168 * g,
+              0.272 - 0.272 * g,
+              0.534 - 0.534 * g,
+              0.131 + 0.869 * g,
+            ]);
+          }
+          if (op === "hue") {
+            const r = (a * Math.PI) / 180,
+              cs = Math.cos(r),
+              sn = Math.sin(r);
+            return mixer([
+              0.213 + cs * 0.787 - sn * 0.213,
+              0.715 - cs * 0.715 - sn * 0.715,
+              0.072 - cs * 0.072 + sn * 0.928,
+              0.213 - cs * 0.213 + sn * 0.143,
+              0.715 + cs * 0.285 + sn * 0.14,
+              0.072 - cs * 0.072 - sn * 0.283,
+              0.213 - cs * 0.213 - sn * 0.787,
+              0.715 - cs * 0.715 + sn * 0.715,
+              0.072 + cs * 0.928 + sn * 0.072,
+            ]);
+          }
+          throw new Error(`Video Edit: unknown colour step "${op}"`);
+        }
+
+        // Bolt-on helper (t3template.grade): one colour adjustment as the preview CSS filter plus the ffmpeg chain that
+        // renders it identically, using the same steps as the per-clip colour.
+        const CSS_OPS = {
+          brightness: (a) => `brightness(${num(a)})`,
+          contrast: (a) => `contrast(${num(a)})`,
+          saturate: (a) => `saturate(${num(a)})`,
+          sepia: (a) => `sepia(${num(a)})`,
+          hue: (a) => `hue-rotate(${num(a)}deg)`,
+          grayscale: (a) => `grayscale(${num(a)})`,
+        };
+        function grade(col) {
+          if (!isObj(col))
+            throw new TypeError(
+              "t3template.grade({ brightness?, contrast?, saturation?, temp? }) needs an object of -100..100 values",
+            );
+          for (const [k, v] of Object.entries(col)) {
+            if (!COLOR_KEYS.some(([c]) => c === k))
+              throw new TypeError(
+                `t3template.grade: unknown key "${k}" (use ${COLOR_KEYS.map(([c]) => c).join(", ")})`,
+              );
+            if (!(isNum(v) && v >= -100 && v <= 100))
+              throw new RangeError(`t3template.grade: ${k} must be -100..100`);
+          }
+          const ops = colourOps(col);
+          return {
+            css: ops.map(([op, a]) => CSS_OPS[op](a)).join(" "),
+            ffmpeg: ops.length ? `format=rgb24,${ops.map(opFilter).join(",")}` : "",
+          };
+        }
+
+        function colourFilters(col) {
+          const ops = colourOps(col);
+          return ops.length ? `,format=rgb24,${ops.map(opFilter).join(",")}` : "";
+        }
+
+        function tempoFilters(speed) {
+          const steps = [];
+          let r = speed;
+          while (r > 2 + 1e-9) {
+            steps.push(2);
+            r /= 2;
+          }
+          while (r < 0.5 - 1e-9) {
+            steps.push(0.5);
+            r /= 0.5;
+          }
+          if (Math.abs(r - 1) > 1e-9) steps.push(r);
+          return steps.map((s) => `,atempo=${num(s)}`).join("");
+        }
+
+        function outputSize(clips) {
+          const p = probes[clips[0].src];
+          const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+          return p.width && p.height
+            ? { w: even(p.width), h: even(p.height) }
+            : { w: 1280, h: 720 };
+        }
+
+        const sq = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+
+        // fx: bolt-on ffmpeg filter fragments from t3template.addExportNote, chained onto the concatenated output.
+        // overlays: bolt-on PNGs (t3template.addOverlay) composited over the edit in their time range, before fx.
+        function ffmpegCommand(clips, size, output, fx, overlays = []) {
+          if (!clips.length)
+            throw new Error("Video Edit: nothing to export, the timeline has no clips");
+          const { w, h } = size;
+          const graph = [];
+          const seq = [];
+          let cursor = 0;
+          let gaps = 0;
+          const addGap = (d) => {
+            const g = gaps++;
+            graph.push(
+              `color=c=black:s=${w}x${h}:r=${FPS}:d=${num(d)},format=yuv420p,setsar=1[gv${g}]`,
+            );
+            graph.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${num(d)}[ga${g}]`);
+            seq.push(`[gv${g}][ga${g}]`);
+          };
+          // One -i per clip keeps every input used once in the graph.
+          clips.forEach((c, i) => {
+            if (c.start - cursor > 1e-3) addGap(c.start - cursor);
+            const len = played(c);
+            graph.push(
+              `[${i}:v]trim=start=${num(c.in)}:end=${num(c.out)},setpts=(PTS-STARTPTS)/${num(c.speed)},scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${FPS}${colourFilters(c.color)},format=yuv420p[v${i}]`,
+            );
+            const gain = c.muted ? "volume=0" : `volume=${num(c.volumeDb)}dB`;
+            graph.push(
+              `[${i}:a]atrim=start=${num(c.in)}:end=${num(c.out)},asetpts=PTS-STARTPTS${tempoFilters(c.speed)},${gain},aformat=sample_rates=48000:channel_layouts=stereo,apad,atrim=duration=${num(len)}[a${i}]`,
+            );
+            seq.push(`[v${i}][a${i}]`);
+            cursor = c.start + len;
+          });
+          graph.push(`${seq.join("")}concat=n=${seq.length}:v=1:a=1[outv][outa]`);
+          let vOut = "[outv]";
+          let aOut = "[outa]";
+          overlays.forEach((o, k) => {
+            graph.push(
+              `${vOut}[${clips.length + k}:v]overlay=0:0:format=auto:enable='between(t,${num(o.start)},${num(o.end)})'[ov${k}]`,
+            );
+            vOut = `[ov${k}]`;
+          });
+          if (fx.video.length) {
+            graph.push(`${vOut}${fx.video.join(",")},format=yuv420p[fxv]`);
+            vOut = "[fxv]";
+          } else if (overlays.length) {
+            graph.push(`${vOut}format=yuv420p[fxv]`);
+            vOut = "[fxv]";
+          }
+          if (fx.audio.length) {
+            graph.push(`[outa]${fx.audio.join(",")}[fxa]`);
+            aOut = "[fxa]";
+          }
+          return [
+            "ffmpeg -y \\",
+            ...clips.map((c) => `  -i ${shellQuote(c.src)} \\`),
+            ...overlays.map((o) => `  -i ${shellQuote(o.file)} \\`),
+            `  -filter_complex ${sq(graph.join(";"))} \\`,
+            `  -map "${vOut}" -map "${aOut}" -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart \\`,
+            `  ${shellQuote(output)}`,
+          ].join("\n");
+        }
+
+        // The EDL goes through the bolt-on transforms first; the render command is then built from the transformed EDL,
+        // so whatever a bolt-on changes is what ffmpeg renders. phase 'preview' reports a failing bolt-on and skips it.
+        // Third argument of every EDL hook: which clip the user is on and where the playhead is.
+        function hookInfo() {
+          const cur = currentClip();
+          return { clipId: cur ? cur.id : null, playhead: player.time() };
+        }
+        // Size and length of the rendered picture: what bolt-on overlays are drawn at.
+        function frameInfo() {
+          const clips = clipsOf(adapter.get());
+          const size = outputSize(clips.slice().sort((a, b) => a.start - b.start));
+          return {
+            width: size.w,
+            height: size.h,
+            duration: r6(clips.reduce((t, c) => Math.max(t, c.start + played(c)), 0)),
+          };
+        }
+        function buildEdl({ phase = "export" } = {}) {
+          const src = adapter.get();
+          const clips = clipsOf(src)
+            .slice()
+            .sort((a, b) => a.start - b.start);
+          const name = slug(opts.title);
+          const size = outputSize(clips);
+          let edl = {
+            format: "t3-edl/1",
+            title: opts.title,
+            fps: FPS,
+            width: size.w,
+            height: size.h,
+            duration: 0,
+            sources: Object.fromEntries(
+              Object.keys(probes).map((k) => [
+                k,
+                {
+                  duration: r3(probes[k].duration),
+                  width: probes[k].width,
+                  height: probes[k].height,
+                },
+              ]),
+            ),
+            tracks: [
+              {
+                id: "V1",
+                kind: "video",
+                clips: clips.map((c) => ({
+                  id: c.id,
+                  label: c.label ?? c.src,
+                  source: c.src,
+                  in: r3(c.in),
+                  out: r3(c.out),
+                  start: r3(c.start),
+                  duration: r3(played(c)),
+                  speed: c.speed,
+                  volumeDb: c.volumeDb,
+                  muted: Boolean(c.muted),
+                  color: { ...NEUTRAL, ...c.color },
+                })),
+              },
+            ],
+            markers: src.markers
+              .slice()
+              .sort((a, b) => a.time - b.time)
+              .map((m) => ({ id: m.id, time: r3(m.time), label: m.label ?? "" })),
+          };
+          const info = hookInfo();
+          edl = rt.transformEdl(edl, { phase, info });
+          const out = edl.tracks?.[0]?.clips;
+          if (!Array.isArray(out))
+            throw new Error("Video Edit: a bolt-on EDL transform removed tracks[0].clips");
+          const seen = new Set();
+          for (const c of out) {
+            if (typeof c.id !== "string" || !c.id)
+              throw new Error(
+                "Video Edit: every EDL clip needs a string id (a bolt-on transform left one out)",
+              );
+            if (seen.has(c.id))
+              throw new Error(
+                `Video Edit: EDL clip id "${c.id}" is used twice; give every clip a transform adds or splits its own id (e.g. "${c.id}-2")`,
+              );
+            seen.add(c.id);
+          }
+          const renderClips = out
+            .map((c, i) => {
+              if (!probes[c.source])
+                throw new Error(
+                  `Video Edit: EDL clip ${i + 1} uses source "${c.source}", which is not attached`,
+                );
+              c.duration = r3((c.out - c.in) / c.speed);
+              return {
+                src: c.source,
+                in: c.in,
+                out: c.out,
+                start: c.start,
+                speed: c.speed,
+                volumeDb: c.volumeDb,
+                muted: Boolean(c.muted),
+                color: c.color,
+              };
+            })
+            .sort((a, b) => a.start - b.start);
+          edl.duration = r3(renderClips.reduce((t, c) => Math.max(t, c.start + played(c)), 0));
+          const fx = rt.exportFilters(edl, { phase, info });
+          const overlays = rt
+            .renderOverlays({ phase })
+            .map((o) => ({
+              ...o,
+              file: `${name}-overlay-${o.id}.png`,
+              start: r3(o.start),
+              end: r3(o.end),
+            }));
+          const command = ffmpegCommand(
+            renderClips,
+            { w: edl.width, h: edl.height },
+            `${name}.mp4`,
+            fx,
+            overlays,
+          );
+          edl.render = {
+            output: `${name}.mp4`,
+            script: `${name}.render.sh`,
+            command,
+            notes:
+              "Run in the folder that holds the sources, named as in sources. Gaps render as black and silence. Colour matches the preview filter chain.",
+            boltOn: {
+              controls: rt.state(),
+              videoFilter: fx.video.join(","),
+              audioFilter: fx.audio.join(","),
+              notes: fx.notes,
+              overlays: overlays.map((o) => ({
+                id: o.id,
+                file: o.file,
+                start: o.start,
+                end: o.end,
+              })),
+            },
+          };
+          const script = [
+            "#!/bin/sh",
+            `# Renders ${name}.mp4 from ${name}.edl.json. Run it in the folder that holds the source files.`,
+            ...fx.notes.map((n) => `# ${String(n).replace(/\s+/g, " ")}`),
+            "set -e",
+            command,
+            "",
+          ].join("\n");
+          return { edl, script, overlays };
+        }
+
+        async function deliver(file) {
+          await window.t3.workspace.attach(file);
+          await window.t3.workspace.download(file, file.name);
+        }
+
+        const pngOf = (canvas, what) =>
+          new Promise((resolve, reject) => {
+            canvas.toBlob(
+              (b) =>
+                b ? resolve(b) : reject(new Error(`Video Edit: could not encode ${what} as PNG`)),
+              "image/png",
+            );
+          });
+
+        // { edl, files, ffmpeg }: everything delivered, plus the render command (what t3template.export() reports).
+        async function exportFiles() {
+          const { edl, script, overlays } = buildEdl();
+          const name = slug(opts.title);
+          ui.status.textContent = "Exporting…";
+          const files = [
+            new File([JSON.stringify(edl, null, 2)], `${name}.edl.json`, {
+              type: "application/json",
+            }),
+            new File([script], `${name}.render.sh`, { type: "text/x-shellscript" }),
+          ];
+          for (const o of overlays)
+            files.push(
+              new File([await pngOf(o.canvas, `overlay "${o.id}"`)], o.file, { type: "image/png" }),
+            );
+          for (const f of files) await deliver(f);
+          const n = edl.tracks[0].clips.length;
+          const extra = overlays.length
+            ? `, ${overlays.length} ${overlays.length === 1 ? "overlay" : "overlays"}`
+            : "";
+          ui.status.textContent = `Exported ${n} ${n === 1 ? "clip" : "clips"}, ${edl.markers.length} ${edl.markers.length === 1 ? "marker" : "markers"}${extra} and the render script`;
+          return { edl, files, ffmpeg: [edl.render.command] };
+        }
+        async function exportEdl() {
+          return (await exportFiles()).edl;
+        }
+
+        async function exportStill() {
+          const t = player.time();
+          let canvas = rt.drawOverlays(await player.frame(t, { maxSide: Infinity }), t);
+          const css = rt.previewFilter(); // bolt-on preview filters apply to stills too, over the overlays as on screen
+          if (css) {
+            const out = document.createElement("canvas");
+            out.width = canvas.width;
+            out.height = canvas.height;
+            const ctx = out.getContext("2d");
+            ctx.filter = css;
+            ctx.drawImage(canvas, 0, 0);
+            canvas = out;
+          }
+          const blob = await pngOf(canvas, "the still");
+          const file = new File([blob], `${slug(opts.title)}-${t.toFixed(2)}s.png`, {
+            type: "image/png",
+          });
+          await deliver(file);
+          ui.status.textContent = `Exported still ${file.name}`;
+          return file;
+        }
+
+        const report = (err) => rt.reportError(err);
+
+        // ---- Bolt-on API (window.t3template) ---------------------------------------
+        // Second argument of preview filters: the playhead and the clip under it (null in a gap).
+        let infoMemo = null; // { clipId, info }, cleared on every edit so playback does not re-read the timeline per frame
+        function previewInfo(clipId) {
+          if (infoMemo && infoMemo.clipId === clipId) return infoMemo.info;
+          const c = clipId ? clipsOf(adapter.get()).find((x) => x.id === clipId) : null;
+          const info = {
+            clip: c
+              ? {
+                  id: c.id,
+                  start: c.start,
+                  duration: r6(played(c)),
+                  in: c.in,
+                  out: c.out,
+                  speed: c.speed,
+                }
+              : null,
+          };
+          infoMemo = { clipId, info };
+          return info;
+        }
+        function publicClip(c) {
+          return {
+            id: c.id,
+            src: c.src,
+            label: c.label,
+            start: c.start,
+            in: c.in,
+            out: c.out,
+            duration: r6(played(c)),
+            speed: c.speed,
+            volumeDb: c.volumeDb,
+            muted: Boolean(c.muted),
+            color: { ...NEUTRAL, ...c.color },
+            look: matchLook(c.color),
+          };
+        }
+
+        function getValues() {
+          const src = adapter.get();
+          const clips = clipsOf(src)
+            .slice()
+            .sort((a, b) => a.start - b.start);
+          const cur = currentClip();
+          return {
+            title: opts.title,
+            duration: r6(clips.reduce((t, c) => Math.max(t, c.start + played(c)), 0)),
+            playhead: player.time(),
+            clip: cur ? publicClip(cur) : null,
+            clips: clips.map(publicClip),
+            markers: src.markers
+              .slice()
+              .sort((a, b) => a.time - b.time)
+              .map((m) => ({ id: m.id, time: m.time, label: m.label ?? "" })),
+          };
+        }
+
+        // A clip patch in source seconds. Throws (without applying) on anything invalid.
+        function checkPatch(p, where) {
+          if (!isObj(p)) throw new TypeError(`${where} must be an object`);
+          for (const key of Object.keys(p)) {
+            if (key !== "id" && !CLIP_KEYS.includes(key))
+              throw new TypeError(`${where}: unknown key "${key}" (use ${CLIP_KEYS.join(", ")})`);
+          }
+          for (const key of ["in", "out", "start"])
+            if (p[key] !== undefined && !isNonNeg(p[key]))
+              throw new TypeError(`${where}.${key} must be seconds >= 0`);
+          if (
+            p.speed !== undefined &&
+            !(isNum(p.speed) && p.speed >= SPEED_MIN && p.speed <= SPEED_MAX)
+          )
+            throw new RangeError(`${where}.speed must be ${SPEED_MIN}..${SPEED_MAX}`);
+          if (
+            p.volumeDb !== undefined &&
+            !(isNum(p.volumeDb) && p.volumeDb >= VOL_MIN && p.volumeDb <= VOL_MAX)
+          )
+            throw new RangeError(`${where}.volumeDb must be ${VOL_MIN}..${VOL_MAX}`);
+          if (p.muted !== undefined && typeof p.muted !== "boolean")
+            throw new TypeError(`${where}.muted must be a boolean`);
+          if (p.label !== undefined && typeof p.label !== "string")
+            throw new TypeError(`${where}.label must be a string`);
+          if (p.look !== undefined && !LOOK_NAMES.includes(p.look))
+            throw new RangeError(`${where}.look must be one of ${LOOK_NAMES.join(", ")}`);
+          if (p.color !== undefined) {
+            if (!isObj(p.color)) throw new TypeError(`${where}.color must be an object`);
+            for (const [k, v] of Object.entries(p.color)) {
+              if (k === "look") {
+                if (v !== undefined && v !== null && !PLAYER_LOOK_OPS[v])
+                  throw new RangeError(
+                    `${where}.color.look must be one of ${Object.keys(PLAYER_LOOK_OPS).join(", ")}`,
+                  );
+              } else if (!COLOR_KEYS.some(([c]) => c === k))
+                throw new TypeError(`${where}.color: unknown key "${k}"`);
+              else if (!(isNum(v) && v >= -100 && v <= 100))
+                throw new RangeError(`${where}.color.${k} must be -100..100`);
+            }
+          }
+        }
+
+        function patchClip(c, p) {
+          if (p.in !== undefined) c.in = p.in;
+          if (p.out !== undefined) c.out = p.out;
+          if (p.start !== undefined) c.start = p.start;
+          if (p.speed !== undefined) c.speed = p.speed;
+          if (p.volumeDb !== undefined) c.volumeDb = p.volumeDb;
+          if (p.muted !== undefined) c.muted = p.muted;
+          if (p.label !== undefined) c.label = p.label;
+          if (p.look !== undefined) c.color = { ...LOOKS[p.look] };
+          if (p.color !== undefined) {
+            c.color = { ...NEUTRAL, ...c.color, ...p.color };
+            if (c.color.look == null) delete c.color.look;
+          }
+          if (c.out - c.in < MIN_CLIP)
+            throw new RangeError(`clip "${c.id}": out must be at least ${MIN_CLIP} s after in`);
+          if (c.out > probes[c.src].duration + 1e-3)
+            throw new RangeError(
+              `clip "${c.id}": out is past the end of ${c.src} (${r3(probes[c.src].duration)} s)`,
+            );
+        }
+
+        // setValues({ clip?, clips?, markers?, playhead? }, label?) -> getValues()
+        //   clip: patch for the current clip; clips: [{ id, ...patch }]; markers: [{ time, label?, id? }] replaces all.
+        function setValues(partial, label = "Script Edit") {
+          if (!isObj(partial)) throw new TypeError("setValues(partial) needs an object");
+          for (const key of Object.keys(partial)) {
+            if (!["clip", "clips", "markers", "playhead"].includes(key))
+              throw new TypeError(
+                `setValues: unknown key "${key}" (use clip, clips, markers, playhead)`,
+              );
+          }
+          const src = adapter.get();
+          const ids = new Set(clipsOf(src).map((c) => c.id));
+          const patches = [];
+          if (partial.clip !== undefined) {
+            checkPatch(partial.clip, "setValues.clip");
+            const cur = currentClip();
+            if (!cur) throw new Error("setValues.clip: there is no current clip");
+            patches.push({ ...partial.clip, id: cur.id });
+          }
+          if (partial.clips !== undefined) {
+            if (!Array.isArray(partial.clips))
+              throw new TypeError("setValues.clips must be an array");
+            partial.clips.forEach((p, i) => {
+              checkPatch(p, `setValues.clips[${i}]`);
+              if (!ids.has(p.id))
+                throw new Error(
+                  `setValues.clips[${i}]: no clip "${p.id}" (ids: ${[...ids].join(", ")})`,
+                );
+              patches.push(p);
+            });
+          }
+          if (partial.markers !== undefined && !markersOk(partial.markers))
+            throw new TypeError(
+              "setValues.markers must be [{ time: seconds >= 0, label?: string }]",
+            );
+          if (partial.playhead !== undefined && !isNonNeg(partial.playhead))
+            throw new TypeError("setValues.playhead must be seconds >= 0");
+          for (const p of patches) rippleEdit(src, p.id, (c) => patchClip(c, p));
+          if (partial.markers) {
+            src.markers = partial.markers.map((m, i) => ({
+              id: typeof m.id === "string" && m.id ? m.id : `m${i + 1}`,
+              time: m.time,
+              label: m.label ?? `Marker ${i + 1}`,
+            }));
+          }
+          if (patches.length || partial.markers) {
+            applyEdl(src);
+            commit(label);
+          }
+          if (partial.playhead !== undefined) player.seek(partial.playhead);
+          return getValues();
+        }
+
+        function createRuntime() {
+          return window.t3kit.templateRuntime.create({
+            id: "video-edit",
+            pipeline: "edl",
+            // 'top': first in the inspector, above Clip (in creation order); 'bottom': after History, above the composer.
+            addPanel(title, { open, position }) {
+              const d = el("details", "panel");
+              d.open = open;
+              const body = el("div", "panel-body");
+              d.append(el("summary", null, title), body);
+              ui.inspector.insertBefore(
+                d,
+                position === "top" ? ui.inspector.querySelector("section.card") : ui.composer,
+              );
+              return body;
+            },
+            toolbar: ui.toolbar,
+            buttonClass: "btn",
+            previewTarget: ui.monitor,
+            frame: () => frameInfo(),
+            export: () => exportFiles(),
+            // Bolt-on audio filters play live through the monitor and the source waveform (Web Audio), as ffmpeg renders them.
+            audioPreview: () => [player, waveform],
+            // In T3 with native chrome the header actions move into T3's toolbar.
+            chrome: {
+              toolbar: () => [
+                {
+                  type: "button",
+                  id: "play",
+                  label: "Play / Pause",
+                  icon: "play",
+                  shortcut: "k",
+                  run: () => player.toggle(),
+                },
+                { type: "separator" },
+                {
+                  type: "button",
+                  id: "marker",
+                  label: "Add Marker",
+                  icon: "bookmark-plus",
+                  shortcut: "m",
+                  run: () => addMarker(),
+                },
+                {
+                  type: "button",
+                  id: "slower",
+                  label: "Slower",
+                  icon: "rewind",
+                  shortcut: "[",
+                  run: () => stepSpeed(-1),
+                },
+                {
+                  type: "button",
+                  id: "faster",
+                  label: "Faster",
+                  icon: "fast-forward",
+                  shortcut: "]",
+                  run: () => stepSpeed(1),
+                },
+                { type: "separator" },
+                {
+                  type: "button",
+                  id: "undo",
+                  label: "Undo",
+                  icon: "undo-2",
+                  run: () => history.undo(),
+                },
+                {
+                  type: "button",
+                  id: "redo",
+                  label: "Redo",
+                  icon: "redo-2",
+                  run: () => history.redo(),
+                },
+                { type: "separator" },
+                {
+                  type: "button",
+                  id: "still",
+                  label: "Still",
+                  icon: "camera",
+                  shortcut: "shift+e",
+                  run: () => exportStill().catch(report),
+                },
+                {
+                  type: "button",
+                  id: "export",
+                  label: "Export",
+                  icon: "download",
+                  shortcut: "e",
+                  run: () => exportEdl().catch(report),
+                },
+              ],
+              native: (on) => $("app").classList.toggle("native", on),
+            },
+            getValues: () => getValues(),
+            setValues: (partial, label) => setValues(partial, label),
+            addPreset(name, values) {
+              checkPatch(values, `addPreset("${name}")`);
+              if ("id" in values || "start" in values)
+                throw new TypeError(`addPreset("${name}"): presets cannot set id or start`);
+              presets.set(name, structuredClone(values));
+              renderPresets();
+            },
+            applyPreset(name) {
+              if (!presets.has(name)) throw new Error(`applyPreset: no preset "${name}"`);
+              return setValues({ clip: presets.get(name) }, `Preset ${name}`);
+            },
+            reservedKeys: ["space", "m", "e", "shift+e", "[", "]", "mod+z", "mod+shift+z", "mod+y"],
+            onBoltOnChange: () => {
+              if (api) scheduleSave();
+            },
+          });
+        }
+
+        // ---- Keyboard ----------------------------------------------------------------
+        const isField = (t) =>
+          t instanceof HTMLInputElement ||
+          t instanceof HTMLTextAreaElement ||
+          t instanceof HTMLSelectElement ||
+          t?.isContentEditable;
+        const isTextEntry = (t) =>
+          (t instanceof HTMLInputElement && /^(text|search|number)$/.test(t.type)) ||
+          t instanceof HTMLTextAreaElement;
+
+        function onKey(e) {
+          if (!api || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+          // The player, timeline and waveform handle their own keys while focused.
+          if (isField(e.target) || ui.left.contains(e.target)) return;
+          const k = e.key;
+          if (k === " " && e.target instanceof HTMLButtonElement) return; // Space presses the focused button
+          if (k === " ") player.toggle();
+          else if (k === "m" || k === "M") addMarker();
+          else if (k === "e") exportEdl().catch(report);
+          else if (k === "E") exportStill().catch(report);
+          else if (k === "[") stepSpeed(-1);
+          else if (k === "]") stepSpeed(1);
+          else return;
+          e.preventDefault();
+        }
+
+        // ---- Startup ---------------------------------------------------------------
+        async function start() {
+          opts = readOptions();
+          document.title = opts.title;
+          ui.title.textContent = opts.title;
+          const ws = await window.t3.workspace.ready();
+          const videos = (ws.assets ?? []).filter(
+            (a) =>
+              /^video\//.test(a.mimeType ?? "") || /\.(mp4|mov|m4v|webm|mkv)$/i.test(a.name ?? ""),
+          );
+          if (!videos.length)
+            throw new Error("Video Edit needs at least one video asset in the workspace");
+          for (const a of videos) {
+            files[a.name] = a.file;
+            probes[a.name] = await probe(a.file);
+          }
+          const saved = ws.state ?? (await window.t3.workspace.initialState()) ?? null;
+          const restored = isObj(saved) && saved.v === 1 && restorable(saved.edl) ? saved : null;
+          const edl = restored ? { ...restored.edl, playhead: 0 } : freshEdl(videos);
+
+          buildInspector(videos);
+          timeline = window.t3kit.timeline.create(ui.timeline, { value: toView(edl), fps: FPS });
+          hideTimelineChrome();
+          adapter = makeAdapter(timeline);
+          player = window.t3kit.player.create(ui.player, {
+            value: edl,
+            media: files,
+            controls: false,
+            fps: FPS,
+          });
+          playerLink = window.t3kit.links.playerTimeline(player, adapter);
+          waveform = window.t3kit.waveform.create(ui.waveform, { height: 72, overview: false });
+          history = window.t3kit.history.create(ui.history, {
+            title: "History",
+            keys: false,
+            label: restored ? "Restored" : "Original",
+          });
+          if (restored && isObj(restored.history)) history.set(restored.history);
+          // Bolt-on control edits are steps too: the runtime adds their values to every step and restores them on undo.
+          historyLink = rt.linkHistory(
+            history,
+            () => ({ edl: editOf(adapter.get()) }),
+            (s) => {
+              adapter.set({ ...s.edl, playhead: timeline.get().playhead });
+              playerLink.sync();
+              refresh();
+            },
+            { sources: { Edit: adapter } },
+          );
+
+          adapter.on("change", () => refresh());
+          timeline.on("select", (ids) => {
+            selectedId = ids.length ? ids[0].replace(/-a$/, "") : null;
+            renderInspector();
+            updateWaveform();
+          });
+          history.on("change", () => scheduleSave());
+          waveform.on("change", onWaveChange);
+          player.on("timeupdate", ({ time, duration, clipId }) => {
+            ui.tc.textContent = `${fmtT(time)} / ${fmtT(duration)}`;
+            if (api) rt.setPreviewTime(time, previewInfo(clipId));
+            if (!selectedId && clipId && clipId !== shownClipId) {
+              renderInspector();
+              updateWaveform();
+            }
+          });
+          ui.tc.textContent = `${fmtT(0)} / ${fmtT(player.duration())}`;
+          ui.export.addEventListener("click", () => {
+            exportEdl().catch(report);
+          });
+          ui.still.addEventListener("click", () => {
+            exportStill().catch(report);
+          });
+          document.addEventListener("keydown", onKey);
+
+          api = rt.publish({
+            instances: { player, timeline, waveform, history },
+            extras: {
+              links: { playerTimeline: playerLink, history: historyLink },
+              buildEdl,
+              exportEdl,
+              exportStill,
+              grade,
+            },
+            saved: restored?.controls,
+          });
+          lastEditKey = "";
+          refresh();
+          rt.setPreviewTime(player.time(), previewInfo(player.clipAt(player.time())?.id ?? null));
+          rt.runCustomScript(opts.customScript, opts);
+        }
+
+        // ---- Wiring ----------------------------------------------------------------
+        ui.title = $("title");
+        ui.tc = $("tc");
+        ui.status = $("status");
+        ui.toolbar = $("toolbar");
+        ui.inspector = $("inspector");
+        ui.left = $("left");
+        ui.player = $("player");
+        ui.monitor = $("monitor");
+        ui.timeline = $("timeline");
+        ui.waveform = $("waveform");
+        ui.sourceName = $("sourceName");
+        ui.export = $("export");
+        ui.still = $("still");
+        rt = createRuntime();
+
+        // One undo stack: Cmd/Ctrl+Z goes to History before the timeline sees it.
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (!(e.metaKey || e.ctrlKey) || e.altKey || !history || isTextEntry(e.target)) return;
+            const k = e.key.toLowerCase();
+            if (k === "z" && !e.shiftKey) history.undo();
+            else if ((k === "z" && e.shiftKey) || (k === "y" && e.ctrlKey && !e.metaKey))
+              history.redo();
+            else return;
+            e.preventDefault();
+            e.stopPropagation();
+          },
+          true,
+        );
+
+        window.addEventListener("unhandledrejection", (e) => report(e.reason));
+
+        start().catch(report);
+      })();
+    </script>
+  </body>
+</html>

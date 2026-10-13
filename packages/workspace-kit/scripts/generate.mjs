@@ -2,7 +2,7 @@
 // Bakes the workspace kit (primitives and templates) into src/generated.ts.
 // The server is bundled, so it cannot read these files from disk at runtime.
 //
-//   node packages/workspace-kit/scripts/generate.mjs <kitDir>
+//   node packages/workspace-kit/scripts/generate.mjs   (sources: packages/workspace-kit/kit)
 //
 // <kitDir> holds primitives/<name>.js (and optionally primitives/_core.js)
 // and templates/<id>/{template.html,template.json}. Anything malformed fails
@@ -228,7 +228,7 @@ export function readKit(kitDir) {
 /** The text of src/generated.ts for a kit. */
 export function renderKitModule(kit) {
   return `// Generated; do not edit. Regenerate with
-//   node packages/workspace-kit/scripts/generate.mjs <kitDir>
+//   node packages/workspace-kit/scripts/generate.mjs   (sources: packages/workspace-kit/kit)
 import type { KitSource } from "./types.ts";
 
 export const GENERATED_KIT: KitSource = ${JSON.stringify(kit, null, 2)};
@@ -236,9 +236,11 @@ export const GENERATED_KIT: KitSource = ${JSON.stringify(kit, null, 2)};
 }
 
 function main() {
-  const kitDirArg = process.argv[2];
-  if (!kitDirArg) fail("usage: node scripts/generate.mjs <kitDir>");
-  const { core, primitives, templates } = readKit(NodePath.resolve(kitDirArg));
+  // The kit sources live in packages/workspace-kit/kit; another directory can be passed while developing.
+  const kitDir = process.argv[2]
+    ? NodePath.resolve(process.argv[2])
+    : NodeURL.fileURLToPath(new URL("../kit", import.meta.url));
+  const { core, primitives, templates } = readKit(kitDir);
   NodeFS.writeFileSync(outFile, renderKitModule({ core, primitives, templates }));
   console.log(
     JSON.stringify({

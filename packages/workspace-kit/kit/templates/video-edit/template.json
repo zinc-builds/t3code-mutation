@@ -1,0 +1,121 @@
+{
+  "id": "video-edit",
+  "title": "Video Edit",
+  "summary": "Premiere-lite editor for one or more video clips: program monitor linked to a picture-and-sound timeline (ripple trims, split, ripple delete, markers), per-clip speed, colour look and volume, a source waveform trimmer, history with undo, and an Export that attaches an EDL JSON plus an ffmpeg render script (and full-size stills). Pick it to cut, trim, split, rearrange, retime or grade video.",
+  "kit": ["player", "timeline", "waveform", "history", "links", "template-runtime"],
+  "chrome": true,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Video Edit",
+      "description": "Header title; also names the export files (slugged)."
+    },
+    "look": {
+      "type": "string",
+      "enum": ["neutral", "moody", "film", "vivid"],
+      "default": "neutral",
+      "description": "Colour look applied to every clip on load."
+    },
+    "in": {
+      "type": "number",
+      "default": 0,
+      "description": "Source in point in seconds for the first clip (ignored when clips is set)."
+    },
+    "out": {
+      "type": "number",
+      "default": 0,
+      "description": "Source out point in seconds for the first clip (0 = clip end; ignored when clips is set)."
+    },
+    "clips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "in": { "type": "number" },
+          "out": { "type": "number" },
+          "label": { "type": "string" },
+          "speed": { "type": "number" },
+          "look": { "type": "string", "enum": ["neutral", "moody", "film", "vivid"] }
+        },
+        "required": []
+      },
+      "default": [],
+      "description": "Starting cut list, played in this order end to end: [{ source?: asset name (default the first video), in?: s, out?: s (0 = end), label?, speed? 0.25..4, look? }]. The same source may repeat. Empty = every attached video."
+    },
+    "splits": {
+      "type": "array",
+      "items": { "type": "number" },
+      "default": [],
+      "description": "Edit seconds (timeline time, after clips/in/out) at which to split clips on load, e.g. [3, 7.5]."
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "time": { "type": "number" }, "label": { "type": "string" } },
+        "required": ["time"]
+      },
+      "default": [],
+      "description": "Timeline markers on load, as [{ \"time\": edit seconds, \"label\": text }]; ones past the end of the edit are skipped."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, preview filters, export filters, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    {
+      "title": "Moody Trim",
+      "in": 2,
+      "out": 9,
+      "look": "moody",
+      "markers": [
+        { "time": 0, "label": "Open" },
+        { "time": 4.5, "label": "Beat" }
+      ]
+    },
+    { "title": "Film Marked", "look": "film", "markers": [{ "time": 3, "label": "Cut here" }] },
+    { "title": "Vivid Short", "out": 4, "look": "vivid" },
+    {
+      "title": "Best Bits",
+      "clips": [
+        { "in": 8, "out": 12, "label": "Hook" },
+        { "in": 0, "out": 5, "label": "Setup", "look": "film" },
+        { "in": 12, "out": 14, "label": "Button", "speed": 0.5 }
+      ],
+      "splits": [2],
+      "markers": [
+        { "time": 4, "label": "Setup" },
+        { "time": 9, "label": "Button" }
+      ]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the media has loaded, the first preview has rendered and the template's panels exist. Add controls, then hooks that read them: addPreviewFilter tints the program monitor and stills, addOverlay draws pictures and text over the edit (monitor, stills and render), addAudioFilter adds EQ, gain, compression or echo to the sound that the monitor plays live and the render applies, addExportNote puts any other ffmpeg filter into the render script, addEdlTransform rewrites the exported EDL the render is built from (export only; the timeline and monitor keep the edit as cut). Control values persist with the edit; options.controls ({ id: value }) sets starting values, and a saved edit wins over it. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows? (text; rows > 1 = multi-line), panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. Labels show about 14 characters. User edits and set() re-run every hook and re-render; onChange runs on edits only, not on load (hooks receive controls on every run, so read them there). Every control edit is one undo step (a slider drag, a typing burst, one toggle or select), named after the control and value; undo, redo, history jumps and presets restore control values with the edit (onChange does not run then).",
+      "EDL (t3-edl/1): tracks[0].clips[{ id, source, in, out, start, duration, speed, volumeDb, muted, color }], markers[{ id, time, label }], duration, width, height, fps. in/out = source seconds; start = edit (timeline) seconds; duration = (out - in) / speed. Clips play end to end by start; gaps render black and silent, so shifting starts adds time. Clip ids must stay unique.",
+      "info (third argument of every EDL hook) = { phase, clipId: the selected clip (else the one under the playhead), playhead }.",
+      "addEdlTransform((edl, controls, info) => edl): edit the export (e.g. split a clip into retimed parts with ids 'c1-2'...) before the render command is built.",
+      "addExportNote((edl, controls, info) => string | { note?, videoFilter?, audioFilter? }): ffmpeg fragments chained onto the whole edit after overlays, in the order added; t is edit seconds. Per-clip effects: one filter per clip with enable='between(t,start,end)' (fade, eq, drawbox all take enable). '' or null = nothing. A string or note becomes a script comment and render.boltOn.notes.",
+      "addPreviewFilter((controls, { time, clip }) => CSS filter, e.g. 'contrast(1.2) saturate(1.3)'): re-run on every frame; clip = { id, start, duration, in, out, speed } under the playhead (null in a gap). Applied over the monitor (overlays included) and stills; pair it with an addExportNote filter.",
+      "addOverlay(id, ({ canvas, context, width, height, scale, phase }, controls) => void, timing?(controls, { duration }) -> { start, end } | null): draw on a transparent canvas the size of the rendered picture (scale = 1 on export); shown on the monitor in that edit-seconds range (no timing = the whole edit, null = hidden), drawn on stills, and exported as <title>-overlay-<id>.png composited by the render script. Redrawn only when controls change.",
+      "addAudioFilter(id, (controls) => filter | [filter] | null): sound for the whole edit, heard live while the monitor or the source waveform plays (Web Audio) and rendered by ffmpeg on the mixed track, together with export-note audio filters in the order added. filter = { type: 'gain', db } | { type: 'highpass'|'lowpass', frequency, q = 0.7071 } | { type: 'bandpass'|'notch', frequency, q = 1 } | { type: 'peaking', frequency, gain, q = 1 } | { type: 'lowshelf'|'highshelf', frequency, gain } | { type: 'compressor', threshold = -24 dB, ratio = 4, attack = 0.003 s, release = 0.25 s, knee = 6 dB, makeup = 0 dB } | { type: 'echo', time = 0.25 s, mix = 0.4 }; Hz, dB, seconds; out-of-range values throw. Add the controls it reads first. An addExportNote audioFilter is heard in the render only. audioFilters() -> { filters, ffmpeg, live }.",
+      "grade({ brightness?, contrast?, saturation?, temp? } -100..100) -> { css, ffmpeg }: one colour change as a preview filter plus the ffmpeg chain that renders it identically.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes to it; the same title returns the same panel). 'top' = first in the inspector above Clip (bolt-on panels in creation order), so a new panel is in view on load; 'bottom' = after History.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'b' | 'shift+b' | 'mod+b', title? }) -> button (also in T3's native toolbar when the workspace shows native chrome).   refresh() re-renders the preview (only for state a hook reads that is not a control).   export() -> Promise<{ files: [{ name, type, size }], ffmpeg: [command] }>: runs the Export button (files go to t3.workspace.attach and download) and reports the files and the render command; it throws on failure.",
+      "getValues() -> { title, duration, playhead, clip, clips, markers, controls }.   setValues({ clip?: patch, clips?: [{ id, ...patch }], markers?: [{ time, label? }], playhead?, controls? }, label?) -> values; patch keys in, out, start, speed, volumeDb, muted, color, look, label; strict, one undo step.",
+      "addPreset(name, clipPatch) / applyPreset(name) applies to the current clip.   on('change', cb(values)) -> off.   buildEdl() -> { edl, script, overlays }, exportEdl(), exportStill().",
+      "instances: { player, timeline, waveform, history }; links: { playerTimeline, history }."
+    ],
+    "reservedShortcuts": ["space", "m", "e", "shift+e", "[", "]", "mod+z", "mod+shift+z", "mod+y"],
+    "example": "t3template.addControl({ id: 'punch', label: 'Punch', type: 'slider', min: 0, max: 100, step: 1, default: 40, panel: 'Finish' });\nt3template.addControl({ id: 'fades', label: 'Clip Fades s', type: 'slider', min: 0, max: 2, step: 0.1, default: 0, panel: 'Finish' });\nt3template.addControl({ id: 'title', label: 'Title', type: 'text', default: 'Sonoma', panel: 'Finish' });\nt3template.addControl({ id: 'titleSec', label: 'Title (s)', type: 'slider', min: 0, max: 6, step: 0.5, default: 2.5, panel: 'Finish' });\nt3template.addControl({ id: 'lowcut', label: 'Low Cut Hz', type: 'slider', min: 20, max: 300, step: 5, default: 80, panel: 'Finish' });\n// Sound: heard while the monitor plays and rendered by ffmpeg on the mixed track.\nt3template.addAudioFilter('lowcut', (c) => ({ type: 'highpass', frequency: c.lowcut }));\nconst look = (c) => t3template.grade({ contrast: c.punch * 0.3, saturation: c.punch * 0.5 });\n// Fade each clip in and out: the preview dims near clip edges, the export uses ffmpeg fade with timeline enable.\nt3template.addPreviewFilter((c, { time, clip }) => {\n  if (!clip || !c.fades) return look(c).css;\n  const edge = Math.min(time - clip.start, clip.start + clip.duration - time);\n  return `${look(c).css} brightness(${Math.min(1, Math.max(0, edge / c.fades)).toFixed(3)})`;\n});\nt3template.addExportNote((edl, c) => {\n  const fades = c.fades ? edl.tracks[0].clips.flatMap((k) => {\n    const end = k.start + k.duration;\n    return [`fade=t=in:st=${k.start}:d=${c.fades}:enable='between(t,${k.start},${k.start + c.fades})'`,\n      `fade=t=out:st=${end - c.fades}:d=${c.fades}:enable='between(t,${end - c.fades},${end})'`];\n  }) : [];\n  return { videoFilter: [look(c).ffmpeg, ...fades].filter(Boolean).join(','), note: `Finish: punch ${c.punch}, clip fades ${c.fades} s` };\n});\n// Title card: drawn once at the picture size, shown over the first titleSec seconds on the monitor and in the render.\nt3template.addOverlay('title', ({ context, width, height }, c) => {\n  context.fillStyle = 'rgba(0, 0, 0, 0.55)';\n  context.fillRect(0, height * 0.4, width, height * 0.2);\n  context.fillStyle = '#ffffff';\n  context.font = `600 ${Math.round(height * 0.09)}px sans-serif`;\n  context.textAlign = 'center';\n  context.textBaseline = 'middle';\n  context.fillText(c.title, width / 2, height / 2);\n}, (c) => (c.title && c.titleSec ? { start: 0, end: c.titleSec } : null));\nt3template.addToolbarButton('Mark Beat', (t) => {\n  const v = t.getValues();\n  t.setValues({ markers: [...v.markers, { time: v.playhead, label: 'Beat' }] }, 'Mark Beat');\n}, { shortcut: 'b' });"
+  }
+}
