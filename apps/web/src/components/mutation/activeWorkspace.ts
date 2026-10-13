@@ -1,7 +1,9 @@
 import {
+  WORKSPACE_MUTATE_TOOL_NAME,
   workspaceReferencesEqual,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
+import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 import { isWorkspaceRestoreToolItem, workspaceFromToolItem } from "@t3tools/shared/toolOutput";
 
 import { isImageAttachment, type ChatAttachment } from "../../types";
@@ -12,6 +14,7 @@ export interface WorkspaceTurnItem {
   readonly type: string;
   readonly status: string;
   readonly toolName?: string | null;
+  readonly input?: unknown;
   readonly output?: unknown;
   readonly attachments?: ReadonlyArray<ChatAttachment> | undefined;
 }
@@ -48,6 +51,47 @@ export function workspaceFromTurnItem(item: WorkspaceTurnItem): WorkspaceReferen
   return item.type === "dynamic_tool" && item.status === "completed"
     ? workspaceFromToolItem({ toolName: item.toolName, output: item.output })
     : undefined;
+}
+
+/** A `workspace_mutate` call still running, and the asset paths its input names. */
+export interface RunningWorkspaceMutation {
+  readonly itemId: string;
+  readonly assetPaths: ReadonlyArray<string>;
+}
+
+const isRunning = (status: string) => status === "pending" || status === "running";
+
+/**
+ * The `workspace_mutate` calls running in the current turn, newest first, so
+ * their media can load before the page asks. Tool calls run after the turn's
+ * user message, so the scan stops there.
+ */
+export function runningWorkspaceMutations(
+  items: ReadonlyArray<{ readonly item: WorkspaceTurnItem }>,
+): RunningWorkspaceMutation[] {
+  const running: RunningWorkspaceMutation[] = [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const { item } = items[index]!;
+    if (item.type === "user_message") break;
+    if (
+      item.type !== "dynamic_tool" ||
+      !isRunning(item.status) ||
+      resolveT3McpToolId(item.toolName) !== WORKSPACE_MUTATE_TOOL_NAME
+    ) {
+      continue;
+    }
+    const assets =
+      typeof item.input === "object" && item.input !== null && "assets" in item.input
+        ? item.input.assets
+        : undefined;
+    running.push({
+      itemId: item.id,
+      assetPaths: Array.isArray(assets)
+        ? assets.filter((path): path is string => typeof path === "string" && path.length > 0)
+        : [],
+    });
+  }
+  return running;
 }
 
 /** Scans newest-first, so a long thread pays only for the items after its last workspace call. */

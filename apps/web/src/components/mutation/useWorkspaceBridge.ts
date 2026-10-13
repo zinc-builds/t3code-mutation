@@ -1,5 +1,5 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { AssetResource, EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
   readWorkspaceBridgeMessage,
   WORKSPACE_BRIDGE_METHODS,
@@ -13,14 +13,12 @@ import {
 import { workspacePageState } from "@t3tools/shared/mutationWorkspaceChrome";
 import { type RefObject, useEffect, useRef } from "react";
 
-import { resolveAssetUrl } from "~/assets/assetUrls";
-import { assetEnvironment } from "~/state/assets";
 import { mutationWorkspaceEnvironment } from "~/state/mutationWorkspace";
-import { readPreparedConnection } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
 import { toastManager } from "../ui/toast";
+import { useWorkspaceAssetFetcher, type WorkspaceAssetResource } from "./useWorkspaceAssets";
+import { loadWorkspaceAsset, workspaceAssetKey } from "./workspaceAssetCache";
 import { setWorkspaceChromePageState } from "./workspaceChromeStore";
 
 export interface WorkspaceBridgeOptions {
@@ -100,13 +98,10 @@ export function useWorkspaceBridge(
   const updateState = useAtomCommand(mutationWorkspaceEnvironment.updateState, {
     reportFailure: false,
   });
-  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
-    reportFailure: false,
-    refresh: true,
-  });
+  const fetchAsset = useWorkspaceAssetFetcher();
   // Read on every message, so the bridge sees current props without
   // re-subscribing (which would drop requests in flight).
-  const live = { options, readState, updateState, createAssetUrl };
+  const live = { options, readState, updateState, fetchAsset };
   const latest = useRef(live);
   useEffect(() => {
     latest.current = live;
@@ -121,18 +116,21 @@ export function useWorkspaceBridge(
     // does not stack the same error.
     let lastStateFailure: string | null = null;
 
-    const fetchAsset = async (resource: AssetResource, name: string) => {
+    // Since the page started loading, for the dev time-to-first-frame log.
+    const startedAt = performance.now();
+    let prefetchedAssets = 0;
+    let initializedAssets = 0;
+    // Attachments never change, so pages share them; a file is fetched per page
+    // unless it was prefetched for this one.
+    const fetchAsset = (resource: WorkspaceAssetResource, name: string) => {
       const { environmentId } = latest.current.options;
-      const connection = readPreparedConnection(environmentId);
-      if (connection === null)
-        throw new Error("Reconnect to this environment to load the workspace.");
-      const minted = await latest.current.createAssetUrl({ environmentId, input: { resource } });
-      if (minted._tag !== "Success") throw commandError(minted);
-      const url = resolveAssetUrl(connection.httpBaseUrl, minted.value.relativeUrl);
-      if (url === null) throw new Error(`The environment returned an invalid URL for ${name}.`);
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`${name} could not be loaded (HTTP ${response.status}).`);
-      return response.blob();
+      const loaded = loadWorkspaceAsset(
+        workspaceAssetKey(environmentId, resource),
+        resource._tag === "attachment",
+        () => latest.current.fetchAsset(environmentId, resource, name),
+      );
+      if (loaded.prefetched) prefetchedAssets += 1;
+      return loaded.blob;
     };
 
     const initialize = async () => {
@@ -175,6 +173,7 @@ export function useWorkspaceBridge(
         };
       });
       const [storedState, assets] = await Promise.all([state, Promise.all([...images, ...files])]);
+      initializedAssets = assets.length;
       // The server answers null before the page stored anything.
       // A workspace with chrome stores { controls, page }; the page sees only its part.
       return { state: workspacePageState(storedState ?? undefined) ?? undefined, assets };
@@ -220,9 +219,17 @@ export function useWorkspaceBridge(
         (result) => {
           post(workspaceBridgeResult(request.id, result));
           if (request.method === WORKSPACE_BRIDGE_METHODS.initialize) {
-            const { composerHeight, agentWorking } = latest.current.options;
+            const { composerHeight, agentWorking, workspace } = latest.current.options;
             post(composerSize(composerHeight));
             post(agentStatus(agentWorking));
+            if (import.meta.env.DEV) {
+              // The page draws its media in the frame after it has them.
+              requestAnimationFrame(() => {
+                console.debug(
+                  `[workspace] ${workspace.title}: first frame ${Math.round(performance.now() - startedAt)}ms after the page started loading (${prefetchedAssets}/${initializedAssets} assets prefetched)`,
+                );
+              });
+            }
           }
         },
         (error: unknown) => {

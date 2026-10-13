@@ -4,6 +4,7 @@ import {
   latestWorkspaceEvent,
   resolveActiveWorkspace,
   resumableWorkspace,
+  runningWorkspaceMutations,
   threadImagesFromTurnItems,
   type WorkspaceTurnItem,
 } from "./activeWorkspace";
@@ -132,6 +133,37 @@ describe("threadImagesFromTurnItems", () => {
     ).toEqual([
       { attachmentId: "one", name: "one.png", mimeType: "image/png" },
       { attachmentId: "two", name: "two.png", mimeType: "image/png" },
+    ]);
+  });
+});
+
+describe("runningWorkspaceMutations", () => {
+  const call = (
+    id: string,
+    status: string,
+    input: unknown,
+    toolName = "t3-code.workspace_mutate",
+  ) => ({
+    item: { id, type: "dynamic_tool", status, toolName, input } satisfies WorkspaceTurnItem,
+  });
+  const userMessage = (id: string) => ({
+    item: { id, type: "user_message", status: "completed" } satisfies WorkspaceTurnItem,
+  });
+
+  it("lists the current turn's running calls with the asset paths their input names", () => {
+    expect(
+      runningWorkspaceMutations([
+        call("old", "running", { assets: ["/m/old.mp4"] }),
+        userMessage("ask"),
+        call("done", "completed", { assets: ["/m/done.mp4"] }),
+        call("other", "running", { assets: ["/m/x.mp4"] }, "t3-code.html_render"),
+        call("first", "pending", { title: "Grade" }),
+        call("second", "running", { assets: ["/m/clip.mp4", 3, ""] }),
+        message("reply"),
+      ]),
+    ).toEqual([
+      { itemId: "second", assetPaths: ["/m/clip.mp4"] },
+      { itemId: "first", assetPaths: [] },
     ]);
   });
 });

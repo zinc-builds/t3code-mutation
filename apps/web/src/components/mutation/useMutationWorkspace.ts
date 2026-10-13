@@ -15,6 +15,7 @@ import {
   type ThreadImage,
 } from "./activeWorkspace";
 import { useMutationWorkspaceStore } from "./mutationWorkspaceStore";
+import { useWorkspaceAssetPrewarm } from "./useWorkspaceAssets";
 import { useWorkspaceChromeSession } from "./useWorkspaceChromeSession";
 import { useWorkspaceChromeStore } from "./workspaceChromeStore";
 
@@ -150,6 +151,7 @@ export function useMutationWorkspace(
   animate: boolean,
 ) {
   const { active, resumable, threadImages } = useActiveWorkspace(threadRef, visibleTurnItems);
+  useWorkspaceAssetPrewarm(threadRef, visibleTurnItems);
   const shown = useShownWorkspace(
     threadRef === null ? null : scopedThreadKey(threadRef),
     active,
