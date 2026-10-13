@@ -217,6 +217,27 @@ describe("kit request errors", () => {
     );
   });
 
+  it("accepts a value matching any type of a type list, null included", () => {
+    const spec = {
+      options: {
+        viewport: {
+          type: ["string", "object"],
+          properties: { width: { type: "number" }, height: { type: "number" } },
+        },
+        field: { type: ["string", "null"] },
+      },
+    } as const;
+    assert.deepEqual(validateTemplateOptions(spec, { viewport: "mobile", field: null }), []);
+    assert.deepEqual(
+      validateTemplateOptions(spec, { viewport: { width: 390, height: 844 }, field: "ts" }),
+      [],
+    );
+    assert.deepEqual(validateTemplateOptions(spec, { viewport: { width: "wide" }, field: 3 }), [
+      'template.options.viewport.width: expected a number, got "wide"',
+      "template.options.field: expected string or null, got 3",
+    ]);
+  });
+
   it("accepts a customScript bolt-on without the template declaring it", () => {
     assert.isTrue(
       kit.planPage({

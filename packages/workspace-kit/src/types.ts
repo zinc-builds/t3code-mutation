@@ -13,8 +13,18 @@ export interface KitPrimitive {
  * Schema subset. T3 checks the keys typed here; any others ride along for
  * agents to read.
  */
+export type TemplateOptionType =
+  | "string"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "array"
+  | "object"
+  | "null";
+
 export interface TemplateOptionSpec {
-  readonly type?: "string" | "number" | "integer" | "boolean" | "array" | "object";
+  /** One type, or several (JSON Schema): the value must match one of them. */
+  readonly type?: TemplateOptionType | ReadonlyArray<TemplateOptionType>;
   readonly enum?: ReadonlyArray<unknown>;
   readonly items?: TemplateOptionSpec;
   /** For an object: its keys. Keys it does not declare are rejected. */

@@ -18,7 +18,7 @@ const outFile = NodePath.resolve(here, "../src/generated.ts");
 
 // Primitives that wire other primitives together must load after them.
 const LOAD_LAST = new Set(["links"]);
-const OPTION_TYPES = new Set(["string", "number", "integer", "boolean", "array", "object"]);
+const OPTION_TYPES = new Set(["string", "number", "integer", "boolean", "array", "object", "null"]);
 const NAME = /^[a-z][a-z0-9-]*$/;
 
 /** The global a primitive registers: `template-runtime` -> `t3kit.templateRuntime`. */
@@ -97,8 +97,11 @@ function checkOptionSpec(spec, where) {
   for (const alias of ["min", "max"]) {
     if (alias in spec) fail(`${where}.${alias} is not JSON Schema; write ${alias}imum.`);
   }
-  if (spec.type !== undefined && !OPTION_TYPES.has(spec.type)) {
-    fail(`${where}.type must be one of ${[...OPTION_TYPES].join(", ")}.`);
+  if (spec.type !== undefined) {
+    const types = Array.isArray(spec.type) ? spec.type : [spec.type];
+    if (types.length === 0 || !types.every((type) => OPTION_TYPES.has(type))) {
+      fail(`${where}.type must be one of ${[...OPTION_TYPES].join(", ")}, or a list of them.`);
+    }
   }
   if (spec.enum !== undefined && !Array.isArray(spec.enum)) fail(`${where}.enum must be an array.`);
   for (const key of ["minimum", "maximum"]) {

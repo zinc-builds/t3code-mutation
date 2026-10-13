@@ -1,4 +1,4 @@
-import type { KitTemplate, TemplateOptionSpec } from "./types.ts";
+import type { KitTemplate, TemplateOptionSpec, TemplateOptionType } from "./types.ts";
 
 /** Every template runs this bolt-on hook, declared or not (TEMPLATE_CONTRACT.md). */
 const CUSTOM_SCRIPT_KEY = "customScript";
@@ -25,10 +25,17 @@ function checkValue(
     problems.push(`${path}: expected one of ${spec.enum.map(show).join(", ")}, got ${show(value)}`);
     return;
   }
-  switch (spec.type) {
+  if (Array.isArray(spec.type)) {
+    checkUnion(spec, spec.type, value, path, problems);
+    return;
+  }
+  switch (spec.type as TemplateOptionType | undefined) {
     case "string":
       if (typeof value !== "string")
         problems.push(`${path}: expected a string, got ${show(value)}`);
+      return;
+    case "null":
+      if (value !== null) problems.push(`${path}: expected null, got ${show(value)}`);
       return;
     case "boolean":
       if (typeof value !== "boolean") {
@@ -75,6 +82,34 @@ function checkValue(
     case undefined:
       return;
   }
+}
+
+/**
+ * A value whose spec lists several types: it passes when it matches one. A
+ * value of a listed kind reports that type's problems (an object with a bad
+ * key); any other value reports the list.
+ */
+function checkUnion(
+  spec: TemplateOptionSpec,
+  types: ReadonlyArray<TemplateOptionType>,
+  value: unknown,
+  path: string,
+  problems: Array<string>,
+): void {
+  const attempts = types.map((type) => {
+    const found: Array<string> = [];
+    checkValue({ ...spec, type }, value, path, found);
+    return { type, found };
+  });
+  if (attempts.some((attempt) => attempt.found.length === 0)) return;
+  const kind = Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
+  const sameKind = attempts.find(
+    (attempt) =>
+      attempt.type === kind ||
+      (kind === "number" && (attempt.type === "integer" || attempt.type === "number")),
+  );
+  if (sameKind !== undefined) problems.push(...sameKind.found);
+  else problems.push(`${path}: expected ${types.join(" or ")}, got ${show(value)}`);
 }
 
 /**

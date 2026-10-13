@@ -29,4 +29,5 @@ export type {
   KitTemplateManifest,
   TemplateBoltOn,
   TemplateOptionSpec,
+  TemplateOptionType,
 } from "./types.ts";
