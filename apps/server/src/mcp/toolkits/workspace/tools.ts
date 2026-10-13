@@ -27,7 +27,7 @@ const dependencies = [
 ];
 
 // Order matters to agents: the cheapest path that fits comes first.
-const WORKSPACE_BUILD_GUIDE = `Build it the fastest way that fits, in this order. 1) A template, when one matches the task: pass template: {id, options} and no html; it is a complete pro app ready in seconds, and options.customScript (JS run with (t3template, options)) bolts on anything it lacks. 2) Otherwise kit primitives plus glue: pass kit: [names] and write only the layout and wiring in html; T3 injects each primitive as window.t3kit.<name> before your scripts, at no cost to your output. 3) Only when neither covers the task, write the whole interface from scratch. Call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with the names you will use for their exact APIs and options before writing glue; never hand-roll what a primitive does.\n${workspaceKit.catalog}`;
+const WORKSPACE_BUILD_GUIDE = `Build it the fastest way that fits, in this order. 1) A template, when one matches the task: pass template: {id, options} and no html; it is a complete pro app ready in seconds, and options.customScript (JS run with (t3template, options)) bolts on anything it lacks, using only the calls in that template's boltOn docs. 2) Otherwise kit primitives plus glue: pass kit: [names] and write only the layout and wiring in html; T3 injects each primitive as window.t3kit.<name> before your scripts, at no cost to your output. 3) Only when neither covers the task, write the whole interface from scratch. Call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with the names you will use for their exact APIs and options before writing glue; never hand-roll what a primitive does.\n${workspaceKit.catalog}`;
 
 const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
   description: `Transform this thread's interface into a workspace built for the user's task, replacing the chat view until the task is done. Use it for hands-on, iterative work on an artifact that the user will adjust by eye over several steps, in space or in time, which a dedicated professional application serves better than chat: grading or retouching a photo they attached or one on disk, cutting a video, mixing audio, exploring a dataset, laying out a design. Do not use it for a one-shot edit the user fully specified ("make it black and white", "trim the first five seconds"): make that edit with your own tools, and offer a workspace in your reply when fine-tuning by hand would help. ${WORKSPACE_BUILD_GUIDE}\nCalling it again rebuilds the workspace in place (the user's control state is kept), so iterate when the user asks for more tools. A page you write is one self-contained document with inline <style> and <script>; remote http(s) libraries load as-is. ${WORKSPACE_PAGE_GUIDE} ${HTML_RENDER_THEME_GUIDE} T3 boots the published page itself and returns what broke in the result's validation, so do not screenshot or test it yourself; when validation lists errors, fix them with another call. After calling it, reply briefly about what you built; the user is already looking at it. When the user is finished, call ${WORKSPACE_RESTORE_TOOL_NAME}. Declare the app's toolbar, sidebar, and inspector with \`chrome\` so T3 renders them natively and the page only needs its canvas or timeline.`,
@@ -102,7 +102,7 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
   .annotate(Tool.OpenWorld, true);
 
 const WorkspaceKitDocsTool = Tool.make(WORKSPACE_KIT_DOCS_TOOL_NAME, {
-  description: `Read the workspace kit's exact docs before building with ${WORKSPACE_MUTATE_TOOL_NAME}: each primitive's API header (create options, methods, events, a usage example) and each template's summary, kit, options with defaults, and examples. Pass the primitive names and template ids you plan to use; omit names for everything (large). Primitives: ${workspaceKit.primitiveNames.join(", ")}. Templates: ${workspaceKit.templateIds.join(", ") || "none installed yet"}.`,
+  description: `Read the workspace kit's exact docs before building with ${WORKSPACE_MUTATE_TOOL_NAME}: each primitive's API header (create options, methods, events, a usage example) and each template's summary, kit, options with defaults, examples, and boltOn: the exact window.t3template API for options.customScript (summary, one line per call, reservedShortcuts, a runnable example). Read a template's boltOn before writing its customScript; do not guess calls. Pass the primitive names and template ids you plan to use; omit names for everything (large). Primitives: ${workspaceKit.primitiveNames.join(", ")}. Templates: ${workspaceKit.templateIds.join(", ") || "none installed yet"}.`,
   parameters: Schema.Struct({
     names: Schema.optional(Schema.Array(Schema.String)).annotate({
       description: "Primitive names and template ids to document.",
@@ -120,6 +120,15 @@ const WorkspaceKitDocsTool = Tool.make(WORKSPACE_KIT_DOCS_TOOL_NAME, {
           kit: Schema.Array(Schema.String),
           options: Schema.Record(Schema.String, Schema.Unknown),
           examples: Schema.Array(Schema.Unknown),
+          boltOn: Schema.StructWithRest(
+            Schema.Struct({
+              summary: Schema.String,
+              api: Schema.Array(Schema.String),
+              reservedShortcuts: Schema.Array(Schema.String),
+              example: Schema.String,
+            }),
+            [Schema.Record(Schema.String, Schema.Unknown)],
+          ),
         }),
         [Schema.Record(Schema.String, Schema.Unknown)],
       ),

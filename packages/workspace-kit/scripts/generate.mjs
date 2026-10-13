@@ -21,6 +21,9 @@ const LOAD_LAST = new Set(["links"]);
 const OPTION_TYPES = new Set(["string", "number", "integer", "boolean", "array", "object"]);
 const NAME = /^[a-z][a-z0-9-]*$/;
 
+/** The global a primitive registers: `template-runtime` -> `t3kit.templateRuntime`. */
+export const primitiveGlobal = (name) => name.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+
 const fail = (message) => {
   throw new Error(`workspace-kit generate: ${message}`);
 };
@@ -44,7 +47,10 @@ const SUMMARY_MAX = 90;
  */
 export function readSummary(docs, name) {
   const paragraph = docs.split("\n\n")[0].split("\n").join(" ").replace(/\s+/g, " ");
-  const lead = paragraph.replace(new RegExp(`^(?:t3kit\\.)?${name}:\\s*`), "");
+  const lead = paragraph.replace(
+    new RegExp(`^(?:t3kit\\.)?(?:${name}|${primitiveGlobal(name)}):\\s*`),
+    "",
+  );
   const sentences = lead.match(/.+?\.(?=\s|$)/g) ?? [lead];
   let summary = sentences[0].trim();
   if (summary.length < 60 && sentences[1]) summary = `${summary} ${sentences[1].trim()}`;
@@ -62,10 +68,13 @@ function readPrimitives(kitDir) {
   if (files.length === 0) fail(`${dir} has no primitives.`);
   const primitives = files.map((file) => {
     const name = file.slice(0, -3);
-    if (!NAME.test(name)) fail(`primitive file name ${file} must be lowercase letters and digits.`);
+    if (!NAME.test(name)) {
+      fail(`primitive file name ${file} must be lowercase letters, digits and hyphens.`);
+    }
     const source = NodeFS.readFileSync(NodePath.join(dir, file), "utf8");
-    if (!new RegExp(`t3kit\\.${name}\\s*=`).test(source)) {
-      fail(`${file} must register itself as t3kit.${name}.`);
+    const global = primitiveGlobal(name);
+    if (!new RegExp(`t3kit\\.${global}\\s*=`).test(source)) {
+      fail(`${file} must register itself as t3kit.${global}.`);
     }
     const docs = readDocsHeader(source, file);
     return { name, summary: readSummary(docs, name), docs, source };
@@ -122,6 +131,31 @@ function checkOptionSpec(spec, where) {
   return spec;
 }
 
+const isStringList = (value) =>
+  Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim() !== "");
+
+/**
+ * Checks a template's bolt-on docs (TemplateBoltOn): what agents read before
+ * writing options.customScript, so every field must be there and well typed.
+ */
+function checkBoltOn(boltOn, where) {
+  if (boltOn === null || typeof boltOn !== "object" || Array.isArray(boltOn)) {
+    fail(`${where} needs a boltOn object (summary, api, reservedShortcuts, example).`);
+  }
+  for (const key of ["summary", "example"]) {
+    if (typeof boltOn[key] !== "string" || boltOn[key].trim() === "") {
+      fail(`${where}.${key} must be a non-empty string.`);
+    }
+  }
+  if (!isStringList(boltOn.api) || boltOn.api.length === 0) {
+    fail(`${where}.api must be a non-empty array of strings, one per call.`);
+  }
+  if (!isStringList(boltOn.reservedShortcuts)) {
+    fail(`${where}.reservedShortcuts must be an array of shortcut strings.`);
+  }
+  return boltOn;
+}
+
 function readTemplates(kitDir, primitiveNames) {
   const dir = NodePath.join(kitDir, "templates");
   if (!NodeFS.existsSync(dir)) return [];
@@ -161,6 +195,7 @@ function readTemplates(kitDir, primitiveNames) {
         if (problems.length > 0) fail(`${where}/template.json ${problems.join("; ")}.`);
       });
       if ("html" in manifest) fail(`${where}/template.json must not have an html key.`);
+      checkBoltOn(manifest.boltOn, `${where}/template.json boltOn`);
       // The manifest as written, so fields T3 does not read (bolt-on docs, notes) reach agents.
       return {
         ...manifest,

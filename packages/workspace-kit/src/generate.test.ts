@@ -5,11 +5,19 @@ import * as NodePath from "node:path";
 
 import { afterEach, assert, describe, it } from "@effect/vitest";
 
-import { readKit, readSummary, renderKitModule } from "../scripts/generate.mjs";
+import { primitiveGlobal, readKit, readSummary, renderKitModule } from "../scripts/generate.mjs";
 import { GENERATED_KIT } from "./generated.ts";
 
 const primitive = (name: string, header: string) =>
   `/**\n * t3kit.${name}: ${header}\n *\n * create(container) -> instance\n */\n(function () {\n  const t3kit = (window.t3kit = window.t3kit || {});\n  t3kit.${name} = { create() {} };\n})();\n`;
+
+const boltOn = {
+  summary: "options.customScript runs once.",
+  api: ["addPanel(title) -> HTMLElement"],
+  reservedShortcuts: ["e"],
+  example: "t3template.addPanel('Extra');",
+  note: "kept verbatim",
+};
 
 const dirs: Array<string> = [];
 const kitDir = (files: Record<string, string>) => {
@@ -30,7 +38,7 @@ describe("the committed kit", () => {
     assert.isAbove(GENERATED_KIT.primitives.length, 0);
     for (const p of GENERATED_KIT.primitives) {
       assert.match(p.name, /^[a-z][a-z0-9-]*$/);
-      assert.include(p.source, `t3kit.${p.name}`);
+      assert.include(p.source, `t3kit.${primitiveGlobal(p.name)}`);
       assert.isFalse(p.docs.startsWith("/**"), `${p.name} docs keep comment markers`);
       assert.isAtMost(p.docs.split("\n").length, 40, `${p.name} docs header is too long`);
       assert.isAtMost(p.summary.length, 90, `${p.name} summary is too long`);
@@ -70,7 +78,7 @@ describe("generate.mjs", () => {
           markers,
         },
         examples: [{ strength: 1, markers: [{ time: 2, label: "Beat" }] }],
-        boltOn: { addPanel: "addPanel(title) -> HTMLElement" },
+        boltOn,
       }),
     });
     const kit = readKit(dir);
@@ -83,7 +91,7 @@ describe("generate.mjs", () => {
       strength: { type: "number", minimum: 0, maximum: 1, default: 0.5, label: "x" },
       markers,
     });
-    assert.deepEqual(kit.templates[0]?.boltOn, { addPanel: "addPanel(title) -> HTMLElement" });
+    assert.deepEqual(kit.templates[0]?.boltOn, boltOn);
     const module = renderKitModule(kit);
     assert.include(module, "export const GENERATED_KIT: KitSource = {");
     assert.include(module, '"html": "<!doctype html><head></head><body></body>"');
@@ -97,6 +105,7 @@ describe("generate.mjs", () => {
         id: "cut",
         title: "Cut",
         summary: "Cut video.",
+        boltOn,
         ...manifest,
       }),
     });
@@ -159,6 +168,34 @@ describe("generate.mjs", () => {
       "primitives/viewer.js": primitive("view", "image viewport.").replace("t3kit.view:", "x:"),
     });
     assert.throws(() => readKit(dir), /must register itself as t3kit.viewer/);
+  });
+
+  it("registers a hyphenated primitive under its camelCased name", () => {
+    const source = primitive("templateRuntime", "the bolt-on runtime. Templates use it.");
+    const dir = kitDir({ "primitives/template-runtime.js": source });
+    const [runtime] = readKit(dir).primitives;
+    assert.strictEqual(runtime?.name, "template-runtime");
+    assert.strictEqual(runtime?.summary, "the bolt-on runtime. Templates use it.");
+    const wrong = kitDir({
+      "primitives/template-runtime.js": source.replace("t3kit.templateRuntime =", "x ="),
+    });
+    assert.throws(() => readKit(wrong), /must register itself as t3kit.templateRuntime/);
+  });
+
+  it("fails on a template without complete bolt-on docs", () => {
+    assert.throws(() => readKit(template({ boltOn: undefined })), /needs a boltOn object/);
+    assert.throws(
+      () => readKit(template({ boltOn: { ...boltOn, api: [] } })),
+      /boltOn.api must be a non-empty array/,
+    );
+    assert.throws(
+      () => readKit(template({ boltOn: { ...boltOn, example: "" } })),
+      /boltOn.example must be a non-empty string/,
+    );
+    assert.throws(
+      () => readKit(template({ boltOn: { ...boltOn, reservedShortcuts: "e" } })),
+      /boltOn.reservedShortcuts must be an array/,
+    );
   });
 
   it("summarizes from the opening sentence, adding the next after a bare noun phrase", () => {

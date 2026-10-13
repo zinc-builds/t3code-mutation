@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 
 import { GENERATED_KIT } from "./generated.ts";
 import {
+  boltOnCalls,
   makeWorkspaceKit,
   templateCatalogLine,
   validateTemplateOptions,
@@ -28,6 +29,12 @@ const template: KitTemplate = {
     panels: { type: "array", items: { type: "string", enum: ["light", "color"] }, default: [] },
   },
   examples: [{ look: "moody" }],
+  boltOn: {
+    summary: "options.customScript runs once.",
+    api: ["addControl({ id }) -> control.", "addPanel(title) -> body.   refresh() re-renders."],
+    reservedShortcuts: ["e"],
+    example: "t3template.addPanel('Extra');",
+  },
   html: '<!doctype html><html><head><meta charset="utf-8"></head><body><script>app()</script></body></html>',
 };
 
@@ -204,6 +211,7 @@ describe("kit docs", () => {
     ]);
     assert.strictEqual(docs.value.templates[0]?.id, "photo-develop");
     assert.isFalse("html" in docs.value.templates[0]!);
+    assert.deepEqual(docs.value.templates[0]?.boltOn, template.boltOn);
   });
 
   it("returns everything without names, and rejects unknown names", () => {
@@ -213,9 +221,45 @@ describe("kit docs", () => {
   });
 
   it("keeps the shipped catalog compact, with every template and primitive", () => {
-    assert.isAtMost(workspaceKit.catalog.length, 2_000);
+    // It rides in every workspace_mutate description: one line per template (with its own
+    // bolt-on calls), one bolt-on line, one line per primitive.
+    assert.isAtMost(workspaceKit.catalog.length, 2_500);
     for (const name of [...workspaceKit.templateIds, ...workspaceKit.primitiveNames])
       assert.include(workspaceKit.catalog, `- ${name}: `);
+  });
+
+  it("lists every template's bolt-on calls once and points at their docs", () => {
+    const listed = (id: string) =>
+      workspaceKit.catalog
+        .split("\n")
+        .find((line) => line.startsWith(`- ${id}: `))
+        ?.split(" Bolt-on: ")[1] ?? "";
+    const shared = /window\.t3template \(([^)]*), plus each/.exec(workspaceKit.catalog)?.[1] ?? "";
+    assert.include(shared, "addControl");
+    for (const template of GENERATED_KIT.templates) {
+      for (const call of boltOnCalls(template.boltOn.api)) {
+        assert.isTrue(
+          shared.split(", ").includes(call) || listed(template.id).includes(call),
+          `${template.id}: ${call} is not in the catalog`,
+        );
+      }
+    }
+    assert.include(listed("photo-develop"), "addImageStage");
+    assert.include(workspaceKit.catalog, "boltOn in workspace_kit_docs");
+  });
+
+  it("reads bolt-on call names from api lines, several per line", () => {
+    assert.deepEqual(
+      boltOnCalls([
+        "addControl({ id }) -> control.",
+        "info (third argument) = { phase }.",
+        "getValues() -> {}.   setValues(partial) -> values.",
+        "addPreset(name, values) / applyPreset(name) applies it.",
+        "ctx.crop = { x, y }.",
+        "addControl again(",
+      ]),
+      ["addControl", "getValues", "setValues", "addPreset", "applyPreset"],
+    );
   });
 
   it("lists a template by what it is and when to pick it", () => {

@@ -29,6 +29,22 @@ export interface TemplateOptionSpec {
 }
 
 /**
+ * How an agent extends a template with `options.customScript`: everything it
+ * may call on `window.t3template`, so it never guesses.
+ */
+export interface TemplateBoltOn {
+  /** When the script runs, what its hooks reach (preview, export), and how errors surface. */
+  readonly summary: string;
+  /** One line per call, with this template's values shape and sizes. */
+  readonly api: ReadonlyArray<string>;
+  /** Keys the template already binds; a bolt-on toolbar shortcut must avoid them. */
+  readonly reservedShortcuts: ReadonlyArray<string>;
+  /** A runnable customScript. */
+  readonly example: string;
+  readonly [key: string]: unknown;
+}
+
+/**
  * A template's `template.json`, verbatim: fields T3 does not read, such as
  * bolt-on docs, are kept for agents.
  */
@@ -41,6 +57,7 @@ export interface KitTemplateManifest {
   readonly kit: ReadonlyArray<string>;
   readonly options: Readonly<Record<string, TemplateOptionSpec>>;
   readonly examples: ReadonlyArray<unknown>;
+  readonly boltOn: TemplateBoltOn;
   readonly [key: string]: unknown;
 }
 

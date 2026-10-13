@@ -11,6 +11,7 @@ import { makeWorkspaceKit } from "./kit.ts";
 export const workspaceKit = makeWorkspaceKit(GENERATED_KIT);
 
 export {
+  boltOnCalls,
   makeWorkspaceKit,
   templateCatalogLine,
   templateOptionsTag,
@@ -26,5 +27,6 @@ export type {
   KitSource,
   KitTemplate,
   KitTemplateManifest,
+  TemplateBoltOn,
   TemplateOptionSpec,
 } from "./types.ts";

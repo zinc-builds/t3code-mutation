@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import { WORKSPACE_KIT_DOCS_TOOL_NAME } from "@t3tools/shared/mutationWorkspace";
 import { workspaceKit } from "@t3tools/workspace-kit";
 import * as Schema from "effect/Schema";
 import { Tool } from "effect/ai";
@@ -32,5 +33,21 @@ it("lists every shipped template in the build catalog and the docs tool", () => 
   for (const id of workspaceKit.templateIds) {
     expect(mutate.description).toContain(`- ${id}: `);
     expect(docs.description).toContain(id);
+  }
+});
+
+const decodeKitDocs = Schema.decodeSync(WorkspaceToolkit.tools.workspace_kit_docs.successSchema);
+
+it("points agents at each template's bolt-on docs and returns them whole", () => {
+  const { workspace_kit_docs: docs, workspace_mutate: mutate } = WorkspaceToolkit.tools;
+  expect(mutate.description).toContain("window.t3template (addControl");
+  expect(mutate.description).toContain(`boltOn in ${WORKSPACE_KIT_DOCS_TOOL_NAME}`);
+  expect(docs.description).toContain("boltOn");
+  const all = workspaceKit.docs(workspaceKit.templateIds);
+  if (!all.ok) throw new Error(all.error);
+  const decoded = decodeKitDocs(all.value);
+  for (const template of decoded.templates) {
+    expect(template.boltOn.api.length).toBeGreaterThan(0);
+    expect(template.boltOn.example).toContain("t3template");
   }
 });

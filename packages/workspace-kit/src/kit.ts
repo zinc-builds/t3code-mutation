@@ -32,6 +32,9 @@ export interface KitDocs {
   readonly templates: ReadonlyArray<KitTemplateManifest>;
 }
 
+// Named here rather than imported: the kit has no dependency on the server's tool names.
+const KIT_DOCS_TOOL = "workspace_kit_docs";
+
 const listOr = (names: ReadonlyArray<string>, none: string) =>
   names.length === 0 ? none : names.join(", ");
 
@@ -47,6 +50,19 @@ export function templateCatalogLine(summary: string): string {
   const lead = (/^[^:.]+/.exec(text)?.[0] ?? text).trim();
   const pick = /(?:^|\s)(Pick it\b.*?\.)(?=\s|$)/.exec(text)?.[1];
   return pick === undefined || lead === pick.slice(0, -1) ? `${lead}.` : `${lead}. ${pick}`;
+}
+
+/**
+ * The `window.t3template` calls a template's bolt-on api documents, in order:
+ * each api line holds one or more calls, separated by three spaces or " / ".
+ */
+export function boltOnCalls(api: ReadonlyArray<string>): ReadonlyArray<string> {
+  const calls = api.flatMap((line) =>
+    line
+      .split(/\s{3,}|\s\/\s/)
+      .flatMap((segment) => /^\s*([a-z][A-Za-z0-9]*)\(/.exec(segment)?.[1] ?? []),
+  );
+  return [...new Set(calls)];
 }
 
 /**
@@ -67,6 +83,18 @@ export function makeWorkspaceKit(source: KitSource) {
   const primitiveNames = source.primitives.map((p) => p.name);
   const templateIds = source.templates.map((t) => t.id);
 
+  // Bolt-on calls every template has are listed once; each template line adds its own.
+  const callsByTemplate = new Map(source.templates.map((t) => [t.id, boltOnCalls(t.boltOn.api)]));
+  const sharedCalls = [...callsByTemplate.values()].reduce<ReadonlyArray<string>>(
+    (shared, calls, index) => (index === 0 ? calls : shared.filter((c) => calls.includes(c))),
+    [],
+  );
+  const templateLine = (t: KitTemplate) => {
+    const own = (callsByTemplate.get(t.id) ?? []).filter((c) => !sharedCalls.includes(c));
+    const line = `- ${t.id}: ${templateCatalogLine(t.summary)}`;
+    return own.length === 0 ? line : `${line} Bolt-on: ${own.join(", ")}.`;
+  };
+
   /**
    * One line per template and primitive, for the `workspace_mutate`
    * description; `docs` returns the details.
@@ -75,8 +103,11 @@ export function makeWorkspaceKit(source: KitSource) {
     "Templates (template: {id, options}):",
     ...(source.templates.length === 0
       ? ["- none installed yet"]
-      : source.templates.map((t) => `- ${t.id}: ${templateCatalogLine(t.summary)}`)),
-    "Kit primitives (kit: [names], then window.t3kit.<name>.create(el, options)):",
+      : [
+          ...source.templates.map(templateLine),
+          `Bolt-ons: options.customScript calls window.t3template (${sharedCalls.join(", ")}, plus each template's own above), seeded by options.controls. Use only what the template's boltOn in ${KIT_DOCS_TOOL} lists; read its signatures, reservedShortcuts and runnable example first.`,
+        ]),
+    "Kit primitives (kit: [names], then window.t3kit.<camelCasedName>.create(el, options)):",
     ...source.primitives.map((p) => `- ${p.name}: ${p.summary}`),
   ].join("\n");
 
