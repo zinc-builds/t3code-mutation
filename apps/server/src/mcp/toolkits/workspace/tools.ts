@@ -78,7 +78,7 @@ const WorkspaceRestoreTool = Tool.make(WORKSPACE_RESTORE_TOOL_NAME, {
 
 const WorkspaceStateTool = Tool.make(WORKSPACE_STATE_TOOL_NAME, {
   description: `Read the current control values of this thread's workspace: the last object its page stored with t3.workspace.setState. Call it before acting on a message the user sent from the workspace when the request depends on what they have set (for example "apply this to the full-resolution file").`,
-  parameters: Schema.Struct({}),
+  // No `parameters`: an explicit Schema.Struct({}) is not a valid MCP input schema (see worktree/tools.ts).
   success: Schema.Struct({ state: Schema.Unknown }),
   failure: OrchestratorMcpFailure,
   failureMode: "return",
