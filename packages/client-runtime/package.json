@@ -399,6 +399,10 @@
       "types": "./src/state/mcpApps.ts",
       "default": "./src/state/mcpApps.ts"
     },
+    "./state/mutation-workspace": {
+      "types": "./src/state/mutationWorkspace.ts",
+      "default": "./src/state/mutationWorkspace.ts"
+    },
     "./source-control-clients": {
       "types": "./src/sourceControlClients.ts",
       "default": "./src/sourceControlClients.ts"

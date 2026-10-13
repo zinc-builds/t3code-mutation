@@ -1655,6 +1655,8 @@ export interface ChatComposerProps {
 
   // Queued runs strip rendered above the composer (v2 queue/steer).
   queuedRunsControl?: ReactNode;
+  // The agent's latest reply, attached on top while a mutation workspace hides the timeline.
+  workspaceReply?: ReactNode;
   // Queued-message edit mode: attachments already stored on the message being
   // edited. Rendered in the attachment strip with a remove control; removal is
   // client state in ChatView until the edit is saved.
@@ -6819,6 +6821,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         : null}
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
+          {props.workspaceReply}
           <ComposerBannerStack
             key={activeThreadId}
             className="relative z-0"

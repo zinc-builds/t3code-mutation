@@ -15,6 +15,12 @@ import {
   McpAppUpdateModelContextInput,
 } from "./mcpApps.ts";
 import {
+  WorkspaceReadStateInput,
+  WorkspaceReadStateResult,
+  WorkspaceStateError,
+  WorkspaceUpdateStateInput,
+} from "./mutationWorkspace.ts";
+import {
   ChatGptReconnectProfileInput,
   ChatGptReconnectProfile,
   ChatGptImportProfileInput,
@@ -401,6 +407,10 @@ export const WS_METHODS = {
   mcpAppsToolInfo: "mcpApps.toolInfo",
   mcpAppsReadResource: "mcpApps.readResource",
   mcpAppsUpdateModelContext: "mcpApps.updateModelContext",
+
+  // Mutation workspace methods
+  workspaceReadState: "workspace.readState",
+  workspaceUpdateState: "workspace.updateState",
 
   // Provider methods
   providerUploadFeedback: "provider.uploadFeedback",
@@ -1339,6 +1349,17 @@ const WsMcpAppsReadResourceRpc = Rpc.make(WS_METHODS.mcpAppsReadResource, {
   error: Schema.Union([McpAppRequestError, EnvironmentAuthorizationError]),
 });
 
+const WsWorkspaceReadStateRpc = Rpc.make(WS_METHODS.workspaceReadState, {
+  payload: WorkspaceReadStateInput,
+  success: WorkspaceReadStateResult,
+  error: Schema.Union([WorkspaceStateError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspaceUpdateStateRpc = Rpc.make(WS_METHODS.workspaceUpdateState, {
+  payload: WorkspaceUpdateStateInput,
+  error: Schema.Union([WorkspaceStateError, EnvironmentAuthorizationError]),
+});
+
 const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
   payload: ProviderUploadFeedbackInput,
   success: ProviderUploadFeedbackResult,
@@ -2001,6 +2022,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsMcpAppsToolInfoRpc,
   WsMcpAppsReadResourceRpc,
   WsMcpAppsUpdateModelContextRpc,
+  WsWorkspaceReadStateRpc,
+  WsWorkspaceUpdateStateRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsSubscribeWorktreeSetupRpc,

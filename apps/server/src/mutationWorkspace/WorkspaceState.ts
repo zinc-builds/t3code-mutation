@@ -1,5 +1,4 @@
-import type { ThreadId } from "@t3tools/contracts";
-import { WORKSPACE_MAX_STATE_BYTES } from "@t3tools/shared/mutationWorkspace";
+import { type ThreadId, WORKSPACE_MAX_STATE_BYTES, WorkspaceStateError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -13,25 +12,6 @@ import * as ServerConfig from "../config.ts";
 const StateJson = Schema.fromJsonString(Schema.Unknown);
 const decodeState = Schema.decodeEffect(StateJson);
 const encodeState = Schema.encodeEffect(StateJson);
-
-export class WorkspaceStateError extends Schema.TaggedError<WorkspaceStateError>()(
-  "WorkspaceStateError",
-  {
-    reason: Schema.Literals(["too-large", "invalid-thread", "store-failed"]),
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {
-  override get message(): string {
-    switch (this.reason) {
-      case "too-large":
-        return `Workspace state must be at most ${WORKSPACE_MAX_STATE_BYTES} bytes of JSON.`;
-      case "invalid-thread":
-        return "This thread cannot store workspace state.";
-      case "store-failed":
-        return "The workspace state could not be read or saved.";
-    }
-  }
-}
 
 /**
  * The control state of a thread's workspace: the last object its page stored.

@@ -161,6 +161,12 @@ export function useThreadVisibleTurnItems(
   );
 }
 
+export function readThreadVisibleTurnItems(
+  ref: ScopedThreadRef,
+): ReadonlyArray<OrchestrationV2ProjectedTurnItem> {
+  return appAtomRegistry.get(environmentThreadDetails.visibleTurnItemsAtom(ref));
+}
+
 export function readProject(ref: ScopedProjectRef): EnvironmentProject | null {
   return appAtomRegistry.get(environmentProjects.projectAtom(ref));
 }

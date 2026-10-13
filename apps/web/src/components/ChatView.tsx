@@ -454,6 +454,13 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { MutationStage } from "./mutation/MutationStage";
+import { MutationTitleBar } from "./mutation/MutationTitleBar";
+import { leaveWorkspace } from "./mutation/mutationWorkspaceStore";
+import { useMutationWorkspace } from "./mutation/useMutationWorkspace";
+import { useWorkspaceComposerPlacement } from "./mutation/useWorkspaceComposerPlacement";
+import { latestWorkspaceReply, WorkspaceReplyStrip } from "./mutation/WorkspaceReplyStrip";
+import { WorkspaceResumeBanner } from "./mutation/WorkspaceResumeBanner";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -2353,9 +2360,20 @@ export default function ChatView(props: ChatViewProps) {
     [allocatableActiveTerminalIds, canReuseTerminal, environmentId],
   );
   const previewPanelOpen = activeRightPanelKind === "preview" && browserAvailable;
-  const rightPanelOpen = rightPanelState.isOpen;
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
+  // A mutation workspace replaces the thread view: no right panel, no timeline.
+  const mutation = useMutationWorkspace(
+    isServerThread ? activeThreadRef : null,
+    serverVisibleTurnItems,
+    panelAnimationsActive,
+  );
+  const mutationWorkspace = mutation.shown;
+  const mutationComposer = useWorkspaceComposerPlacement(
+    composerOverlayElement,
+    mutationWorkspace?.workspace.attachmentId ?? null,
+  );
+  const rightPanelOpen = rightPanelState.isOpen && mutationWorkspace === null;
   const activeTerminalDrawerPresence = usePanelPresence(
     Boolean(activeThreadKey && terminalUiState.terminalOpen),
     true,
@@ -10957,6 +10975,28 @@ export default function ChatView(props: ChatViewProps) {
   );
   const onComposerResume = useCallback(() => onResumeRef.current(), []);
   const onComposerCompactContext = useCallback(() => onCompactContextRef.current(), []);
+  const leaveMutationWorkspace = useCallback(() => {
+    if (activeThreadRef) leaveWorkspace(activeThreadRef);
+  }, [activeThreadRef]);
+  const attachWorkspaceFiles = useCallback(
+    (files: ReadonlyArray<File>) => composerRef.current?.addDroppedFiles([...files]),
+    [composerRef],
+  );
+  // In a workspace: the agent's latest reply. Back in chat: the way back into it.
+  const workspaceReply = useMemo(
+    () =>
+      mutationWorkspace !== null ? (
+        <WorkspaceReplyStrip
+          reply={latestWorkspaceReply(timelineMessages)}
+          working={isWorking}
+          threadRef={activeThreadRef}
+          cwd={gitCwd ?? undefined}
+        />
+      ) : mutation.resumable !== null && activeThreadRef !== null ? (
+        <WorkspaceResumeBanner threadRef={activeThreadRef} resumable={mutation.resumable} />
+      ) : null,
+    [activeThreadRef, gitCwd, isWorking, mutation.resumable, mutationWorkspace, timelineMessages],
+  );
   const queuedRunsControl = useMemo(
     () =>
       isServerThread && activeThread ? (
@@ -11453,22 +11493,32 @@ export default function ChatView(props: ChatViewProps) {
               className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
             />
           ) : null}
-          {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
+          {mutationWorkspace === null && !rightPanelControlsAtRoot && !rightPanelControlsInPanel
+            ? panelLayoutControls
+            : null}
           {inlineRightPanelOwnsTitleBar ? threadPanelHeaderControl : null}
-          <ChatHeader
-            activeThreadEnvironmentId={activeThread.environmentId}
-            activeThreadId={activeThread.id}
-            isServerThread={isServerThread}
-            activeThreadTitle={activeThread.title}
-            activeProject={activeProject ?? null}
-            parentThreadLink={parentThreadLink}
-            onOpenThread={onOpenRelatedThread}
-            rightPanelOpen={inlineRightPanelOwnsTitleBar}
-            onNewThreadInProject={handleNewThreadInActiveProject}
-            {...(activeDraftLogicalProjectKey
-              ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
-              : {})}
-          />
+          {mutationWorkspace !== null ? (
+            <MutationTitleBar
+              threadTitle={activeThread.title}
+              workspaceTitle={mutationWorkspace.workspace.title}
+              onBackToChat={leaveMutationWorkspace}
+            />
+          ) : (
+            <ChatHeader
+              activeThreadEnvironmentId={activeThread.environmentId}
+              activeThreadId={activeThread.id}
+              isServerThread={isServerThread}
+              activeThreadTitle={activeThread.title}
+              activeProject={activeProject ?? null}
+              parentThreadLink={parentThreadLink}
+              onOpenThread={onOpenRelatedThread}
+              rightPanelOpen={inlineRightPanelOwnsTitleBar}
+              onNewThreadInProject={handleNewThreadInActiveProject}
+              {...(activeDraftLogicalProjectKey
+                ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
+                : {})}
+            />
+          )}
         </header>
 
         {/* Main content area with optional plan sidebar */}
@@ -11480,7 +11530,10 @@ export default function ChatView(props: ChatViewProps) {
               progressive: serverConfig?.threadFindProgressive === true,
               thread: activeThreadRef,
               enabled:
-                isServerThread && serverConfig?.threadFind === true && !paintOnlyDisplayedTimeline,
+                isServerThread &&
+                serverConfig?.threadFind === true &&
+                !paintOnlyDisplayedTimeline &&
+                mutationWorkspace === null,
               content: serverProjection ?? undefined,
             }}
             controlsRef={threadFindControlsRef}
@@ -11530,7 +11583,13 @@ export default function ChatView(props: ChatViewProps) {
               />
             </div>
             {/* Messages Wrapper */}
-            <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+            <div
+              inert={mutationWorkspace !== null}
+              className={cn(
+                "relative flex min-h-0 flex-1 flex-col bg-background",
+                mutationWorkspace !== null && "invisible",
+              )}
+            >
               {/* Messages — LegendList handles virtualization and scrolling internally */}
               <MessagesTimeline
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
@@ -11657,24 +11716,46 @@ export default function ChatView(props: ChatViewProps) {
               )}
             </div>
 
-            {/* Input bar — centered for an empty draft, docked after sending. */}
+            {mutationWorkspace !== null && activeThreadRef ? (
+              <MutationStage
+                dockHeight={mutationComposer.dockHeight}
+                environmentId={activeThreadRef.environmentId}
+                threadId={activeThreadRef.threadId}
+                workspace={mutationWorkspace.workspace}
+                threadImages={mutation.threadImages}
+                agentWorking={isWorking}
+                composerHeight={mutationComposer.composerHeight}
+                onComposerSlotChange={mutationComposer.onComposerSlotChange}
+                onSendMessage={sendAppMessage}
+                onAttachFiles={attachWorkspaceFiles}
+                onRestore={leaveMutationWorkspace}
+              />
+            ) : null}
+
+            {/* Input bar — centered for an empty draft, docked after sending, or placed by a
+                mutation workspace (its slot, else docked below the page). */}
             <div
               ref={setComposerOverlayElement}
               inert={isRevertingCheckpoint}
               data-chat-composer-overlay="true"
               className={
-                isDraftHeroState
+                mutationComposer.overlayClassName ??
+                (isDraftHeroState
                   ? "pointer-events-none absolute inset-0 z-20 flex items-center"
-                  : "pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
+                  : "pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2")
               }
+              style={mutationComposer.overlayStyle}
             >
               <div
                 ref={draftHeroTransition.transitionGroupRef}
-                className="chat-composer-lane w-full"
+                className={mutationComposer.slotted ? "w-full" : "chat-composer-lane w-full"}
               >
                 <div
                   data-chat-composer-stack="true"
-                  className="group/composer-stack pointer-events-auto relative z-10 mx-auto w-full max-w-(--chat-content-max-width)"
+                  className={cn(
+                    "group/composer-stack pointer-events-auto relative z-10 mx-auto w-full",
+                    !mutationComposer.slotted && "max-w-(--chat-content-max-width)",
+                  )}
                 >
                   {isDraftHeroState ? (
                     <div className="absolute inset-x-0 bottom-full">
@@ -11793,6 +11874,7 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
+                              workspaceReply={workspaceReply}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
@@ -11966,10 +12048,12 @@ export default function ChatView(props: ChatViewProps) {
                         </div>
                       </div>
                     </ComposerSurface.Shell>
-                    <div
-                      aria-hidden
-                      className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
-                    />
+                    {mutationComposer.slotted ? null : (
+                      <div
+                        aria-hidden
+                        className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
+                      />
+                    )}
                   </div>
                 </div>
               </div>

@@ -19,8 +19,8 @@ export const WORKSPACE_OUTPUT_KEY = "mutationWorkspace";
 
 export const WORKSPACE_MAX_TITLE_LENGTH = 120;
 export const WORKSPACE_MAX_ASSETS = 16;
-/** Largest state a workspace may store, as UTF-8 JSON. */
-export const WORKSPACE_MAX_STATE_BYTES = 64 * 1024;
+// The RPC contract's state error names the limit, so the contract owns it.
+export { WORKSPACE_MAX_STATE_BYTES } from "@t3tools/contracts";
 
 /** A file the agent handed the workspace, served from the environment host. */
 export interface WorkspaceAssetReference {
