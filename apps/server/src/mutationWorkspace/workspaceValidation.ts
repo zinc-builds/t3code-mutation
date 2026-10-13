@@ -127,7 +127,9 @@ export const VALIDATION_PROBLEM_PREFIXES = [TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER]
  * none, standing in for the thread's attached images) and the chrome's
  * control values; `setChrome` fails without chrome, as in the client, and is
  * otherwise recorded for T3 to check; files the page attaches or downloads
- * are kept for the export report; every other request succeeds;
+ * are kept for the export report (an export may return those Files, or
+ * describe them as `{ name, type, size }`, which must match one the page
+ * delivered); every other request succeeds;
  * notifications are dropped.
  * A template page counts as booted only once it has published
  * `window.t3template` and been quiet since: templates run `customScript` right
@@ -178,8 +180,10 @@ V.files=[];
 return new Promise(function(r){r(t.export());}).then(function(v){return{ok:true,value:v};},function(e){return{ok:false,error:message(e)};}).then(function(x){
 var v=x.ok&&x.value&&typeof x.value==="object"?x.value:null,files=[],keys={},problems=[],cmds=[];
 function add(f){var k=(f.name||"")+"\\0"+f.size+"\\0"+f.type;if(!keys[k]){keys[k]=1;files.push(f);}}
-if(v&&v.files!==undefined){if(Array.isArray(v.files))v.files.forEach(function(f,i){if(f instanceof Blob)add(f);else problems.push("export() returned files["+i+"], which is not a File.");});else problems.push("export() returned files that is not an array of Files.");}
+var described=[];
+if(v&&v.files!==undefined){if(Array.isArray(v.files))v.files.forEach(function(f,i){if(f instanceof Blob)add(f);else if(f&&typeof f==="object"&&typeof f.name==="string")described.push({at:i,file:f});else problems.push("export() returned files["+i+"], which is neither a File nor a {name, type, size} description.");});else problems.push("export() returned files that is not an array.");}
 V.files.forEach(add);
+described.forEach(function(d){var f=d.file;if(!files.some(function(g){return g.name===f.name&&(typeof f.size!=="number"||g.size===f.size);}))problems.push("export() described files["+d.at+"] ("+f.name+"), which the page never attached or downloaded.");});
 var ff=v?v.ffmpeg:undefined;
 if(typeof ff==="string")cmds=[ff];else if(Array.isArray(ff)&&ff.every(function(c){return typeof c==="string";}))cmds=ff;else if(ff!=null)problems.push("export() returned ffmpeg that is not a string or an array of strings.");
 var budget={left:C.maxInputBytes};

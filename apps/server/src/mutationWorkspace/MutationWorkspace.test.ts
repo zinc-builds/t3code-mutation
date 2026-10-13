@@ -14,6 +14,7 @@ import * as ServerConfig from "../config.ts";
 import * as HeadlessChrome from "../htmlRender/headlessChrome.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
 import * as PreviewBrowser from "../preview/PreviewBrowser.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import * as FfmpegDryRun from "./FfmpegDryRun.ts";
 import * as MutationWorkspace from "./MutationWorkspace.ts";
 import { workspaceMutateAdvice } from "./workspaceValidation.ts";
@@ -696,7 +697,9 @@ it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
           },
         ],
         ffmpeg: [],
-        problems: ["export() returned files[0], which is not a File."],
+        problems: [
+          "export() returned files[0], which is neither a File nor a {name, type, size} description.",
+        ],
       },
     };
     return Effect.gen(function* () {
@@ -713,7 +716,11 @@ it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
         { source: "export", message: "stage blew up" },
         { source: "customScript", message: 'image stage "glow": x is not defined' },
         { source: "export", message: 'export() failed: image stage "glow": x is not defined' },
-        { source: "export", message: "export() returned files[0], which is not a File." },
+        {
+          source: "export",
+          message:
+            "export() returned files[0], which is neither a File nor a {name, type, size} description.",
+        },
         {
           source: "export",
           message:
@@ -1187,5 +1194,88 @@ Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (read
         }).pipe(Effect.scoped, Effect.provide(layer));
       }),
     30_000,
+  );
+});
+
+// Real-browser and real-ffmpeg test of every shipped template's bolt-on example.
+const TEST_FFMPEG_ENV = "T3CODE_TEST_FFMPEG";
+
+describe("MutationWorkspace shipped templates in a browser", () => {
+  it.live(
+    "every shipped template's bolt-on example boots, exports, and dry-runs its ffmpeg",
+    (ctx) =>
+      Effect.gen(function* () {
+        const env = yield* HostProcess.Environment;
+        const executable = env[TEST_BROWSER_ENV];
+        if (!executable || !env[TEST_FFMPEG_ENV]) {
+          return ctx.skip(`Set ${TEST_BROWSER_ENV} and ${TEST_FFMPEG_ENV} to run this test.`);
+        }
+        yield* Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const runner = yield* ProcessRunner.ProcessRunner;
+          const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-shipped-" });
+          const clip = path.join(directory, "clip.mp4");
+          yield* runner.run({
+            command: "ffmpeg",
+            args: [
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-f",
+              "lavfi",
+              "-i",
+              "testsrc=size=320x180:rate=24:duration=2",
+              "-f",
+              "lavfi",
+              "-i",
+              "sine=frequency=440:duration=2",
+              "-c:v",
+              "libx264",
+              "-pix_fmt",
+              "yuv420p",
+              "-c:a",
+              "aac",
+              "-shortest",
+              clip,
+            ],
+          });
+          const table = path.join(directory, "trips.csv");
+          yield* fileSystem.writeFileString(
+            table,
+            "trip_id,city,duration_min,member\nT1,Osaka,7.3,true\nT2,Austin,4.2,false\nT3,Osaka,12.5,true\n",
+          );
+          const workspace = yield* MutationWorkspace.MutationWorkspace;
+          for (const id of workspaceKit.templateIds) {
+            const template = workspaceKit.findTemplate(id);
+            if (!template.ok) throw new Error(template.error);
+            const pipeline = /pipeline:\s*["'](edl|data)["']/.exec(template.value.html)?.[1];
+            // Image templates get the validation stand-in's placeholder photo.
+            const assetPaths = pipeline === "edl" ? [clip] : pipeline === "data" ? [table] : [];
+            const { validation } = yield* workspace.publish({
+              threadId: thread,
+              title: template.value.title,
+              assetPaths,
+              template: { id, options: { customScript: template.value.boltOn.example } },
+            });
+            expect(validation, id).toMatchObject({ level: "full", ok: true, errors: [] });
+            expect(validation.export?.files.length, `${id} exports files`).toBeGreaterThan(0);
+            if (pipeline === "edl") {
+              const checks = validation.export?.ffmpeg ?? [];
+              expect(checks.length, `${id} returns ffmpeg`).toBeGreaterThan(0);
+              for (const check of checks) expect(check.status, id).toBe("ok");
+            }
+          }
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.merge(
+              layerBrowserWorkspace(executable),
+              ProcessRunner.layer.pipe(Layer.provide(NodeServices.layer)),
+            ),
+          ),
+        );
+      }),
+    180_000,
   );
 });

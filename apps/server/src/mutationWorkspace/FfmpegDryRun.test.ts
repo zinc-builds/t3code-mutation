@@ -203,8 +203,11 @@ describe("FfmpegDryRun with the host's ffmpeg", () => {
         expect(broken?.status === "failed" ? broken.stderr : "").toMatch(/notafilter/);
       }).pipe(
         Effect.scoped,
-        Effect.provide(Layer.mergeAll(FfmpegDryRun.layer, ProcessRunner.layer)),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(
+          Layer.mergeAll(FfmpegDryRun.layer, ProcessRunner.layer).pipe(
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ),
       ),
     20_000,
   );
