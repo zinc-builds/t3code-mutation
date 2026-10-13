@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as NodeURL from "node:url";
 
 import * as ServerConfig from "../config.ts";
 import * as HeadlessChrome from "../htmlRender/headlessChrome.ts";
@@ -1289,6 +1290,9 @@ Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (read
 
 // Real-browser and real-ffmpeg test of every shipped template's bolt-on example.
 const TEST_FFMPEG_ENV = "T3CODE_TEST_FFMPEG";
+const TEMPLATE_FIXTURES = NodeURL.fileURLToPath(
+  new URL("./__fixtures__/shipped-templates", import.meta.url),
+);
 
 describe("MutationWorkspace shipped templates in a browser", () => {
   it.live(
@@ -1336,12 +1340,25 @@ describe("MutationWorkspace shipped templates in a browser", () => {
             "trip_id,city,duration_min,member\nT1,Osaka,7.3,true\nT2,Austin,4.2,false\nT3,Osaka,12.5,true\n",
           );
           const workspace = yield* MutationWorkspace.MutationWorkspace;
+          for (const id of yield* fileSystem.readDirectory(TEMPLATE_FIXTURES)) {
+            expect(workspaceKit.templateIds, `fixture directory ${id}`).toContain(id);
+          }
           for (const id of workspaceKit.templateIds) {
             const template = workspaceKit.findTemplate(id);
             if (!template.ok) throw new Error(template.error);
             const pipeline = /pipeline:\s*["'](edl|data)["']/.exec(template.value.html)?.[1];
-            // Image templates get the validation stand-in's placeholder photo.
-            const assetPaths = pipeline === "edl" ? [clip] : pipeline === "data" ? [table] : [];
+            // A template that needs its own media (a page, a log, a profile) has a fixture
+            // directory named after it; image templates get the stand-in's placeholder photo.
+            const fixtures = path.join(TEMPLATE_FIXTURES, id);
+            const assetPaths = (yield* fileSystem.exists(fixtures))
+              ? (yield* fileSystem.readDirectory(fixtures))
+                  .toSorted()
+                  .map((name) => path.join(fixtures, name))
+              : pipeline === "edl"
+                ? [clip]
+                : pipeline === "data"
+                  ? [table]
+                  : [];
             const { validation } = yield* workspace.publish({
               threadId: thread,
               title: template.value.title,
