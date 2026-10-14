@@ -35,8 +35,26 @@ const ffmpegWith = (dryRun: FfmpegDryRun.FfmpegDryRun["Service"]["dryRun"]) =>
   Layer.succeed(FfmpegDryRun.FfmpegDryRun, FfmpegDryRun.FfmpegDryRun.of({ dryRun }));
 const ffmpegUnused = ffmpegWith(() => Effect.die("This test runs no ffmpeg."));
 
+const fixtureBoltOn = {
+  summary: "options.customScript runs once.",
+  api: ["addPanel(title) -> body."],
+  reservedShortcuts: [],
+  example: "t3template.addPanel('Extra');",
+};
+
 const fixtureKit = makeWorkspaceKit({
   core: null,
+  vendorRuntime: "window.t3kit_vendor=1;",
+  vendor: [
+    {
+      name: "sql",
+      package: "@example/sql",
+      version: "1.2.3",
+      license: "MIT",
+      files: [{ name: "sql.wasm", load: "bytes", content: "AGFzbQ==" }],
+      init: 't3kit.vendor.define("sql", () => 1);',
+    },
+  ],
   primitives: [
     { name: "develop", summary: "", docs: "develop docs", source: "window.t3kit_develop=1;" },
     { name: "viewer", summary: "", docs: "viewer docs", source: "window.t3kit_viewer=1;" },
@@ -47,15 +65,22 @@ const fixtureKit = makeWorkspaceKit({
       title: "Photo Develop",
       summary: "Grade one photo.",
       kit: ["develop"],
+      vendor: [],
       options: { look: { type: "string", enum: ["neutral", "moody"], default: "neutral" } },
       examples: [],
-      boltOn: {
-        summary: "options.customScript runs once.",
-        api: ["addPanel(title) -> body."],
-        reservedShortcuts: [],
-        example: "t3template.addPanel('Extra');",
-      },
+      boltOn: fixtureBoltOn,
       html: "<!doctype html><html><head></head><body><script>app()</script></body></html>",
+    },
+    {
+      id: "query",
+      title: "Query",
+      summary: "Query a database.",
+      kit: ["viewer"],
+      vendor: ["sql"],
+      options: { sql: { type: "string", default: "" } },
+      examples: [],
+      boltOn: fixtureBoltOn,
+      html: "<!doctype html><html><head></head><body><script>query()</script></body></html>",
     },
   ],
 });
@@ -264,6 +289,18 @@ it.layer(NodeServices.layer)("MutationWorkspace shipped templates", (it) => {
             const at = html.indexOf(`<script data-t3kit="${name}">`);
             assert.isTrue(at > bridge && at < optionsTag, `${where}: ${name} loads in order`);
           }
+          // Vendored libraries come after the bridge and before every primitive.
+          const firstKit = Math.min(
+            ...template.kit.map((name) => html.indexOf(`<script data-t3kit="${name}">`)),
+          );
+          for (const name of template.vendor) {
+            const init = html.indexOf(`data-t3vendor="${name}" data-t3vendor-file="init.js"`);
+            const registry = html.indexOf('<script data-t3kit="_vendor">');
+            assert.isTrue(
+              bridge < registry && registry < init && init < firstKit,
+              `${where}: ${name} is vendored before the kit`,
+            );
+          }
           const tag =
             /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
           assert.deepEqual(JSON.parse(tag?.[1] ?? "null"), options, where);
@@ -321,6 +358,56 @@ it.layer(NodeServices.layer)("MutationWorkspace template memo", (it) => {
         assetPaths: [],
       });
       assert.strictEqual(prepared, 3);
+    }).pipe(Effect.provide(layerKitWorkspace(htmlRender)));
+  });
+
+  it("vendors a template's libraries after the bridge and before its kit, assembled once", () => {
+    let prepared = 0;
+    const htmlRender = htmlRenderWith({
+      prepare: (html: string) =>
+        Effect.sync(() => {
+          prepared += 1;
+          return html;
+        }),
+    });
+    return Effect.gen(function* () {
+      const workspace = yield* MutationWorkspace.MutationWorkspace;
+      const publishQuery = (sql: string) =>
+        workspace
+          .publish({
+            threadId: thread,
+            template: { id: "query", options: { sql } },
+            title: "Query",
+            assetPaths: [],
+          })
+          .pipe(Effect.flatMap(({ reference }) => readStored(reference.attachmentId)));
+      const first = yield* publishQuery("select 1");
+      const second = yield* publishQuery("select 2");
+      assert.strictEqual(prepared, 1);
+      assert.strictEqual(second, first.replace('{"sql":"select 1"}', '{"sql":"select 2"}'));
+      const order = [
+        "window.t3.workspace=",
+        '<script data-t3kit="_vendor">window.t3kit_vendor=1;</script>',
+        '<script type="application/octet-stream" data-t3vendor="sql" data-t3vendor-file="sql.wasm">AGFzbQ==</script>',
+        '<script data-t3vendor="sql" data-t3vendor-file="init.js">',
+        '<script data-t3kit="viewer">',
+        '<script id="t3-template-options"',
+        "query()",
+      ].map((markup) => first.indexOf(markup));
+      assert.isTrue(
+        order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]!)),
+        JSON.stringify(order),
+      );
+      const develop = yield* workspace
+        .publish({
+          threadId: thread,
+          template: { id: "photo-develop", options: {} },
+          title: "Develop",
+          assetPaths: [],
+        })
+        .pipe(Effect.flatMap(({ reference }) => readStored(reference.attachmentId)));
+      assert.notInclude(develop, "data-t3vendor");
+      assert.notInclude(develop, "t3kit_vendor");
     }).pipe(Effect.provide(layerKitWorkspace(htmlRender)));
   });
 });
@@ -851,6 +938,8 @@ it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
 const chromeTemplateKit = (chrome: Record<string, unknown>) =>
   makeWorkspaceKit({
     core: null,
+    vendorRuntime: null,
+    vendor: [],
     primitives: [],
     templates: [
       {
@@ -858,6 +947,7 @@ const chromeTemplateKit = (chrome: Record<string, unknown>) =>
         title: "Grade",
         summary: "Grade one photo.",
         kit: [],
+        vendor: [],
         options: {},
         examples: [],
         boltOn: {
@@ -1216,6 +1306,8 @@ Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (read
         const layer = MutationWorkspace.layerWithKit(
           makeWorkspaceKit({
             core: null,
+            vendorRuntime: null,
+            vendor: [],
             primitives: [],
             templates: [{ ...template.value, html: chromeTemplateHtml }],
           }),

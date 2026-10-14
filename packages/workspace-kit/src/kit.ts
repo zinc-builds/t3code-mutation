@@ -1,5 +1,12 @@
 import { validateTemplateOptions } from "./templateOptions.ts";
-import type { KitPrimitive, KitSource, KitTemplate, KitTemplateManifest } from "./types.ts";
+import type {
+  KitPrimitive,
+  KitSource,
+  KitTemplate,
+  KitTemplateManifest,
+  KitVendor,
+  KitVendorFile,
+} from "./types.ts";
 
 /** A kit lookup either succeeds or says exactly what to fix. */
 export type KitResult<A> =
@@ -23,6 +30,8 @@ export interface WorkspacePagePlan {
   /** The agent's html, or the template's. */
   readonly html: string;
   readonly primitives: ReadonlyArray<KitPrimitive>;
+  /** The template's vendored libraries; none for the agent's own page. */
+  readonly vendor: ReadonlyArray<KitVendor>;
   /** Present for a template page; injected as `#t3-template-options`. */
   readonly template?: {
     readonly id: string;
@@ -93,10 +102,56 @@ export const templateOptionsTag = (options: Readonly<Record<string, unknown>>) =
 const inlineScript = (attributes: string, source: string) =>
   `<script ${attributes}>${source.replace(/<\/script/gi, "<\\/script")}</script>`;
 
+const vendorFileScript = (library: string, file: KitVendorFile) => {
+  const attributes = `data-t3vendor="${library}" data-t3vendor-file="${file.name}"`;
+  switch (file.load) {
+    case "script":
+      return inlineScript(attributes, file.content);
+    case "module":
+      return inlineScript(`type="module" ${attributes}`, file.content);
+    case "bytes":
+      // Base64 holds no markup, and a script of this type never runs.
+      return `<script type="application/octet-stream" ${attributes}>${file.content}</script>`;
+  }
+};
+
+/**
+ * The markup that vendors libraries into a page: the `t3kit.vendor` registry,
+ * then each library's files and its init, in that order.
+ */
+export function vendorScripts(runtime: string, libraries: ReadonlyArray<KitVendor>): string {
+  if (libraries.length === 0) return "";
+  return [
+    inlineScript('data-t3kit="_vendor"', runtime),
+    ...libraries.flatMap((library) => [
+      ...library.files.map((file) => vendorFileScript(library.name, file)),
+      inlineScript(`data-t3vendor="${library.name}" data-t3vendor-file="init.js"`, library.init),
+    ]),
+  ].join("");
+}
+
 /** Lookups, docs, and page assembly over one kit (the generated one, or a fixture in tests). */
 export function makeWorkspaceKit(source: KitSource) {
   const primitivesByName = new Map(source.primitives.map((p) => [p.name, p]));
   const templatesById = new Map(source.templates.map((t) => [t.id, t]));
+  // A template that vendors a library the kit lacks is a broken kit, not a bad request.
+  const vendorByName = new Map(source.vendor.map((v) => [v.name, v]));
+  const vendorByTemplate = new Map(
+    source.templates.map((t) => [
+      t.id,
+      t.vendor.map((name) => {
+        const library = vendorByName.get(name);
+        if (library === undefined) {
+          throw new Error(`Template "${t.id}" vendors "${name}", which the kit lacks.`);
+        }
+        return library;
+      }),
+    ]),
+  );
+  const vendorRuntime = source.vendorRuntime;
+  if (source.vendor.length > 0 && vendorRuntime === null) {
+    throw new Error("The kit vendors libraries but has no vendor runtime.");
+  }
   const primitiveNames = source.primitives.map((p) => p.name);
   const templateIds = source.templates.map((t) => t.id);
 
@@ -189,7 +244,7 @@ export function makeWorkspaceKit(source: KitSource) {
       }
       const primitives = resolvePrimitives(requestedKit);
       if (!primitives.ok) return primitives;
-      return ok({ html: request.html, primitives: primitives.value });
+      return ok({ html: request.html, primitives: primitives.value, vendor: [] });
     }
     if (request.html !== undefined) {
       return fail(
@@ -209,6 +264,7 @@ export function makeWorkspaceKit(source: KitSource) {
     return ok({
       html: template.value.html,
       primitives: primitives.value,
+      vendor: vendorByTemplate.get(template.value.id) ?? [],
       template: {
         id: template.value.id,
         options,
@@ -218,13 +274,16 @@ export function makeWorkspaceKit(source: KitSource) {
   };
 
   /**
-   * Inserts the plan's primitives (after the kit's shared core, if any) and
-   * the template options at the start of the document head, so they run
-   * before the page's own scripts. T3 then inserts the workspace bridge
-   * ahead of them.
+   * Inserts the plan's vendored libraries, its primitives (after the kit's
+   * shared core, if any) and the template options at the start of the
+   * document head, so they run before the page's own scripts. T3 then inserts
+   * the workspace bridge ahead of them.
    */
   const inject = (html: string, plan: WorkspacePagePlan): string => {
     const scripts = [
+      ...(plan.vendor.length > 0 && vendorRuntime !== null
+        ? [vendorScripts(vendorRuntime, plan.vendor)]
+        : []),
       ...(plan.primitives.length > 0 && source.core !== null
         ? [inlineScript('data-t3kit="_core"', source.core)]
         : []),

@@ -2,10 +2,17 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
 import { afterEach, assert, describe, it } from "@effect/vitest";
 
-import { primitiveGlobal, readKit, readSummary, renderKitModule } from "../scripts/generate.mjs";
+import {
+  primitiveGlobal,
+  readKit,
+  readSummary,
+  renderKitModule,
+  vendorModuleEpilogue,
+} from "../scripts/generate.mjs";
 import { GENERATED_KIT } from "./generated.ts";
 
 const primitive = (name: string, header: string) =>
@@ -48,6 +55,15 @@ describe("the committed kit", () => {
 
   it("loads links after the primitives it wires", () => {
     assert.strictEqual(GENERATED_KIT.primitives.at(-1)?.name, "links");
+  });
+
+  it("is generated from the current kit sources and pinned packages", () => {
+    const committed = NodeFS.readFileSync(new URL("./generated.ts", import.meta.url), "utf8");
+    const kit = readKit(NodeURL.fileURLToPath(new URL("../kit", import.meta.url)));
+    assert.isTrue(
+      committed === renderKitModule(kit),
+      "src/generated.ts is stale: run node packages/workspace-kit/scripts/generate.mjs",
+    );
   });
 });
 
@@ -219,5 +235,117 @@ describe("generate.mjs", () => {
     const long = readSummary(`layers: ${"word ".repeat(40)}end.`, "layers");
     assert.isAtMost(long.length, 90);
     assert.isTrue(long.endsWith("…"));
+  });
+
+  const vendorRuntime =
+    "/**\n * t3kit.vendor: registry.\n */\n(function () { window.t3kit.vendor = {}; })();\n";
+  const sqlModule =
+    "/* SQL */\nconst open = () => 1;\nconst version$1 = '1';\nexport { open as default, version$1 as version };\n";
+  const vendored = (
+    overrides: { pin?: string; installed?: string; module?: string; files?: unknown } = {},
+  ) =>
+    NodePath.join(
+      kitDir({
+        "package.json": JSON.stringify({
+          name: "@t3tools/workspace-kit",
+          devDependencies: { "@example/sql": overrides.pin ?? "1.2.3" },
+        }),
+        "node_modules/@example/sql/package.json": JSON.stringify({
+          version: overrides.installed ?? "1.2.3",
+        }),
+        "node_modules/@example/sql/dist/sql.mjs": overrides.module ?? sqlModule,
+        "node_modules/@example/sql/dist/sql.wasm": "\0asm",
+        "kit/primitives/viewer.js": primitive("viewer", "image viewport."),
+        "kit/vendor/runtime.js": vendorRuntime,
+        "kit/vendor/sql/vendor.json": JSON.stringify({
+          package: "@example/sql",
+          version: "1.2.3",
+          license: "MIT",
+          files: overrides.files ?? [
+            { path: "dist/sql.mjs", load: "module" },
+            { path: "dist/sql.wasm", load: "bytes" },
+          ],
+        }),
+        "kit/vendor/sql/init.js":
+          '/**\n * sql: init.\n */\nt3kit.vendor.define("sql", ({ exports }) => exports["sql.mjs"].default());\n',
+        "kit/templates/query/template.html": "<p></p>",
+        "kit/templates/query/template.json": JSON.stringify({
+          id: "query",
+          title: "Query",
+          summary: "Query data.",
+          vendor: ["sql"],
+          boltOn,
+        }),
+      }),
+      "kit",
+    );
+
+  it("vendors a pinned package's files, with module exports handed to t3kit.vendor", () => {
+    const kit = readKit(vendored());
+    assert.strictEqual(kit.vendorRuntime, vendorRuntime);
+    assert.deepEqual(kit.templates[0]?.vendor, ["sql"]);
+    assert.deepEqual(
+      kit.templates.map((t) => t.kit),
+      [[]],
+    );
+    const [sql] = kit.vendor;
+    assert.deepEqual(
+      { ...sql, files: undefined },
+      {
+        name: "sql",
+        package: "@example/sql",
+        version: "1.2.3",
+        license: "MIT",
+        files: undefined,
+        init: '/**\n * sql: init.\n */\nt3kit.vendor.define("sql", ({ exports }) => exports["sql.mjs"].default());\n',
+      },
+    );
+    assert.deepEqual(sql?.files, [
+      {
+        name: "sql.mjs",
+        load: "module",
+        content: `${sqlModule}\n;t3kit.vendor.ran("sql", "sql.mjs", { "default": open, "version": version$1 });\n`,
+      },
+      { name: "sql.wasm", load: "bytes", content: Buffer.from("\0asm").toString("base64") },
+    ]);
+    assert.include(renderKitModule(kit), '"vendorRuntime": ');
+  });
+
+  it("refuses a package the kit's package does not pin to exactly that version", () => {
+    assert.throws(() => readKit(vendored({ pin: "^1.2.3" })), /pins @example\/sql to "\^1.2.3"/);
+    assert.throws(() => readKit(vendored({ installed: "1.2.4" })), /but 1.2.4 is installed/);
+    assert.throws(
+      () => readKit(vendored({ files: [{ path: "../../../package.json", load: "script" }] })),
+      /has no file/,
+    );
+    assert.throws(
+      () => readKit(vendored({ files: [{ path: "dist/sql.mjs", load: "eval" }] })),
+      /must be \{ path, load: script \| module \| bytes \}/,
+    );
+  });
+
+  it("refuses a module that imports others or does not end in one export list", () => {
+    assert.throws(
+      () => vendorModuleEpilogue('import { x } from "./x.js";\nexport { x };', "sql", "a.mjs"),
+      /imports other modules/,
+    );
+    assert.throws(
+      () => vendorModuleEpilogue("export default 1;\nexport { a };", "sql", "a.mjs"),
+      /one "export \{ \.\.\. \}" list/,
+    );
+    assert.throws(
+      () => readKit(vendored({ module: "const a = '<!-- x';\nexport { a };" })),
+      /contains "<!--"/,
+    );
+    // Words like "important" or "importDb(" in comments and code are not imports.
+    assert.strictEqual(
+      vendorModuleEpilogue("// important\nimportDb(1);\nexport { a };", "sql", "a.mjs"),
+      '\n;t3kit.vendor.ran("sql", "a.mjs", { "a": a });\n',
+    );
+  });
+
+  it("fails on a template that vendors an unknown library", () => {
+    const dir = template({ vendor: ["sql"] });
+    assert.throws(() => readKit(dir), /vendor names unknown "sql"/);
   });
 });

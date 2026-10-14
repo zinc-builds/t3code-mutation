@@ -8,6 +8,38 @@ export interface KitPrimitive {
   readonly source: string;
 }
 
+/** How the page gets one file of a vendored library (see KitVendor). */
+export type KitVendorLoad = "script" | "module" | "bytes";
+
+/** One file taken from a vendored package. */
+export interface KitVendorFile {
+  /** Its base name in the package, unique within the library: what `bytes(name)` and the exports map key. */
+  readonly name: string;
+  /**
+   * `script`: a classic script. `module`: a self-contained ES module, ending
+   * with a call that hands its export list to `t3kit.vendor`. `bytes`: binary
+   * data (wasm) the library's init decodes; it never executes.
+   */
+  readonly load: KitVendorLoad;
+  /** The script text, or base64 for `bytes`. */
+  readonly content: string;
+}
+
+/**
+ * A third-party library baked into the kit from an npm package pinned to an
+ * exact version. Pages run sandboxed with no network, so its files are inlined
+ * into every page that names it, ahead of the primitives.
+ */
+export interface KitVendor {
+  readonly name: string;
+  readonly package: string;
+  readonly version: string;
+  readonly license: string;
+  readonly files: ReadonlyArray<KitVendorFile>;
+  /** The kit's classic script that turns the files into the page's API (`t3kit.vendor.define`). */
+  readonly init: string;
+}
+
 /**
  * One key of a template's options, verbatim from `template.json`: a JSON
  * Schema subset. T3 checks the keys typed here; any others ride along for
@@ -65,6 +97,8 @@ export interface KitTemplateManifest {
   readonly summary: string;
   /** Primitives T3 injects before the template's own scripts. */
   readonly kit: ReadonlyArray<string>;
+  /** Vendored libraries T3 injects before the primitives (`t3kit.vendor.load(name)`). */
+  readonly vendor: ReadonlyArray<string>;
   readonly options: Readonly<Record<string, TemplateOptionSpec>>;
   readonly examples: ReadonlyArray<unknown>;
   readonly boltOn: TemplateBoltOn;
@@ -88,6 +122,10 @@ export interface KitTemplate extends KitTemplateManifest {
 export interface KitSource {
   /** Shared helpers loaded before any primitive; null when the kit has none. */
   readonly core: string | null;
+  /** The `t3kit.vendor` registry, injected before any vendored library; null when the kit vendors none. */
+  readonly vendorRuntime: string | null;
+  /** Vendored libraries, by name. */
+  readonly vendor: ReadonlyArray<KitVendor>;
   /** In load order. */
   readonly primitives: ReadonlyArray<KitPrimitive>;
   readonly templates: ReadonlyArray<KitTemplate>;

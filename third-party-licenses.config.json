@@ -134,6 +134,34 @@
       ]
     },
     {
+      "bundles": ["server"],
+      "license": "Apache-2.0 AND blessing AND MIT",
+      "name": "SQLite Wasm",
+      "sourceUrl": "https://github.com/sqlite/sqlite-wasm",
+      "version": "3.53.4-build1",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0",
+          "preamble": [
+            "The workspace kit inlines @sqlite.org/sqlite-wasm (dist/index.mjs and dist/sqlite3.wasm) into SQL workspace pages. The npm wrapper is licensed under Apache-2.0."
+          ]
+        },
+        {
+          "licenseId": "blessing",
+          "preamble": [
+            "SQLite and its WebAssembly/JavaScript APIs (https://sqlite.org) are in the public domain."
+          ]
+        },
+        {
+          "licenseId": "MIT",
+          "preamble": [
+            "The bundle includes Emscripten's glue code (https://emscripten.org), available under the MIT license and the University of Illinois/NCSA Open Source License."
+          ],
+          "copyrights": ["Copyright (c) 2010-2014 Emscripten authors, see AUTHORS file."]
+        }
+      ]
+    },
+    {
       "bundles": ["mobile"],
       "license": "MIT",
       "name": "react-native-uitextview",

@@ -13,6 +13,7 @@
  *              or 'auto' (time x: the finest unit that keeps the span at about 100 bins). Default: histogram
  *              Sturges; bar, line, area use distinct x values up to 40 (bar) or 240, else that many bins
  *   stacked    boolean: stack bar, histogram and area groups. Default true for histogram, else false
+ *   categories 'natural' (default) sorts category values; 'data' keeps their first-appearance order (a SQL ORDER BY)
  *   legend, axes, tooltips   booleans, default true;   hidden: legend labels to hide (see get().groups)
  *   brush      { min, max } (epoch ms for time x) | { values: [...] } for a category x | null
  *   rows       row indices to draw (a linked view, e.g. a grid's filtered rows) or null = all; bins, categories
@@ -24,11 +25,10 @@
  * instance.get() -> { ...options with effective aggregate and stacked, groups, hasData, rowCount, shownRows, columns }
  * instance.set(partial)   validated as a whole; errors name the valid columns or values. Never emits.
  * instance.exportBlob({ type: 'image/png' | 'image/svg+xml', scale = 2 }) -> Promise<Blob>   includes the legend
- * instance.on(event, cb) -> unsubscribe
+ * instance.on(event, cb) -> unsubscribe     instance.destroy()
  *   'change'  user brushed, cleared or toggled a legend item; payload get()
  *   'filter'  user brushed: { column, kind, min, max, count } or { column, kind: 'category', values, count }, null
  *             when cleared. count = rows whose x is inside. Marks outside the brush are dimmed.
- * instance.destroy()
  *
  * Mouse: hover for a tooltip, drag across the plot to brush (bars and histograms snap to whole bins), click to
  * clear. Keyboard on the focused plot: arrows move the cursor, Shift+arrows brush, PageUp/PageDown jump 10,
@@ -65,13 +65,15 @@
     aggregate: null,
     bins: null,
     stacked: null,
+    categories: "natural",
     legend: true,
     axes: true,
     tooltips: true,
   };
   const CONFIG_KEYS = Object.keys(DEFAULTS);
   const SETTINGS = [...CONFIG_KEYS, "brush", "hidden", "rows"];
-  const STRUCTURAL = ["type", "x", "y", "series", "color", "aggregate", "bins"];
+  const STRUCTURAL = ["type", "x", "y", "series", "color", "aggregate", "bins", "categories"];
+  const CATEGORY_ORDERS = ["natural", "data"];
   const EVENTS = ["change", "filter"];
   const EXPORT_TYPES = ["image/png", "image/svg+xml"];
   const CHART_VARS = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6"];
@@ -484,7 +486,7 @@
     ).getTime();
   }
 
-  function columnFrom(name, rows, j, n) {
+  function columnFrom(name, rows, j, n, categories) {
     let numeric = true;
     let temporal = true;
     let any = false;
@@ -521,7 +523,8 @@
         valid,
       };
     }
-    // Category: codes index labels sorted naturally, so bars and legends read in a stable order.
+    // Category: codes index labels sorted naturally, so bars and legends read in a stable order, or in the order
+    // the data lists them (categories: 'data').
     const index = new Map();
     const first = [];
     const codes = new Int32Array(n);
@@ -539,7 +542,8 @@
       }
       codes[i] = c;
     }
-    const order = first.map((_, k) => k).sort((a, b) => COLLATOR.compare(first[a], first[b]));
+    const order = first.map((_, k) => k);
+    if (categories !== "data") order.sort((a, b) => COLLATOR.compare(first[a], first[b]));
     const remap = new Int32Array(first.length);
     order.forEach((old, k) => {
       remap[old] = k;
@@ -557,9 +561,9 @@
     };
   }
 
-  function tableFrom(names, rows) {
+  function tableFrom(names, rows, categories) {
     const n = rows.length;
-    const columns = names.map((name, j) => columnFrom(name, rows, j, n));
+    const columns = names.map((name, j) => columnFrom(name, rows, j, n, categories));
     const byName = new Map();
     for (const col of columns) {
       if (byName.has(col.name)) fail(`duplicate column "${col.name}"`);
@@ -823,6 +827,8 @@
     }
     if (c.stacked !== null && typeof c.stacked !== "boolean")
       fail("stacked must be true, false or null");
+    if (!CATEGORY_ORDERS.includes(c.categories))
+      fail(`categories must be one of ${CATEGORY_ORDERS.join(", ")}`);
     const ys = yList(c);
     if (c.type === "scatter") {
       if (ys.length !== 1) fail("scatter needs exactly one y column");
@@ -1741,6 +1747,7 @@
 
     let cfg = { ...DEFAULTS };
     let table = null;
+    let parsed = null; // the source table, kept to rebuild category order
     let model = null;
     let frame = null;
     let brush = null;
@@ -1916,17 +1923,22 @@
       );
       const next = normaliseConfig({ ...cfg, ...subset });
       const structural = STRUCTURAL.some((key) => key in partial);
+      const nextTable =
+        table && next.categories !== cfg.categories
+          ? tableFrom(parsed.names, parsed.rows, next.categories)
+          : table;
       const nextRows = "rows" in partial ? validRows(partial.rows) : rows;
       const nextModel =
         structural || "rows" in partial
-          ? table
-            ? buildModel(table, next, nextRows)
+          ? nextTable
+            ? buildModel(nextTable, next, nextRows)
             : null
           : model;
       const nextBrush =
         "brush" in partial ? validBrush(partial.brush, nextModel) : structural ? null : brush;
       const nextHidden = "hidden" in partial ? validHidden(partial.hidden) : hidden;
       cfg = next;
+      table = nextTable;
       model = nextModel;
       rows = nextRows;
       brush = nextBrush;
@@ -2092,6 +2104,7 @@
       if (source === null) {
         const hadBrush = brush !== null;
         table = null;
+        parsed = null;
         model = null;
         rows = null;
         brush = null;
@@ -2102,9 +2115,10 @@
         scheduleBase();
         return null;
       }
-      const parsed = await readSource(source);
+      const nextParsed = await readSource(source);
       if (destroyed || mine !== token) return null;
-      const nextTable = tableFrom(parsed.names, parsed.rows);
+      const nextTable = tableFrom(nextParsed.names, nextParsed.rows, cfg.categories);
+      parsed = nextParsed;
       const nextModel = buildModel(nextTable, cfg);
       rows = null;
       const hadBrush = brush !== null;
@@ -2130,6 +2144,7 @@
         aggregate: effAggregate(cfg),
         bins: cfg.bins,
         stacked: effStacked(cfg),
+        categories: cfg.categories,
         legend: cfg.legend,
         axes: cfg.axes,
         tooltips: cfg.tooltips,

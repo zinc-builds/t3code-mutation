@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "catalog:",
     "vite-plus": "catalog:"
   }

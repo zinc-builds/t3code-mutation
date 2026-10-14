@@ -49,3 +49,14 @@ The file MUST start with a JSDoc block of at most 40 lines: one-line purpose, `c
 ## Shared Helpers (Optional)
 
 `primitives/_core.js` (if present) provides `t3kit.theme.get(name)`, `t3kit.theme.onChange(cb)`, `t3kit.emitter()`, and `t3kit.loadImage(blobOrUrl)`. Primitives may depend on it only if it exists when the kit is assembled. To stay independent, each primitive should inline the small helpers it needs.
+
+## Vendored Libraries
+
+When a workspace needs a real engine (SQLite, a video editor core), the kit vendors a third-party library instead of rewriting it. The first is `sqlite-wasm`; read `vendor/runtime.js` and `vendor/sqlite-wasm/init.js` for the shape.
+
+- Source: an npm package pinned to an exact version published at least 14 days earlier (check `npm view <pkg> time --json`), added to `packages/workspace-kit` with `vp add -D -E <pkg>@<version>`. The generator refuses a range, or an installed version that differs from the pin.
+- `vendor/<name>/vendor.json`: `{ "package", "version", "license", "files": [{ "path", "load" }] }`. `path` is inside the package. `load` is `script` (a classic script), `module` (a self-contained ES module, such as a bundler's output: no imports, every export in one `export { … }` list; the generator appends a call that hands that list to `t3kit.vendor`) or `bytes` (binary such as wasm: inlined as base64, never executed). Take the fewest files that work: everything is inlined into every page that names the library.
+- `vendor/<name>/init.js`: a classic script with a docs header that calls `t3kit.vendor.define("<name>", ({ exports, bytes }) => api)`. It is where the sandbox is handled, once: binaries come from `bytes(file)` and reach the library through its init options (Emscripten's `instantiateWasm` or `wasmBinary`), never a URL; anything that needs storage, workers, cookies or the network is switched off.
+- `vendor/runtime.js` is the `t3kit.vendor` registry. Pages call `await t3kit.vendor.load("<name>")`, which runs the init once, after the library's modules have run (inline modules run deferred, after the page's classic scripts started).
+- A template names its libraries in `template.json` `"vendor": ["<name>"]`; T3 injects the registry, the files and the init before the primitives, and only into those pages. The generator embeds the files in `src/generated.ts`, so the server never reads `node_modules` at runtime.
+- Vendored files are third-party code: `tools/lint.mjs` skips them, but a page that loads them must still boot without console errors or warnings.

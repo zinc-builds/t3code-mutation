@@ -204,6 +204,8 @@ const templateShellKey = (plan: WorkspacePagePlan) =>
     .update(plan.html)
     .update("\0")
     .update(plan.primitives.map((primitive) => primitive.name).join(","))
+    .update("\0")
+    .update(plan.vendor.map((library) => library.name).join(","))
     .digest("hex");
 
 const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
@@ -236,8 +238,9 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     if (missing.length > 0) return yield* new WorkspaceAssetNotFoundError({ paths: missing });
   });
 
-  // Kit sources go in after prepare, so they never count against the page's limits.
-  // Each injector inserts at the head start: the bridge, then the kit, then the page.
+  // Kit sources (vendored libraries included) go in after prepare, so they never count
+  // against the page's limits. Each injector inserts at the head start: the bridge, then
+  // the kit, then the page.
   const assemble = (plan: WorkspacePagePlan) =>
     htmlRender
       .prepare(plan.html)
