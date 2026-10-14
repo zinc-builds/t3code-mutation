@@ -20,6 +20,8 @@ A template's `"chrome": true` means its page projects its toolbar into T3's nati
 
 Before returning, `workspace_mutate` boots the page in T3's own headless browser with a stand-in for the client side of the bridge ([workspaceValidation.ts](../../apps/server/src/mutationWorkspace/workspaceValidation.ts)). At `full` it also runs `t3template.export()` and dry-runs any ffmpeg commands it returns with the host's ffmpeg. The stand-in must answer the way the clients do: when a client starts rejecting a bridge request, or accepts a new shape, change the stand-in too, or agents get a clean validation for a page that breaks for users.
 
+The page is validated under the sandbox every client frames it with (`WORKSPACE_FRAME_SANDBOX`, served as a `sandbox` CSP), so it runs at the same opaque origin. That origin changes what works, not only what is reachable: Chrome refuses a module Worker started from a blob URL there, and sql-workbench passed an unsandboxed validation while its worker never started in the desktop app. Keep the clients' frames and validation on that one constant.
+
 Assets follow the same rule. Hosts load the files a workspace was handed as `workspace-asset` resources, which the server serves whatever their type but only for a path a `workspace_mutate` call in the thread (or its fork source) declared ([WorkspaceAssets.ts](../../apps/server/src/mutationWorkspace/WorkspaceAssets.ts)). Publishing opens and types each asset through the same [WorkspaceAssetFile.ts](../../apps/server/src/assets/WorkspaceAssetFile.ts) the route uses, so do not hand workspaces files through `media-file`, whose preview-only type policy validation would not see.
 
 ## Live Previews Run in Their Own Page

@@ -233,6 +233,8 @@ interface PageEvents {
   readonly resources: ReadonlyMap<string, ServedResource>;
   /** Console messages at any level that start with one of these are problems too. */
   readonly problemPrefixes: ReadonlyArray<string>;
+  /** A `sandbox` CSP the page is served under, which makes its origin opaque. */
+  readonly sandbox: string | undefined;
   readonly problems: Array<PageProblem>;
   omittedProblems: number;
 }
@@ -241,6 +243,12 @@ interface PageEvents {
 interface PageOptions {
   readonly resources?: ReadonlyMap<string, ServedResource>;
   readonly problemPrefixes?: ReadonlyArray<string>;
+  /**
+   * Serves the page under this `sandbox` CSP, as T3 serves documents to its clients. The page's origin is then
+   * opaque, so its own resources are served with `Access-Control-Allow-Origin: *` for module, fetch, and
+   * `crossorigin` loads.
+   */
+  readonly sandbox?: string | undefined;
 }
 
 /**
@@ -342,10 +350,15 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
   // Serves the page or a resource. Its body is shared bytes between two small
   // JSON halves, queued together, so loading a page of up to 25 MiB at several
   // widths never copies it on this side.
-  const fulfill = (sessionId: string, requestId: string, body: Uint8Array, contentType: string) =>
+  const fulfill = (
+    sessionId: string,
+    requestId: string,
+    body: Uint8Array,
+    headers: ReadonlyArray<{ readonly name: string; readonly value: string }>,
+  ) =>
     Queue.offerAll(outgoing, [
       textEncoder.encode(
-        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":200,"responseHeaders":[{"name":"Content-Type","value":${JSON.stringify(contentType)}}],"body":"`,
+        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":200,"responseHeaders":${JSON.stringify(headers)},"body":"`,
       ),
       body,
       textEncoder.encode('"}}\0'),
@@ -379,13 +392,23 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       const body = page.body;
       const url = paused.request.url.split("#", 1)[0]!;
       if (url === PAGE_URL && body !== undefined) {
-        return fulfill(sessionId, paused.requestId, body, "text/html; charset=utf-8");
+        return fulfill(sessionId, paused.requestId, body, [
+          { name: "Content-Type", value: "text/html; charset=utf-8" },
+          ...(page.sandbox === undefined
+            ? []
+            : [{ name: "Content-Security-Policy", value: page.sandbox }]),
+        ]);
       }
       const resource = url.startsWith(`${PAGE_ORIGIN}/`)
         ? page.resources.get(url.slice(PAGE_ORIGIN.length))
         : undefined;
       if (resource !== undefined) {
-        return fulfill(sessionId, paused.requestId, resource.body, resource.contentType);
+        return fulfill(sessionId, paused.requestId, resource.body, [
+          { name: "Content-Type", value: resource.contentType },
+          ...(page.sandbox === undefined
+            ? []
+            : [{ name: "Access-Control-Allow-Origin", value: "*" }]),
+        ]);
       }
       // A frame inside the page may show another site; Local Network Access
       // still covers it. The main frame and T3's own origin serve nothing else.
@@ -514,6 +537,7 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       omittedConsoleMessages: 0,
       resources: options.resources ?? new Map(),
       problemPrefixes: options.problemPrefixes ?? [],
+      sandbox: options.sandbox,
       problems: [],
       omittedProblems: 0,
     };
@@ -763,6 +787,7 @@ export const observeHtmlPage = Effect.fn("headlessChrome.observeHtmlPage")(funct
   readonly urlFragment: string;
   readonly resources: ReadonlyMap<string, ServedResource>;
   readonly problemPrefixes: ReadonlyArray<string>;
+  readonly sandbox?: string | undefined;
   readonly settledExpression: string;
   readonly budget: Duration.Input;
   /** Runs once the page has settled; skipped when it never does. */
@@ -779,6 +804,7 @@ export const observeHtmlPage = Effect.fn("headlessChrome.observeHtmlPage")(funct
   const page = yield* browser.openPage(input.width, {
     resources: input.resources,
     problemPrefixes: input.problemPrefixes,
+    sandbox: input.sandbox,
   });
   const settled = yield* page
     .observe(pageBody(input.html), input.urlFragment, input.settledExpression)

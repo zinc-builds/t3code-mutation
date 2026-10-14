@@ -113,6 +113,8 @@ export interface ObservePageInput {
   readonly resources: ReadonlyMap<string, HeadlessChrome.ServedResource>;
   /** Console messages at any level that start with one of these count as problems. */
   readonly problemPrefixes: ReadonlyArray<string>;
+  /** A `sandbox` CSP to serve the page under, so it runs with the opaque origin its real host gives it. */
+  readonly sandbox?: string | undefined;
   /** Evaluates, after load, to a promise that resolves once the page has booted. */
   readonly settledExpression: string;
   /** How long the page gets from navigation. */

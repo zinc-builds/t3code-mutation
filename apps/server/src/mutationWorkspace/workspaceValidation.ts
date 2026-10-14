@@ -9,6 +9,7 @@
 import {
   WORKSPACE_BRIDGE_METHODS,
   WORKSPACE_MUTATE_TOOL_NAME,
+  WORKSPACE_FRAME_SANDBOX,
 } from "@t3tools/shared/mutationWorkspace";
 import {
   applyWorkspaceChromePatch,
@@ -118,6 +119,8 @@ export const VALIDATION_SETTLED_EXPRESSION =
 
 /** Console messages carrying this prefix count as errors at any level. */
 export const VALIDATION_PROBLEM_PREFIXES = [TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER];
+/** Pages are validated under the sandbox clients frame them with, at the same opaque origin. */
+export const VALIDATION_SANDBOX = `sandbox ${WORKSPACE_FRAME_SANDBOX}`;
 
 /**
  * The client's side of the workspace bridge, for a page loaded on its own.

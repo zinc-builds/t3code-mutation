@@ -2624,7 +2624,7 @@
         })();
 
         // ---- Database worker --------------------------------------------------------
-        // SQLite runs in a module worker built from this page's vendored files (the #sql-worker script). A busy
+        // SQLite runs in a worker built from this page's vendored files (the #sql-worker script). A busy
         // worker reads no messages, and interrupting it from here (sqlite3_interrupt, or a progress handler polling a
         // flag) needs a SharedArrayBuffer, which needs cross-origin isolation, which an opaque-origin sandbox never
         // has. So Cancel terminates the worker and rebuilds the database in a fresh one.
@@ -2663,7 +2663,9 @@
               ),
             }));
             const f = await files;
-            const w = new Worker(f.url, { type: "module", name: "sql-workbench" });
+            // A classic worker: in an opaque-origin sandbox Chrome refuses a module worker from a blob URL ("cross-origin
+            // redirects of the top-level worker script"), while a classic one starts and can still import() blob URLs.
+            const w = new Worker(f.url, { name: "sql-workbench" });
             worker = w;
             w.onmessage = ({ data }) => {
               const entry = worker === w ? waiting.get(data.id) : null;

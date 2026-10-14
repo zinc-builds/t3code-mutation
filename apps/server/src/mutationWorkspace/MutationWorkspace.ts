@@ -49,6 +49,7 @@ import {
   shapeValidation,
   skippedValidation,
   VALIDATION_PROBLEM_PREFIXES,
+  VALIDATION_SANDBOX,
   VALIDATION_SETTLED_EXPRESSION,
   validationAssetUrl,
   validationHostScript,
@@ -361,6 +362,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         width: VALIDATION_WIDTH,
         resources,
         problemPrefixes: VALIDATION_PROBLEM_PREFIXES,
+        sandbox: VALIDATION_SANDBOX,
         settledExpression: VALIDATION_SETTLED_EXPRESSION,
         budget: VALIDATION_PAGE_BUDGET[input.level],
         probe: {

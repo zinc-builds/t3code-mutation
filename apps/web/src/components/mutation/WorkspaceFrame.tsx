@@ -6,7 +6,11 @@ import {
   htmlRenderThemeMessage,
   readHtmlRenderLinkRequest,
 } from "@t3tools/shared/htmlRender";
-import type { WorkspaceBridgeRect, WorkspaceReference } from "@t3tools/shared/mutationWorkspace";
+import {
+  WORKSPACE_FRAME_SANDBOX,
+  type WorkspaceBridgeRect,
+  type WorkspaceReference,
+} from "@t3tools/shared/mutationWorkspace";
 import { type JSX, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
@@ -162,7 +166,7 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
       aria-label={title}
       // Never allow-same-origin: the opaque origin keeps the page out of the
       // app's session. Downloads go through the bridge.
-      sandbox="allow-scripts allow-forms"
+      sandbox={WORKSPACE_FRAME_SANDBOX}
       onLoad={() => {
         loads.current += 1;
         if (loads.current > 1) {

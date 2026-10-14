@@ -1,6 +1,7 @@
 import {
   readWorkspaceBridgeMessage,
   WORKSPACE_BRIDGE_METHODS,
+  WORKSPACE_FRAME_SANDBOX,
   type WorkspaceBridgeNotification,
   type WorkspaceBridgeRequest,
 } from "@t3tools/shared/mutationWorkspace";
@@ -162,7 +163,7 @@ export function workspaceInitializeScript(
 export function workspaceOuterDocument(src: string, secret: string): string {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}iframe{border:0;display:block;width:100%;height:100%}</style></head>
-<body><iframe id="page" sandbox="allow-scripts allow-forms"></iframe>
+<body><iframe id="page" sandbox="${WORKSPACE_FRAME_SANDBOX}"></iframe>
 <script>(function(){
 var frame=document.getElementById("page"),secret=${jsonForScript(secret)},MAX=${WORKSPACE_WEBVIEW_MAX_FILE_BYTES},loads=0,live=true,queue=Promise.resolve();
 function relay(m,active){window.ReactNativeWebView.postMessage(JSON.stringify({secret:secret,active:active,message:m}));}

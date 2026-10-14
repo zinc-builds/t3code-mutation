@@ -152,6 +152,12 @@ export function workspaceReferencesEqual(left: WorkspaceReference, right: Worksp
 
 // Bridge methods. Requests carry an id and get a result or error back;
 // notifications do not.
+/**
+ * The `sandbox` every client frames a workspace page with: scripts and forms, never same-origin, so the page runs
+ * at an opaque origin. Publish-time validation serves pages under the same sandbox, so what passes there runs here.
+ */
+export const WORKSPACE_FRAME_SANDBOX = "allow-scripts allow-forms";
+
 export const WORKSPACE_BRIDGE_METHODS = {
   /** Request from the page: initial state and the media it can work on. */
   initialize: "t3/workspace/initialize",

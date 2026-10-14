@@ -8,8 +8,8 @@
  *   ES modules, and its binary files, then resolves to what its init returns (see vendor/<name>/init.js). Rejects
  *   when the library is not vendored into this page, a file fails to load or run, or its init throws.
  * t3kit.vendor.file(name, path) -> Promise<Blob>   one of the library's raw files, by its path in the package as
- *   vendor.json lists it (such as "dist/sqlite3.wasm"), typed with its content type; for a module Worker, use
- *   URL.createObjectURL(blob).
+ *   vendor.json lists it (such as "dist/sqlite3.wasm"), typed with its content type; for a worker, import() it
+ *   through URL.createObjectURL(blob) from a classic worker (the sandbox refuses module workers from blob URLs).
  * t3kit.vendor.names() -> string[]   the libraries vendored into this page.
  * Library side (init.js; templates do not call this):
  *   define(name, init({ exports, bytes }) -> api | Promise<api>)   exports: { [moduleFile]: module namespace };
