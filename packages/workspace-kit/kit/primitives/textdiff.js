@@ -13,9 +13,9 @@
  *   starts are 1-based line numbers as in a unified diff header (an empty side gives the line before).
  * get() merge -> {chunks: [{id, kind: 'auto'|'conflict', choice, text}], unresolved}. ids: a1.. auto, c1.. conflicts.
  *   choice null | 'ours' | 'theirs' | 'both' | 'both-theirs' | 'base' | 'edited'; text is '' while unresolved.
- * set(partial) silent: {any option above?, hunks?: [{id, status?,
- *   comment?}], chunks?: [{id, choice?, text?}]}. Unknown ids throw. ignoreWhitespace re-diffs {a, b} at once and
- *   keeps decisions on hunks whose ranges are unchanged (ids renumber); a merge picks it up on the next load.
+ * set(partial) silent: {any option above?, hunks?: [{id, status?, comment?}], chunks?: [{id, choice?, text?}],
+ *   suggestions?: [{id, choice, text?}] (replaces all; a dashed choice plus an Accept button, never a decision; load
+ *   clears)}. Unknown ids throw. ignoreWhitespace re-diffs {a, b} keeping same-range hunk decisions; merge: next load.
  * decide(hunkId, status, comment?) and choose(chunkId, choice, text?) emit 'change'. 'edited' needs text; auto chunks
  *   take only 'edited'; choice null reopens a conflict.
  * next() / prev() -> id | null: select and scroll to the next open hunk or unresolved conflict (no wrap-around).
@@ -26,7 +26,7 @@
  * on('change' (get()) | 'select' (id) | 'resolve' ({unresolved}, when the count of open hunks or conflicts changes),
  *   cb) -> unsubscribe. destroy().
  * Keys (click a change first): n / p next and prev; a accept, r reject (again reopens), c comment;
- *   1 ours, 2 theirs, 3 both, Shift+3 both theirs first, 4 base, e edit; Ctrl/Cmd+Enter saves, Escape cancels.
+ *   1 ours, 2 theirs, 3 both, Shift+3 theirs first, 4 base, e edit, a accept suggestion; Ctrl/Cmd+Enter saves.
  * Statics: diffLines(a, b) -> [{aStart, aLines, bStart, bLines}] (Myers); diffWords(a, b) -> [{type: 'equal'|
  *   'delete'|'insert', text}]; diff3(base, ours, theirs, {ignoreWhitespace}?) -> [{kind: 'auto', lines} | {kind:
  *   'conflict', base, ours, theirs}] (line arrays); parseConflicts(text) -> {base|null, ours, theirs, hasBase} (whole texts);
@@ -95,6 +95,7 @@
     "mergeLayout",
     "hunks",
     "chunks",
+    "suggestions",
   ];
   const MERGE_LAYOUTS = ["stacked", "columns", "columns-no-base"];
   // Columns a resolved conflict keeps lit in the column layout (the others dim).
@@ -164,6 +165,9 @@
 .t3k-textdiff-title{font-weight:600}
 .t3k-textdiff-state{margin-right:auto;color:var(--muted-foreground)}
 .t3k-textdiff-chead[data-state="unresolved"] .t3k-textdiff-state{color:var(--warning)}
+.t3k-textdiff-sugg{color:var(--info)}
+.t3k-textdiff-root button.t3k-textdiff-suggested:not([aria-pressed="true"]){border-style:dashed;border-color:var(--info);color:var(--info)}
+.t3k-textdiff-root button.t3k-textdiff-accept{border-color:var(--info);color:var(--info)}
 .t3k-textdiff-edit{display:flex;flex-direction:column;gap:6px;padding:6px 8px;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
 .t3k-textdiff-ta{display:block;width:100%;min-height:72px;resize:vertical;padding:6px 8px;font-family:var(--font-mono);font-size:12.5px;line-height:20px;tab-size:4;color:var(--foreground);background:var(--background);border:1px solid var(--ring);border-radius:calc(var(--radius) - 2px)}
 .t3k-textdiff-mline.t3k-textdiff-side-ours{background:color-mix(in srgb,var(--info) 14%,transparent);box-shadow:inset 3px 0 0 var(--info)}
@@ -1011,6 +1015,7 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
       commentDraft: new Map(),
       editing: new Set(),
       editDraft: new Map(),
+      suggest: new Map(), // conflict id -> { choice, text? }: shown, never applied until accepted
       loading: false,
       lastUnresolved: 0,
       maxChars: 0,
@@ -1766,21 +1771,44 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
       if (view() === "columns" && c.choice !== "edited" && !st.editing.has(c.id))
         el.classList.add("t3k-textdiff-m3");
       el.dataset.state = c.choice === null ? "unresolved" : "resolved";
-      el.append(
-        node("span", "t3k-textdiff-title", `Conflict ${c.no}`),
-        node(
-          "span",
-          "t3k-textdiff-state",
-          c.choice === null ? "Unresolved" : `Resolved: ${CHOICE_LABEL[c.choice]}`,
-        ),
+      const sug = st.suggest.get(c.id);
+      const state = node(
+        "span",
+        "t3k-textdiff-state",
+        c.choice === null ? "Unresolved" : `Resolved: ${CHOICE_LABEL[c.choice]}`,
       );
+      if (sug) {
+        const taken = c.choice !== null && suggestionTaken(c, sug);
+        state.appendChild(
+          node(
+            "span",
+            "t3k-textdiff-sugg",
+            taken
+              ? " (suggested)"
+              : ` · suggested ${sug.choice === "edited" ? "edit" : CHOICE_LABEL[sug.choice]}`,
+          ),
+        );
+      }
+      el.append(node("span", "t3k-textdiff-title", `Conflict ${c.no}`), state);
+      if (sug && c.choice === null) {
+        const accept = keyBtn(actBtn("Accept", "accept-suggestion", c.id), "A");
+        accept.classList.add("t3k-textdiff-accept");
+        accept.title = `Accept the suggestion: ${CHOICE_LABEL[sug.choice]} (A)`;
+        el.appendChild(accept);
+      }
+      const mark = (b, choice) => {
+        if (sug && sug.choice === choice) b.classList.add("t3k-textdiff-suggested");
+        return b;
+      };
       for (const [choice, label, key] of CHOICE_BUTTONS) {
-        const b = keyBtn(actBtn(label, "choose", c.id, c.choice === choice), key);
+        const b = mark(keyBtn(actBtn(label, "choose", c.id, c.choice === choice), key), choice);
         b.dataset.choice = choice;
         if (choice === "base" && !c.hasBase) b.disabled = true;
         el.appendChild(b);
       }
-      el.appendChild(keyBtn(actBtn("Edit", "edit", c.id, c.choice === "edited"), "E"));
+      el.appendChild(
+        mark(keyBtn(actBtn("Edit", "edit", c.id, c.choice === "edited"), "E"), "edited"),
+      );
       if (c.choice !== null) el.appendChild(actBtn("Reopen", "reopen", c.id));
     }
 
@@ -1859,6 +1887,49 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
       applyChoice(chunkOrThrow(id), choice, text);
       rebuild();
       userChanged();
+    }
+
+    // A resolved chunk took its suggestion when the choice (and, for edited, the text) matches it.
+    function suggestionTaken(c, sug) {
+      if (c.choice !== sug.choice) return false;
+      return sug.choice !== "edited" || textOf(c.edited) === textOf(splitLines(sug.text));
+    }
+
+    function setSuggestions(list) {
+      if (!Array.isArray(list))
+        throw new TypeError("textdiff.set: suggestions must be an array of {id, choice, text?}");
+      if (st.kind !== "merge" && list.length)
+        throw new Error("textdiff.set: suggestions need a three-way merge");
+      const next = new Map();
+      for (const sg of list) {
+        if (!sg || typeof sg !== "object")
+          throw new TypeError("textdiff.set: a suggestion must be {id, choice, text?}");
+        const c = chunkOrThrow(sg.id);
+        if (c.kind !== "conflict")
+          throw new TypeError(`textdiff.set: ${c.id} is auto-merged; suggest only for conflicts`);
+        if (!CHOICES.includes(sg.choice))
+          throw new TypeError(
+            `textdiff.set: a suggested choice must be one of ${CHOICES.join(", ")}`,
+          );
+        if (sg.choice === "base" && !c.hasBase)
+          throw new TypeError(`textdiff.set: ${c.id} has no base section to suggest`);
+        if (sg.choice === "edited" && typeof sg.text !== "string")
+          throw new TypeError(`textdiff.set: the "edited" suggestion for ${c.id} needs text`);
+        next.set(
+          c.id,
+          sg.choice === "edited" ? { choice: "edited", text: sg.text } : { choice: sg.choice },
+        );
+      }
+      st.suggest = next;
+    }
+
+    // Takes an open conflict's suggestion (a user action: emits 'change'). Returns whether there was one to take.
+    function acceptSuggestion(id) {
+      const c = chunkOrThrow(id);
+      const sug = st.suggest.get(c.id);
+      if (!sug || c.choice !== null) return false;
+      choose(c.id, sug.choice, sug.choice === "edited" ? sug.text : undefined);
+      return true;
     }
 
     function decide(id, status, comment) {
@@ -2017,6 +2088,9 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
         case "choose":
           choose(d.id, d.choice);
           break;
+        case "accept-suggestion":
+          acceptSuggestion(d.id);
+          break;
         case "edit":
           startEdit(d.id);
           break;
@@ -2082,6 +2156,8 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
       if (key === "n") step(1);
       else if (key === "p") step(-1);
       else if (key === "e" && merge && sel !== null && lookupChunk(sel)) startEdit(sel);
+      else if (key === "a" && merge && sel !== null && lookupChunk(sel))
+        handled = acceptSuggestion(sel);
       else if ((key === "a" || key === "r") && !merge && sel !== null && lookupHunk(sel))
         toggleStatus(sel, key === "a" ? "accepted" : "rejected");
       else if (key === "c" && !merge && sel !== null && lookupHunk(sel)) openComment(sel);
@@ -2167,6 +2243,7 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
         st.commentDraft.clear();
         st.editing.clear();
         st.editDraft.clear();
+        st.suggest.clear();
         st.mode = st.kind === "merge" ? "merge" : st.diffMode;
         st.lastUnresolved = unresolvedCount();
         scroll.scrollTop = 0;
@@ -2229,6 +2306,7 @@ button[aria-pressed="true"] .t3k-textdiff-key{color:inherit;opacity:.75}
           else if (c.text !== undefined) throw new TypeError("textdiff.set: text needs a choice");
         }
       }
+      if (p.suggestions !== undefined) setSuggestions(p.suggestions);
       st.lastUnresolved = unresolvedCount();
       rebuild();
     }

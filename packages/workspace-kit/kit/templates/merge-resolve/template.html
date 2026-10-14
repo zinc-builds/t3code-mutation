@@ -386,6 +386,73 @@
         opacity: 0.4;
         cursor: default;
       }
+      /* The agent's suggested pick: dashed until the user takes it. */
+      .chip.suggested:not([aria-pressed="true"]) {
+        border-style: dashed;
+        border-color: var(--info);
+        color: var(--info);
+      }
+      .suggestion {
+        margin: 0 0 8px;
+        padding: 8px;
+        border: 1px dashed var(--info);
+        border-radius: calc(var(--radius) - 2px);
+        background: color-mix(in srgb, var(--info) 8%, transparent);
+      }
+      .suggestion[data-state="accepted"] {
+        border-style: solid;
+        border-color: color-mix(in srgb, var(--success) 60%, transparent);
+        background: transparent;
+      }
+      .suggestion[data-state="overridden"] {
+        border-color: var(--border);
+        background: transparent;
+      }
+      .sugg-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+      }
+      .sugg-tag {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--info);
+      }
+      .suggestion[data-state="accepted"] .sugg-tag {
+        color: var(--success);
+      }
+      .suggestion[data-state="overridden"] .sugg-tag {
+        color: var(--muted-foreground);
+      }
+      .sugg-choice {
+        font-weight: 600;
+      }
+      .sugg-head .btn {
+        margin-left: auto;
+        height: 26px;
+      }
+      .sugg-note {
+        margin: 6px 0 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        line-height: 1.45;
+      }
+      .sugg-note:empty {
+        display: none;
+      }
+      .sugg-text {
+        max-height: 120px;
+        margin: 6px 0 0;
+        padding: 6px 8px;
+        overflow: auto;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--muted);
+        font: 11px/1.45 var(--font-mono);
+        white-space: pre;
+      }
       .chip:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: -2px;
@@ -459,6 +526,12 @@
       .dot.edit {
         background: var(--info);
         border-color: var(--info);
+      }
+      .dot.pending-sugg {
+        border: 1px dashed var(--info);
+      }
+      .crow .what.pending-sugg {
+        color: var(--info);
       }
       .history-body {
         padding: 0 4px 8px;
@@ -581,6 +654,15 @@
         <div class="tools" id="extra-tools"></div>
         <button
           class="btn"
+          id="accept-all"
+          type="button"
+          title="Take every suggested pick on the conflicts that are still open, in every file (Shift+A)"
+          hidden
+        >
+          <span id="accept-all-label">Accept All Suggestions</span> <kbd>⇧A</kbd>
+        </button>
+        <button
+          class="btn"
           id="wrap"
           type="button"
           aria-pressed="false"
@@ -630,6 +712,17 @@
               <summary>Conflict</summary>
               <div class="panel-body">
                 <p class="cinfo" id="cinfo"></p>
+                <div class="suggestion" id="sugg" hidden>
+                  <div class="sugg-head">
+                    <span class="sugg-tag" id="sugg-tag">Suggested</span>
+                    <span class="sugg-choice" id="sugg-choice"></span>
+                    <button class="btn" id="sugg-accept" type="button">
+                      <span id="sugg-accept-label">Accept</span> <kbd>A</kbd>
+                    </button>
+                  </div>
+                  <pre class="sugg-text" id="sugg-text" hidden></pre>
+                  <p class="sugg-note" id="sugg-note"></p>
+                </div>
                 <div
                   class="choices"
                   id="choices"
@@ -679,6 +772,7 @@
           <span><kbd>⇧3</kbd> theirs first</span>
           <span><kbd>4</kbd> base</span>
           <span><kbd>E</kbd> edit</span>
+          <span><kbd>A</kbd> accept suggestion</span>
         </span>
       </footer>
     </div>
@@ -695,6 +789,8 @@
         const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
         const CHOICES = ["ours", "theirs", "both", "both-theirs", "base", "edited"];
         const DEFAULT_CHOICES = ["ours", "theirs", "both", "both-theirs", "base"];
+        // options.suggestions also takes theirs-first for both-theirs.
+        const SUGGEST_ALIAS = { "theirs-first": "both-theirs" };
         const CHOICE_LABEL = {
           ours: "Ours",
           theirs: "Theirs",
@@ -729,6 +825,7 @@
           ignoreWhitespace: { default: false, ok: (v) => typeof v === "boolean" },
           defaultChoice: { default: null, ok: (v) => v === null || DEFAULT_CHOICES.includes(v) },
           file: { default: null, ok: (v) => v === null || typeof v === "string" },
+          suggestions: { default: {}, ok: isPlain },
           customScript: { default: "", ok: (v) => typeof v === "string" },
           controls: { default: {}, ok: isPlain },
         };
@@ -834,8 +931,10 @@
             "3",
             "4",
             "e",
+            "a",
             "shift+3",
             "shift+e",
+            "shift+a",
             "mod+enter",
             "mod+z",
             "mod+shift+z",
@@ -903,8 +1002,57 @@
           return segs;
         }
 
+        // suggest: conflict id -> { choice, text? (edited), note }, from options.suggestions. Shown, never applied
+        // until the user accepts one; it is not part of the history state.
         function makeFile(name, text) {
-          return { name, text, segs: parseSegments(text), decisions: {} };
+          return { name, text, segs: parseSegments(text), decisions: {}, suggest: new Map() };
+        }
+
+        // Reads options.suggestions ({ fileName: [{ conflict, choice, text?, note }] }, conflict 1-based) into the
+        // files. Returns what was skipped and why; the caller shows it.
+        function readSuggestions() {
+          const skipped = [];
+          for (const [name, list] of Object.entries(OPTS.suggestions)) {
+            const f = files.find((x) => x.name === name);
+            if (!f) {
+              skipped.push(`no attached file named "${name}"`);
+              continue;
+            }
+            if (!Array.isArray(list)) {
+              skipped.push(`"${name}" must map to a list of suggestions`);
+              continue;
+            }
+            const conflicts = f.segs.filter((seg) => seg.kind === "conflict");
+            list.forEach((sg, i) => {
+              const at = `${name}[${i}]`;
+              if (!isPlain(sg)) return skipped.push(`${at} is not an object`);
+              const extra = Object.keys(sg).filter(
+                (k) => !["conflict", "choice", "text", "note"].includes(k),
+              );
+              if (extra.length) return skipped.push(`${at} has unknown key "${extra[0]}"`);
+              const n = sg.conflict;
+              if (!Number.isInteger(n) || n < 1 || n > conflicts.length)
+                return skipped.push(`${at}: conflict must be 1 to ${conflicts.length}`);
+              const seg = conflicts[n - 1];
+              const choice = SUGGEST_ALIAS[sg.choice] ?? sg.choice;
+              if (!CHOICES.includes(choice))
+                return skipped.push(`${at}: choice must be one of ${CHOICES.join(", ")}`);
+              if (choice === "base" && !seg.hasBase)
+                return skipped.push(`${at}: ${seg.id} has no base section`);
+              if (choice === "edited" && typeof sg.text !== "string")
+                return skipped.push(`${at}: "edited" needs text`);
+              if (choice !== "edited" && sg.text !== undefined)
+                return skipped.push(`${at}: text applies only to "edited"`);
+              if (sg.note !== undefined && typeof sg.note !== "string")
+                return skipped.push(`${at}: note must be a string`);
+              if (f.suggest.has(seg.id))
+                return skipped.push(`${at}: conflict ${n} already has a suggestion`);
+              const entry = { choice, note: sg.note ?? "" };
+              if (choice === "edited") entry.text = normText(sg.text);
+              f.suggest.set(seg.id, entry);
+            });
+          }
+          return skipped;
         }
 
         // Three assets (*.base, *.ours, *.theirs) become one diff3-style conflicted text, then parse like any file.
@@ -979,6 +1127,26 @@
         };
         const hasChoice = (f, id) => Boolean(f.decisions[id] && f.decisions[id].choice);
         const isOpen = (f, seg) => seg.kind === "conflict" && !hasChoice(f, seg.id);
+        // Whether a conflict's decision is the agent's suggestion (same choice; for edited, the same text).
+        function tookSuggestion(f, id) {
+          const sg = f.suggest.get(id);
+          const d = f.decisions[id];
+          if (!sg || !d || d.choice !== sg.choice) return false;
+          return sg.choice !== "edited" || d.text === sg.text;
+        }
+        // Open conflicts that have a suggestion, in every file.
+        const pendingSuggestions = () =>
+          files.flatMap((f) =>
+            f.segs
+              .filter((seg) => isOpen(f, seg) && f.suggest.has(seg.id))
+              .map((seg) => ({ f, seg })),
+          );
+        const suggestionList = (f) =>
+          [...f.suggest].map(([id, sg]) =>
+            sg.choice === "edited"
+              ? { id, choice: sg.choice, text: sg.text }
+              : { id, choice: sg.choice },
+          );
 
         function choiceText(seg, choice, text) {
           switch (choice) {
@@ -1113,7 +1281,7 @@
           for (const key of Object.keys(partial))
             if (key !== "file" && key !== "decisions")
               throw new Error(
-                `setValues: unknown key "${key}" (use file or decisions; files is read-only)`,
+                `setValues: unknown key "${key}" (use file or decisions; files and suggestions are read-only)`,
               );
           const state = getState();
           if (partial.decisions !== undefined) mergeDecisions(state, partial.decisions);
@@ -1176,6 +1344,12 @@
               conflicts: f.segs.filter((s) => s.kind === "conflict").map((s) => s.id),
             })),
             decisions: getState().decisions,
+            suggestions: Object.fromEntries(
+              files.map((f) => [
+                f.name,
+                Object.fromEntries([...f.suggest].map(([id, sg]) => [id, { ...sg }])),
+              ]),
+            ),
           };
         }
 
@@ -1224,6 +1398,7 @@
                 base: "Base",
                 theirs: first && first.theirsLabel ? `Theirs · ${first.theirsLabel}` : "Theirs",
               },
+              suggestions: suggestionList(f),
             });
             syncView();
             sel = defaultSel(f);
@@ -1269,7 +1444,11 @@
           armedUntil = 0;
           sel = last.id;
           renderAll();
-          commitNow(`${CHOICE_LABEL[last.choice] ?? "Clear"} ${last.id}`);
+          commitNow(
+            last.choice && tookSuggestion(f, last.id)
+              ? `Accept suggestion ${last.id}`
+              : `${CHOICE_LABEL[last.choice] ?? "Clear"} ${last.id}`,
+          );
         }
 
         // ---- Actions -------------------------------------------------------------------
@@ -1315,6 +1494,30 @@
           ta.focus();
           if (span) ta.setSelectionRange(span.start, span.end);
           say(`${seg.id} is edited by hand; type in the result below`);
+        }
+
+        // A: the selected conflict takes its suggestion (also over a different choice the user made).
+        function acceptSelected() {
+          const f = current();
+          const seg = selectedSeg();
+          if (!f || !seg) return say("Pick a conflict first: N or P, or click one in the list");
+          const sg = f.suggest.get(seg.id);
+          if (!sg) return say(`${seg.id} has no suggestion`);
+          if (tookSuggestion(f, seg.id)) return say(`${seg.id} already uses the suggestion`);
+          writeEntry(f, seg.id, { choice: sg.choice, text: sg.text });
+          afterEdit(`Accept suggestion ${seg.id}`);
+        }
+
+        // Shift+A: every open conflict with a suggestion takes it, in every file; one undo step. Choices the user
+        // already made stay.
+        function acceptAll() {
+          const todo = pendingSuggestions();
+          if (!todo.length) return say("No open conflict has a suggestion");
+          for (const { f, seg } of todo) {
+            const sg = f.suggest.get(seg.id);
+            writeEntry(f, seg.id, { choice: sg.choice, text: sg.text });
+          }
+          afterEdit(`Accept ${todo.length} suggestion${todo.length === 1 ? "" : "s"}`);
         }
 
         function editSelected() {
@@ -1432,16 +1635,44 @@
                   id: seg.id,
                   lines: [seg.startLine, seg.endLine],
                   choice: d.choice ?? null,
+                  fromSuggestion: tookSuggestion(f, seg.id),
                 };
+                const sg = f.suggest.get(seg.id);
+                if (sg) row.suggested = { ...sg };
                 if (d.note) row.note = d.note;
                 return row;
               }),
           };
         }
 
+        // Counts over every file: what the user decided and how much of it was the agent's suggestion.
+        function summaryOf() {
+          const out = {
+            conflicts: 0,
+            resolved: 0,
+            unresolved: 0,
+            suggested: 0,
+            fromSuggestion: 0,
+            overridden: 0,
+          };
+          for (const f of files) {
+            out.unresolved += compose(f).unresolved;
+            for (const seg of f.segs) {
+              if (seg.kind !== "conflict") continue;
+              out.conflicts += 1;
+              if (hasChoice(f, seg.id)) out.resolved += 1;
+              if (!f.suggest.has(seg.id)) continue;
+              out.suggested += 1;
+              if (tookSuggestion(f, seg.id)) out.fromSuggestion += 1;
+              else if (hasChoice(f, seg.id)) out.overridden += 1;
+            }
+          }
+          return out;
+        }
+
         function outputFiles() {
           const out = files.map((f) => new File([compose(f).text], f.name, { type: "text/plain" }));
-          const resolution = { files: files.map(resolutionOf) };
+          const resolution = { summary: summaryOf(), files: files.map(resolutionOf) };
           out.push(
             new File([JSON.stringify(resolution, null, 2) + "\n"], "resolution.json", {
               type: "application/json",
@@ -1581,19 +1812,43 @@
             const state = d.choice ? `resolved: ${CHOICE_LABEL[d.choice]}` : "open";
             info.textContent = `${seg.id} · lines ${seg.startLine}–${seg.endLine} · ${state}`;
           }
+          const sg = f && seg ? (f.suggest.get(seg.id) ?? null) : null;
+          renderSuggestion(f, seg, sg, d);
           // Only the inspector's chips: the merge view's rows carry data-choice too and show their own choice.
           for (const b of $("choices").querySelectorAll("[data-choice]")) {
             const c = b.dataset.choice;
             b.setAttribute("aria-pressed", String(Boolean(d.choice) && d.choice === c));
+            b.classList.toggle("suggested", Boolean(sg) && sg.choice === c);
             b.disabled = !seg || seg.kind !== "conflict" || (c === "base" && !seg.hasBase);
           }
           const edit = $("edit-btn");
           edit.setAttribute("aria-pressed", String(Boolean(d.choice) && d.choice === "edited"));
+          edit.classList.toggle("suggested", Boolean(sg) && sg.choice === "edited");
           edit.disabled = !seg;
           const note = $("note");
           const conflict = Boolean(seg && seg.kind === "conflict");
           note.disabled = !conflict;
           if (document.activeElement !== note) note.value = conflict ? d.note || "" : "";
+        }
+
+        // The agent's pick for the selected conflict: pending (Accept), accepted, or overridden (Use Suggestion).
+        function renderSuggestion(f, seg, sg, d) {
+          const box = $("sugg");
+          box.hidden = !sg;
+          if (!sg) return;
+          const took = tookSuggestion(f, seg.id);
+          const state = took ? "accepted" : d.choice ? "overridden" : "pending";
+          box.dataset.state = state;
+          $("sugg-tag").textContent = took ? "Accepted suggestion" : "Suggested";
+          $("sugg-choice").textContent =
+            (sg.choice === "edited" ? "Merged text" : CHOICE_LABEL[sg.choice]) +
+            (state === "overridden" ? ` · you chose ${CHOICE_LABEL[d.choice]}` : "");
+          $("sugg-accept").hidden = took;
+          $("sugg-accept-label").textContent = state === "overridden" ? "Use Suggestion" : "Accept";
+          const pre = $("sugg-text");
+          pre.hidden = sg.choice !== "edited";
+          pre.textContent = sg.choice === "edited" ? sg.text : "";
+          $("sugg-note").textContent = sg.note;
         }
 
         function renderList(f) {
@@ -1608,8 +1863,11 @@
             b.type = "button";
             b.className = "crow";
             b.setAttribute("aria-current", String(seg.id === sel));
+            const sg = f.suggest.get(seg.id);
             const dot = document.createElement("span");
-            dot.className = "dot" + (d.choice === "edited" ? " edit" : d.choice ? " done" : "");
+            dot.className =
+              "dot" +
+              (d.choice === "edited" ? " edit" : d.choice ? " done" : sg ? " pending-sugg" : "");
             const id = document.createElement("span");
             id.textContent = seg.id;
             const lines = document.createElement("span");
@@ -1617,7 +1875,13 @@
             lines.textContent = `${seg.startLine}–${seg.endLine}`;
             const what = document.createElement("span");
             what.className = "what";
-            what.textContent = d.choice ? CHOICE_LABEL[d.choice].toLowerCase() : "open";
+            what.textContent = d.choice
+              ? CHOICE_LABEL[d.choice].toLowerCase() +
+                (tookSuggestion(f, seg.id) ? " · suggested" : "")
+              : sg
+                ? `suggests ${sg.choice === "edited" ? "edit" : CHOICE_LABEL[sg.choice].toLowerCase()}`
+                : "open";
+            what.classList.toggle("pending-sugg", !d.choice && Boolean(sg));
             b.append(dot, id, lines, what);
             b.addEventListener("click", () => selectChunk(seg.id));
             li.append(b);
@@ -1639,6 +1903,10 @@
                 ? `Click again to send ${n} unresolved`
                 : `Send with ${n} unresolved`;
           $("export").disabled = files.length === 0;
+          const pending = pendingSuggestions().length;
+          $("accept-all").hidden = pending === 0;
+          $("accept-all-label").textContent =
+            pending === 1 ? "Accept 1 Suggestion" : `Accept ${pending} Suggestions`;
         }
 
         // ---- Persistence (per workspace, through T3) ------------------------------------
@@ -1711,6 +1979,8 @@
           else if (key === "n" && !e.shiftKey) act = () => step(1);
           else if (key === "p" && !e.shiftKey) act = () => step(-1);
           else if (key === "e" && e.shiftKey) act = () => exportFiles().catch(showError);
+          else if (key === "a" && e.shiftKey) act = () => acceptAll();
+          else if (key === "a") act = () => acceptSelected();
           else if (key === "e") act = () => editSelected();
           if (!act) return;
           e.preventDefault();
@@ -1728,6 +1998,12 @@
           const saved = ready.state ?? (await ws.initialState()) ?? null;
           const loaded = await loadFiles(ready.assets ?? []);
           files = loaded.files;
+          const skippedSuggestions = readSuggestions();
+          if (skippedSuggestions.length) {
+            const text = `Skipped ${skippedSuggestions.length} suggestion(s): ${skippedSuggestions.join("; ")}`;
+            console.warn(`merge-resolve: ${text}`);
+            rt.showBanner(text);
+          }
           const restored = restoreFrom(saved);
           if (restored) setModelState(restored.state);
           else applyDefaults();
@@ -1771,8 +2047,12 @@
           renderAll();
           if (files.length) {
             const skipped = loaded.ignored.length ? ` Ignored: ${loaded.ignored.join(", ")}.` : "";
+            const pending = pendingSuggestions().length;
+            const hint = pending
+              ? ` ${pending} suggested pick(s): A accepts one, Shift+A all.`
+              : "";
             say(
-              `${files.length} conflicted file(s). N/P move, 1 ours, 2 theirs, 3 both, 4 base, E edit.${skipped}`,
+              `${files.length} conflicted file(s). N/P move, 1 ours, 2 theirs, 3 both, 4 base, E edit.${hint}${skipped}`,
             );
           } else
             say(
@@ -1803,6 +2083,8 @@
         $("note").addEventListener("input", onNoteInput);
         $("result").addEventListener("input", onResultInput);
         $("edit-btn").addEventListener("click", editSelected);
+        $("sugg-accept").addEventListener("click", acceptSelected);
+        $("accept-all").addEventListener("click", acceptAll);
         for (const b of $("choices").querySelectorAll("[data-choice]"))
           b.addEventListener("click", () => choose(b.dataset.choice));
         window.addEventListener("keydown", onKey, true);
