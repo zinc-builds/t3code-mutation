@@ -13,6 +13,14 @@ import {
   workspaceStateWithPage,
 } from "@t3tools/client-runtime/state/mutation-workspace-host";
 import { assetUrlStateFromResult } from "@t3tools/client-runtime/state/assets";
+import {
+  planWorkspaceAssets,
+  startWorkspaceAssetUrlRefresher,
+  streamedWorkspaceAssets,
+  workspaceBridgeAssetIdentity,
+  type MintedWorkspaceAsset,
+} from "@t3tools/client-runtime/state/mutation-workspace-assets";
+import type { WorkspaceAssetResource } from "@t3tools/client-runtime/state/mutation-workspace-host";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   CommandId,
@@ -162,43 +170,59 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Resent when the status changes.
   }, [props.agentWorking]);
 
-  const mintAssetUrls = async (): Promise<WorkspaceWebViewAsset[]> => {
+  /** Mints a URL for one asset on the environment's current origin, with its type and size. */
+  const mintAsset = async (resource: WorkspaceAssetResource): Promise<MintedWorkspaceAsset> => {
     const { props: current, createAssetUrl: mint, httpBaseUrl: baseUrl } = latest.current;
-    const sources = workspaceAssetSources(
-      current.threadId,
-      current.workspace.workspace,
-      current.threadImages,
-    );
-    return Promise.all(
-      sources.map(async (source): Promise<WorkspaceWebViewAsset> => {
-        const minted = await mint({
-          environmentId: current.environmentId,
-          input: { resource: source.resource },
-        });
-        if (minted._tag !== "Success") throw commandError(minted);
-        const state = assetUrlStateFromResult(minted, baseUrl);
-        if (state._tag !== "Success") {
-          throw new Error(`Reconnect to this environment to load ${source.name}.`);
-        }
-        const common = { name: source.name, mimeType: source.mimeType, url: state.url };
-        return source.source === "attachment"
-          ? { ...common, source: "attachment", attachmentId: source.attachmentId }
-          : { ...common, source: "file", path: source.path };
-      }),
-    );
+    const minted = await mint({ environmentId: current.environmentId, input: { resource } });
+    if (minted._tag !== "Success") throw commandError(minted);
+    const state = assetUrlStateFromResult(minted, baseUrl);
+    if (state._tag !== "Success") throw new Error("Reconnect to this environment to load it.");
+    return { url: state.url, file: minted.value.file };
   };
+
+  // Renews the streamed URLs the page holds; replaced when the page initializes again.
+  const urlRefresher = useRef<ReturnType<typeof startWorkspaceAssetUrlRefresher> | null>(null);
+  const lastUrlFailure = useRef<string | null>(null);
+  useEffect(() => () => urlRefresher.current?.dispose(), []);
 
   const initialize = async (id: string | number) => {
     const { props: current } = latest.current;
-    const [read, assets] = await Promise.all([
+    const [read, plan] = await Promise.all([
       latest.current.readState({
         environmentId: current.environmentId,
         input: { threadId: current.threadId },
       }),
-      mintAssetUrls(),
+      planWorkspaceAssets(
+        workspaceAssetSources(current.threadId, current.workspace.workspace, current.threadImages),
+        mintAsset,
+      ),
     ]);
     if (read._tag !== "Success") throw commandError(read);
     stored.current = read.value.state;
+    const assets = plan.map((asset): WorkspaceWebViewAsset => ({
+      ...workspaceBridgeAssetIdentity(asset),
+      url: asset.url,
+      ...(asset.streams ? { stream: true, size: asset.size } : { stream: false }),
+    }));
+    urlRefresher.current?.dispose();
+    urlRefresher.current = startWorkspaceAssetUrlRefresher({
+      assets: streamedWorkspaceAssets(plan),
+      mint: async (resource) => (await mintAsset(resource)).url,
+      notify: (message) => {
+        lastUrlFailure.current = null;
+        post(message);
+      },
+      // The page keeps its current URLs, which still work for a while.
+      onError: (error) => {
+        const message = workspaceErrorMessage(error);
+        if (message === lastUrlFailure.current) return;
+        lastUrlFailure.current = message;
+        Alert.alert(
+          "Couldn't renew the workspace's media links",
+          `${message} Retrying; playback stops if this keeps failing.`,
+        );
+      },
+    });
     // The outer page fetches the files and answers the page itself.
     webView.current?.injectJavaScript(
       workspaceInitializeScript(id, workspaceInitialPageState(read.value.state), assets),

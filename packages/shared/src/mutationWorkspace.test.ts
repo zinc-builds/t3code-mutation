@@ -269,7 +269,9 @@ describe("isWorkspaceRestoreToolItem", () => {
  * Runs the injected bridge against a stand-in window whose parent records what
  * the page posts, so its behavior can be driven the way the host drives it.
  */
-function loadBridge() {
+function loadBridge(
+  fetch: (url: string) => Promise<Response> = () => Promise.reject(new Error("offline")),
+) {
   const script = /<script>([\s\S]*)<\/script>/.exec(injectWorkspaceBridge(""))![1]!;
   const posted: Array<{ id?: string; method: string; params: Record<string, unknown> }> = [];
   const windowListeners = new Map<string, Array<(event: unknown) => void>>();
@@ -285,15 +287,17 @@ function loadBridge() {
   };
   const document = { addEventListener: listen(new Map()), querySelector: () => null };
   // Runs the bridge source as the page would, with stand-ins for the page's globals.
-  new Function("window", "document", "URL", "requestAnimationFrame", script)(
+  new Function("window", "document", "URL", "requestAnimationFrame", "fetch", script)(
     page,
     document,
     { createObjectURL: (file: File) => `blob:${file.name}` },
     (callback: () => void) => setTimeout(callback, 16),
+    fetch,
   );
   const workspace = page.t3!.workspace as {
     ready: () => Promise<{ state: unknown; assets: ReadonlyArray<Record<string, unknown>> }>;
     setState: (state: unknown) => void;
+    assetFile: (name: string) => Promise<File>;
     send: (text: string, options?: { files: unknown }) => Promise<unknown>;
     restore: () => void;
     preview: {
@@ -378,9 +382,113 @@ describe("workspace bridge", () => {
     const { state, assets } = await retried;
     expect(state).toEqual({ v: 2 });
     expect(assets).toMatchObject([
-      { source: "attachment", attachmentId: "a-1", url: "blob:photo.png" },
-      { source: "file", path: "/media/clip.mp4", url: "blob:clip.mp4" },
+      { source: "attachment", attachmentId: "a-1", url: "blob:photo.png", size: 1 },
+      { source: "file", path: "/media/clip.mp4", url: "blob:clip.mp4", size: 1 },
     ]);
+  });
+
+  /** Answers the page's initialize with a photo's bytes and a clip streamed from `url`. */
+  const initializeWithClip = async (bridge: ReturnType<typeof loadBridge>) => {
+    const ready = bridge.workspace.ready();
+    bridge.fromHost({
+      jsonrpc: "2.0",
+      id: bridge.posted[0]!.id,
+      result: {
+        state: undefined,
+        assets: [
+          {
+            name: "photo.png",
+            mimeType: "image/png",
+            source: "file",
+            path: "/media/photo.png",
+            file: new File(["png"], "photo.png", { type: "image/png" }),
+          },
+          {
+            name: "clip.mov",
+            mimeType: "video/quicktime",
+            source: "file",
+            path: "/Volumes/X10/clip.mov",
+            url: "https://host.example/api/assets/t1/clip.mov",
+            size: 3_300_000_000,
+          },
+        ],
+      },
+    });
+    return (await ready).assets;
+  };
+
+  it("hands a streamed asset its URL and size with no bytes, and other assets their File", async () => {
+    const assets = await initializeWithClip(loadBridge());
+    expect(assets[0]).toMatchObject({ url: "blob:photo.png", size: 3 });
+    expect(assets[0]!.file).toBeInstanceOf(File);
+    expect(assets[1]).toEqual({
+      name: "clip.mov",
+      mimeType: "video/quicktime",
+      source: "file",
+      path: "/Volumes/X10/clip.mov",
+      attachmentId: undefined,
+      url: "https://host.example/api/assets/t1/clip.mov",
+      size: 3_300_000_000,
+    });
+  });
+
+  it("swaps in a renewed URL and tells the page, for the streamed asset it names only", async () => {
+    const bridge = loadBridge();
+    const assets = await initializeWithClip(bridge);
+    const renewed: Array<unknown> = [];
+    bridge.workspace.on("asset-url", (change) => renewed.push(change));
+    const url = "https://host.example/api/assets/t2/clip.mov";
+    // A stale index, or one naming the photo (whose blob: URL never expires), changes nothing.
+    bridge.fromHost({
+      jsonrpc: "2.0",
+      method: WORKSPACE_BRIDGE_METHODS.assetUrl,
+      params: { index: 0, name: "photo.png", url },
+    });
+    bridge.fromHost({
+      jsonrpc: "2.0",
+      method: WORKSPACE_BRIDGE_METHODS.assetUrl,
+      params: { index: 1, name: "other.mov", url },
+    });
+    expect(renewed).toEqual([]);
+    bridge.fromHost({
+      jsonrpc: "2.0",
+      method: WORKSPACE_BRIDGE_METHODS.assetUrl,
+      params: { index: 1, name: "clip.mov", url },
+    });
+    expect(renewed).toEqual([{ name: "clip.mov", url }]);
+    expect(assets[1]!.url).toBe(url);
+    expect(assets[0]!.url).toBe("blob:photo.png");
+  });
+
+  it("loads an asset's bytes on demand: a File as it is, a streamed one from its current URL", async () => {
+    const fetched: Array<string> = [];
+    const bridge = loadBridge(async (url) => {
+      fetched.push(url);
+      return url.includes("/t9/")
+        ? new Response("nope", { status: 404 })
+        : new Response(new Blob(["frames"], { type: "video/quicktime" }));
+    });
+    const assets = await initializeWithClip(bridge);
+    expect(await bridge.workspace.assetFile("photo.png")).toBe(assets[0]!.file);
+    const clip = await bridge.workspace.assetFile("clip.mov");
+    expect([clip.name, clip.type, await clip.text()]).toEqual([
+      "clip.mov",
+      "video/quicktime",
+      "frames",
+    ]);
+    expect(fetched).toEqual(["https://host.example/api/assets/t1/clip.mov"]);
+
+    bridge.fromHost({
+      jsonrpc: "2.0",
+      method: WORKSPACE_BRIDGE_METHODS.assetUrl,
+      params: { index: 1, name: "clip.mov", url: "https://host.example/api/assets/t9/clip.mov" },
+    });
+    await expect(bridge.workspace.assetFile("clip.mov")).rejects.toThrow(
+      "clip.mov could not be loaded (HTTP 404).",
+    );
+    await expect(bridge.workspace.assetFile("missing.wav")).rejects.toThrow(
+      'No workspace asset is named "missing.wav".',
+    );
   });
 
   it("sends files in the same message the host reads", () => {
