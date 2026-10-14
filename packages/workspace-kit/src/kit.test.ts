@@ -453,6 +453,8 @@ describe("shipped templates", () => {
         const html = workspaceKit.inject(page.value.html, page.value);
         for (const name of template.kit)
           assert.include(html, `<script data-t3kit="${name}">`, where);
+        for (const name of template.vendor)
+          assert.include(html, `data-t3vendor="${name}" data-t3vendor-file="init.js"`, where);
         const tag =
           /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
         assert.isNotNull(tag, where);

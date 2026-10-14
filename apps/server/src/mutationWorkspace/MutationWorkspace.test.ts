@@ -289,6 +289,18 @@ it.layer(NodeServices.layer)("MutationWorkspace shipped templates", (it) => {
             const at = html.indexOf(`<script data-t3kit="${name}">`);
             assert.isTrue(at > bridge && at < optionsTag, `${where}: ${name} loads in order`);
           }
+          // Vendored libraries come after the bridge and before every primitive.
+          const firstKit = Math.min(
+            ...template.kit.map((name) => html.indexOf(`<script data-t3kit="${name}">`)),
+          );
+          for (const name of template.vendor) {
+            const init = html.indexOf(`data-t3vendor="${name}" data-t3vendor-file="init.js"`);
+            const registry = html.indexOf('<script data-t3kit="_vendor">');
+            assert.isTrue(
+              bridge < registry && registry < init && init < firstKit,
+              `${where}: ${name} is vendored before the kit`,
+            );
+          }
           const tag =
             /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
           assert.deepEqual(JSON.parse(tag?.[1] ?? "null"), options, where);
