@@ -869,16 +869,99 @@
         font-size: 11px;
       }
       .running {
-        position: absolute;
-        top: 8px;
-        right: 12px;
-        z-index: 4;
-        padding: 3px 8px;
-        border-radius: 999px;
-        background: var(--popover);
-        border: 1px solid var(--border);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         font-size: 11px;
+        font-family: var(--font-mono);
+        color: var(--foreground);
+        white-space: nowrap;
+      }
+      .running[hidden],
+      .running:not([hidden]) + .run-sum {
+        display: none;
+      }
+      .running .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--info);
+      }
+
+      /* ---- Data edits ---- */
+      .edits-chip {
+        flex: 0 0 auto;
+        height: 22px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--muted);
         color: var(--muted-foreground);
+        font-size: 11px;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .edits-chip.warn {
+        background: color-mix(in srgb, var(--warning) 16%, transparent);
+        border-color: color-mix(in srgb, var(--warning) 50%, var(--border));
+        color: var(--foreground);
+      }
+      .edits-chip.bad {
+        background: color-mix(in srgb, var(--destructive) 14%, transparent);
+        border-color: color-mix(in srgb, var(--destructive) 50%, var(--border));
+        color: var(--foreground);
+      }
+      .edits-body {
+        display: grid;
+        gap: 6px;
+        padding: 2px 10px 10px;
+        font-size: 11.5px;
+      }
+      .edits-line {
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .meter {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--muted);
+        overflow: hidden;
+      }
+      .meter span {
+        display: block;
+        height: 100%;
+        background: var(--primary);
+      }
+      .meter span.over {
+        background: var(--warning);
+      }
+      .edits-note {
+        display: grid;
+        gap: 6px;
+        justify-items: start;
+        padding: 6px 8px;
+        border-radius: calc(var(--radius) - 4px);
+        border-left: 3px solid var(--info);
+        background: color-mix(in srgb, var(--info) 9%, transparent);
+        line-height: 1.4;
+      }
+      .edits-note.warn {
+        border-left-color: var(--warning);
+        background: color-mix(in srgb, var(--warning) 11%, transparent);
+      }
+      .edits-note.bad {
+        border-left-color: var(--destructive);
+        background: color-mix(in srgb, var(--destructive) 10%, transparent);
+      }
+      .edits-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .edits-help {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        line-height: 1.4;
       }
 
       /* ---- Inspector ---- */
@@ -1208,6 +1291,7 @@
       <header class="bar">
         <h1 class="title" id="title">SQL</h1>
         <span class="meta" id="meta">Opening database</span>
+        <button class="edits-chip" id="edits-chip" type="button" hidden></button>
         <div class="tools page-chrome" id="extra-tools"></div>
         <div class="seg page-chrome" id="view-seg" role="group" aria-label="Results view">
           <button type="button" data-view="grid" title="Show results as a grid (V cycles)">
@@ -1328,6 +1412,18 @@
             <div class="rtabs">
               <div class="rtab-list" id="rtabs" role="tablist" aria-label="Results"></div>
               <div class="rtab-tools">
+                <span class="running" id="running" role="status" hidden>
+                  <span class="dot"></span>
+                  <span id="running-text">Running</span>
+                  <button
+                    class="btn btn-sm"
+                    id="cancel-run"
+                    type="button"
+                    title="Stop the query (Esc)"
+                  >
+                    Cancel <kbd>Esc</kbd>
+                  </button>
+                </span>
                 <span class="run-sum" id="run-sum"></span>
               </div>
             </div>
@@ -1347,13 +1443,16 @@
                 <div class="chart-host" id="chart-host"></div>
               </div>
               <div class="messages" id="messages" hidden></div>
-              <div class="running" id="running" hidden>Running…</div>
             </div>
           </div>
         </section>
 
         <aside class="inspector" id="inspector" aria-label="Inspector">
           <div class="panels" id="panels">
+            <details class="panel" data-panel="edits">
+              <summary>Data Edits <span class="count" id="edits-count"></span></summary>
+              <div class="panel-body edits-body" id="edits-body"></div>
+            </details>
             <details class="panel" data-panel="saved" open>
               <summary>Saved Queries <span class="count" id="saved-count"></span></summary>
               <div class="panel-body">
@@ -1412,6 +1511,377 @@
       </div>
     </div>
 
+    <script type="text/x-sql-worker" id="sql-worker">
+      // The database worker: SQLite (the official wasm build) off the page's main thread, so a long query never
+      // freezes the page and Cancel can end it by terminating this worker. One request at a time, in order:
+      //   init { module: Blob, wasm: Blob } -> { version }       the library from the page's vendored files, no network
+      //   open { dbs: [{ name, schema, bytes }], csvs: [{ name, text, table? }], replay: [{ sql, params? }] }
+      //     -> { sources, replay: { ran, failed?: { index, message } } }   a fresh database: files, CSVs, the edit log
+      //   run { statements: [{ sql, verb, params? }], maxRows }  posts one "outcome" per statement, then the reply
+      //   query { sql, params? } -> outcome    schema -> objects    export -> Uint8Array (the main schema as a file)
+      // Each outcome tells the page what SQLite saw: write (the statement changed the database or the connection),
+      // txn / savepoint (transaction control), autocommit after it, and nd (what makes its replay differ).
+      let sqlite3 = null;
+      let capi = null;
+      let db = null;
+      let seen = null; // what the authorizer reports while a statement is prepared
+      const C = {};
+      const ALWAYS = {
+        random: "random()",
+        randomblob: "randomblob()",
+        current_time: "CURRENT_TIME",
+        current_date: "CURRENT_DATE",
+        current_timestamp: "CURRENT_TIMESTAMP",
+        last_insert_rowid: "last_insert_rowid()",
+        changes: "changes()",
+        total_changes: "total_changes()",
+      };
+      const CLOCK = new Set(["date", "time", "datetime", "julianday", "strftime", "unixepoch", "timediff"]);
+      const DML = new Set(["INSERT", "UPDATE", "DELETE", "REPLACE"]);
+      const NOW_DEFAULT = /current_(time|date|timestamp)|'now'|random/i;
+      const quoteIdent = (name) => `"${String(name).replace(/"/g, '""')}"`;
+      const cleanError = (err) =>
+        String(err && err.message ? err.message : err).replace(
+          /^SQLITE_\w+:\s*(sqlite3 result code \d+:\s*)?/,
+          "",
+        );
+      const bigint = (v) =>
+        typeof v === "bigint"
+          ? v >= BigInt(Number.MIN_SAFE_INTEGER) && v <= BigInt(Number.MAX_SAFE_INTEGER)
+            ? Number(v)
+            : v.toString()
+          : v;
+
+      async function init({ module, wasm }) {
+        // The page has no storage and no cross-origin isolation: the storage-backed VFSes stay off.
+        globalThis.sqlite3ApiConfig = {
+          disable: {
+            vfs: { kvvfs: true, opfs: true, "opfs-vfs": true, "opfs-sahpool": true, "opfs-wl": true },
+          },
+        };
+        const url = URL.createObjectURL(module);
+        const bytes = await wasm.arrayBuffer();
+        const lib = await import(url);
+        URL.revokeObjectURL(url);
+        // Emscripten never hears about a failed instantiation through instantiateWasm, so it rejects the race instead.
+        let failed;
+        const instantiationFailed = new Promise((_, reject) => {
+          failed = reject;
+        });
+        sqlite3 = await Promise.race([
+          lib.default({
+            instantiateWasm(imports, done) {
+              WebAssembly.instantiate(bytes, imports).then((r) => done(r.instance, r.module), failed);
+              return {};
+            },
+          }),
+          instantiationFailed,
+        ]);
+        capi = sqlite3.capi;
+        for (const k of ["FUNCTION", "INSERT", "ATTACH", "DETACH", "PRAGMA", "TRANSACTION", "SAVEPOINT"])
+          C[k] = capi[`SQLITE_${k}`];
+        return { version: capi.sqlite3_libversion() };
+      }
+
+      // SQLite's own account of a statement, gathered while it is prepared.
+      function authorize(_user, code, arg1, arg2, dbName) {
+        if (!seen) return 0;
+        if (code === C.FUNCTION) seen.fns.add(String(arg2).toLowerCase());
+        else if (code === C.INSERT) seen.inserts.push({ table: arg1, schema: dbName });
+        else if (code === C.ATTACH || code === C.DETACH) seen.attach = true;
+        else if (code === C.PRAGMA) seen.pragmaArg = seen.pragmaArg || Boolean(arg2);
+        else if (code === C.TRANSACTION) seen.txn = arg1;
+        else if (code === C.SAVEPOINT) seen.savepoint = arg1;
+        return 0;
+      }
+
+      function prepare(sql) {
+        seen = { fns: new Set(), inserts: [], attach: false, pragmaArg: false, txn: null, savepoint: null };
+        try {
+          return { stmt: db.prepare(sql), seen };
+        } finally {
+          seen = null;
+        }
+      }
+
+      function select(sql, bind) {
+        const { stmt } = prepare(sql);
+        try {
+          if (bind) stmt.bind(bind);
+          const rows = [];
+          while (stmt.step()) rows.push(stmt.get([]));
+          return { columns: stmt.getColumnNames([]), rows };
+        } finally {
+          stmt.finalize();
+        }
+      }
+
+      // What a replay of this statement cannot reproduce: random values, the clock, connection counters, and
+      // column defaults of the tables it inserts into that read them.
+      function nondeterminism(sql, found) {
+        const out = [];
+        for (const f of found.fns) {
+          if (ALWAYS[f]) out.push(ALWAYS[f]);
+          else if (CLOCK.has(f) && (/'now'/i.test(sql) || new RegExp(`\\b${f}\\s*\\(\\s*\\)`, "i").test(sql)))
+            out.push(`${f}('now')`);
+        }
+        for (const { table, schema } of found.inserts) {
+          if (/^sqlite_/i.test(table)) continue;
+          const { rows } = select("SELECT name, dflt_value FROM pragma_table_xinfo(?, ?)", [table, schema ?? "main"]);
+          for (const [name, dflt] of rows)
+            if (typeof dflt === "string" && NOW_DEFAULT.test(dflt)) out.push(`${table}.${name} DEFAULT ${dflt}`);
+        }
+        return [...new Set(out)];
+      }
+
+      // One statement, stepped to the end (rows past maxRows are not kept). Errors carry where SQLite says they are.
+      function runStatement({ sql, verb, params }, maxRows) {
+        const t0 = performance.now();
+        const fail = (err) => ({
+          kind: "error",
+          message: cleanError(err),
+          offset: capi.sqlite3_error_offset(db.pointer),
+          ms: performance.now() - t0,
+          autocommit: capi.sqlite3_get_autocommit(db.pointer) !== 0,
+        });
+        let prepared;
+        try {
+          prepared = prepare(sql);
+        } catch (err) {
+          return fail(err);
+        }
+        const { stmt, seen: found } = prepared;
+        try {
+          if (params) stmt.bind(params);
+          // A write is what SQLite says may change the database, plus ATTACH, DETACH and pragmas that set a value.
+          const write =
+            !stmt.isReadOnly() || found.attach || (found.pragmaArg && stmt.columnCount === 0);
+          const facts = { write, txn: found.txn, savepoint: found.savepoint };
+          let out;
+          if (stmt.columnCount > 0) {
+            const columns = stmt.getColumnNames([]);
+            const rows = [];
+            let truncated = false;
+            while (stmt.step()) {
+              if (rows.length >= maxRows) {
+                truncated = true;
+                break;
+              }
+              rows.push(stmt.get([]).map(bigint));
+            }
+            out = { kind: "rows", columns, rows, truncated };
+          } else {
+            stmt.step();
+            out = { kind: "done", changes: DML.has(verb) ? db.changes() : null };
+          }
+          return {
+            ...out,
+            ...facts,
+            ms: performance.now() - t0,
+            autocommit: capi.sqlite3_get_autocommit(db.pointer) !== 0,
+            nd: write ? nondeterminism(sql, found) : [],
+          };
+        } catch (err) {
+          return fail(err);
+        } finally {
+          stmt.finalize();
+        }
+      }
+
+      // A database file's bytes into a schema of the in-memory database (main, or a newly attached one).
+      function deserialize(bytes, schemaName) {
+        // A WAL-mode file reads as rollback-journal once deserialized.
+        if (bytes[18] === 2) bytes[18] = 1;
+        if (bytes[19] === 2) bytes[19] = 1;
+        if (schemaName !== "main") db.exec(`ATTACH ':memory:' AS ${quoteIdent(schemaName)}`);
+        const p = sqlite3.wasm.allocFromTypedArray(bytes);
+        const rc = capi.sqlite3_deserialize(
+          db.pointer,
+          schemaName,
+          p,
+          bytes.byteLength,
+          bytes.byteLength,
+          capi.SQLITE_DESERIALIZE_FREEONCLOSE | capi.SQLITE_DESERIALIZE_RESIZEABLE,
+        );
+        db.checkRc(rc);
+        // Reading the schema proves the file is a database SQLite can open.
+        db.selectValue(`SELECT count(*) FROM ${quoteIdent(schemaName)}.sqlite_schema`);
+      }
+
+      // RFC 4180 CSV: quoted fields with doubled quotes and embedded newlines, CRLF or LF, an optional BOM.
+      function parseCsv(text) {
+        const rows = [];
+        let row = [];
+        let field = "";
+        let i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+        let quoted = false;
+        const n = text.length;
+        while (i < n) {
+          const c = text[i];
+          if (quoted) {
+            if (c === '"') {
+              if (text[i + 1] === '"') {
+                field += '"';
+                i += 2;
+                continue;
+              }
+              quoted = false;
+            } else field += c;
+            i++;
+            continue;
+          }
+          if (c === '"' && field === "") quoted = true;
+          else if (c === ",") {
+            row.push(field);
+            field = "";
+          } else if (c === "\n" || c === "\r") {
+            row.push(field);
+            field = "";
+            rows.push(row);
+            row = [];
+            if (c === "\r" && text[i + 1] === "\n") i++;
+          } else field += c;
+          i++;
+        }
+        if (field !== "" || row.length) {
+          row.push(field);
+          rows.push(row);
+        }
+        return rows.filter((r) => r.length > 1 || r[0] !== "");
+      }
+      // Columns are INTEGER when every value is a whole number, REAL when every value is a number, else TEXT.
+      function inferType(values) {
+        let integer = true;
+        let any = false;
+        for (const v of values) {
+          if (v === "") continue;
+          any = true;
+          if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(v.trim())) return "TEXT";
+          if (integer && !/^-?\d{1,15}$/.test(v.trim())) integer = false;
+        }
+        return !any ? "TEXT" : integer ? "INTEGER" : "REAL";
+      }
+      function listObjects() {
+        return select(
+          "SELECT schema, name, type FROM pragma_table_list WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY schema = 'main' DESC, schema, type, name",
+        ).rows.map(([schema, name, type]) => ({ schema, name, type }));
+      }
+      function importCsv({ name, text, table: wanted }) {
+        const rows = parseCsv(text);
+        if (rows.length === 0) throw new Error(`${name} is empty`);
+        const names = new Map();
+        const header = rows[0].map((h, i) => {
+          const base = h.trim() || `column_${i + 1}`;
+          const n = (names.get(base.toLowerCase()) ?? 0) + 1;
+          names.set(base.toLowerCase(), n);
+          return n === 1 ? base : `${base}_${n}`;
+        });
+        const body = rows.slice(1);
+        const types = header.map((_, c) => inferType(body.map((r) => r[c] ?? "")));
+        const taken = new Set(listObjects().map((o) => o.name.toLowerCase()));
+        let table = wanted;
+        for (let k = 2; taken.has(table.toLowerCase()); k++) table = `${wanted}_${k}`;
+        db.exec(
+          `CREATE TABLE ${quoteIdent(table)} (${header.map((h, i) => `${quoteIdent(h)} ${types[i]}`).join(", ")})`,
+        );
+        const insert = db.prepare(
+          `INSERT INTO ${quoteIdent(table)} VALUES (${header.map(() => "?").join(", ")})`,
+        );
+        db.exec("BEGIN");
+        try {
+          for (const r of body) {
+            insert.bind(
+              header.map((_, c) => {
+                const v = r[c] ?? "";
+                if (v === "") return null;
+                return types[c] === "TEXT" ? v : Number(v);
+              }),
+            );
+            insert.stepReset();
+          }
+          db.exec("COMMIT");
+        } catch (err) {
+          db.exec("ROLLBACK");
+          throw err;
+        } finally {
+          insert.finalize();
+        }
+        return { table, rows: body.length };
+      }
+
+      function open({ dbs, csvs, replay }) {
+        if (db) db.close();
+        db = new sqlite3.oo1.DB(":memory:");
+        capi.sqlite3_set_authorizer(db.pointer, authorize, 0);
+        const sources = [];
+        for (const f of dbs) {
+          try {
+            deserialize(f.bytes, f.schema);
+          } catch (err) {
+            throw new Error(`${f.name} could not be opened as a SQLite database: ${cleanError(err)}`);
+          }
+          sources.push({ name: f.name, kind: "sqlite", schema: f.schema });
+        }
+        for (const f of csvs) {
+          const { table, rows } = importCsv(f);
+          sources.push({ name: f.name, kind: "csv", schema: "main", table, rows });
+        }
+        // The edit log, in order. A statement that fails stops the replay there, and the page says so.
+        for (const [index, st] of replay.entries()) {
+          const o = runStatement({ sql: st.sql, verb: "", params: st.params }, 0);
+          if (o.kind === "error") return { sources, replay: { ran: index, failed: { index, message: o.message } } };
+        }
+        return { sources, replay: { ran: replay.length } };
+      }
+
+      function schema() {
+        return listObjects().map((o) => {
+          const fks = new Map(
+            select('SELECT "from", "table" FROM pragma_foreign_key_list(?, ?)', [o.name, o.schema]).rows,
+          );
+          const columns = select(
+            'SELECT name, type, "notnull", pk FROM pragma_table_xinfo(?, ?) WHERE hidden IN (0, 2, 3)',
+            [o.name, o.schema],
+          ).rows.map(([name, type, notnull, pk]) => ({
+            name,
+            type: type || "",
+            notnull: Boolean(notnull),
+            pk: Number(pk) > 0,
+            fk: fks.get(name) ?? null,
+          }));
+          const rows =
+            o.type === "table"
+              ? Number(db.selectValue(`SELECT count(*) FROM ${quoteIdent(o.schema)}.${quoteIdent(o.name)}`))
+              : null;
+          return { ...o, columns, rows };
+        });
+      }
+
+      const handlers = {
+        init,
+        open,
+        schema,
+        run({ statements, maxRows }, id) {
+          for (const st of statements) {
+            const o = runStatement(st, maxRows);
+            self.postMessage({ id, outcome: o });
+            if (o.kind === "error") break;
+          }
+          return null;
+        },
+        query: ({ sql, params }) => runStatement({ sql, verb: "", params }, Infinity),
+        export: () => capi.sqlite3_js_db_export(db.pointer),
+      };
+
+      self.onmessage = async ({ data: { id, op, args } }) => {
+        try {
+          const result = await handlers[op](args, id);
+          self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []);
+        } catch (err) {
+          self.postMessage({ id, error: cleanError(err) });
+        }
+      };
+    </script>
     <script>
       (function () {
         "use strict";
@@ -1431,7 +1901,8 @@
         const VALUE_KEYS = ["sql", "view", "chart"];
         const CHART_KEYS = ["type", "x", "y", "series", "aggregate"];
         const LOG_MAX = 60;
-        const STATE_BUDGET = 56000; // bytes of setState JSON; T3 keeps 64 KB
+        const STATE_LIMIT = 63 * 1024; // bytes of setState JSON: T3 keeps 64 KB
+        const EDIT_BUDGET = 48 * 1024; // of it, the most the edit log takes; the rest holds the editor, history, log
         const PREVIEW_LIMIT = 100;
         const SQLITE_MAGIC = "SQLite format 3\0";
 
@@ -1525,12 +1996,6 @@
             .replace(/^_+|_+$/g, "") || "result";
         const isTyping = (el) =>
           Boolean(el) && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
-        // Lets "Running…" paint before a synchronous run. A hidden page gets no frames, so a timer caps the wait.
-        const nextFrame = () =>
-          new Promise((resolve) => {
-            requestAnimationFrame(() => setTimeout(resolve, 0));
-            setTimeout(resolve, 50);
-          });
         const firstLine = (sql) =>
           sql
             .split("\n")
@@ -2158,190 +2623,266 @@
           };
         })();
 
-        // ---- Database ---------------------------------------------------------------
-        let sqlite3 = null;
-        let db = null;
-        const sources = []; // { name, kind: "sqlite" | "csv", schema, table?, rows? }
+        // ---- Database worker --------------------------------------------------------
+        // SQLite runs in a module worker built from this page's vendored files (the #sql-worker script). A busy
+        // worker reads no messages, and interrupting it from here (sqlite3_interrupt, or a progress handler polling a
+        // flag) needs a SharedArrayBuffer, which needs cross-origin isolation, which an opaque-origin sandbox never
+        // has. So Cancel terminates the worker and rebuilds the database in a fresh one.
+        class Cancelled extends Error {
+          constructor(ms) {
+            super(`cancelled after ${(ms / 1000).toFixed(1)} s`);
+            this.ms = ms;
+          }
+        }
+        const dbc = (() => {
+          let worker = null;
+          let seq = 0;
+          let files = null; // Promise<{ module, wasm, url }>, read once per page
+          const waiting = new Map(); // id -> { resolve, reject, onOutcome }
+          function failAll(err) {
+            for (const w of waiting.values()) w.reject(err);
+            waiting.clear();
+          }
+          function request(op, args, onOutcome) {
+            if (!worker) throw new Error("sql-workbench: the database worker is not running");
+            const id = ++seq;
+            return new Promise((resolve, reject) => {
+              waiting.set(id, { resolve, reject, onOutcome });
+              worker.postMessage({ id, op, args });
+            });
+          }
+          async function start() {
+            files ??= Promise.all([
+              t3kit.vendor.file("sqlite-wasm", "dist/index.mjs"),
+              t3kit.vendor.file("sqlite-wasm", "dist/sqlite3.wasm"),
+            ]).then(([module, wasm]) => ({
+              module,
+              wasm,
+              url: URL.createObjectURL(
+                new Blob([$("sql-worker").textContent], { type: "text/javascript" }),
+              ),
+            }));
+            const f = await files;
+            const w = new Worker(f.url, { type: "module", name: "sql-workbench" });
+            worker = w;
+            w.onmessage = ({ data }) => {
+              const entry = worker === w ? waiting.get(data.id) : null;
+              if (!entry) return;
+              if ("outcome" in data) return entry.onOutcome(data.outcome);
+              waiting.delete(data.id);
+              if ("error" in data) entry.reject(new Error(data.error));
+              else entry.resolve(data.result);
+            };
+            w.onerror = (e) => {
+              if (worker !== w) return;
+              e.preventDefault(); // reported below, once, with what failed
+              const err = new Error(
+                `sql-workbench: the database worker failed: ${e.message || "it did not start"}`,
+              );
+              worker = null;
+              w.terminate();
+              failAll(err);
+              showError(err);
+            };
+            return request("init", { module: f.module, wasm: f.wasm });
+          }
+          function terminate(reason) {
+            if (!worker) return;
+            worker.terminate();
+            worker = null;
+            failAll(reason);
+          }
+          return { start, request, terminate };
+        })();
+
+        // ---- Edit log ---------------------------------------------------------------
+        // The statements that changed the database, in order, so a reload replays them over the original files.
+        // Positions are absolute: entries[i] is statement base + i, and cursor is how many apply (history steps
+        // hold it, so undo and redo move it). Discard Edits appends a reset, so undoing it brings the edits back.
+        // The database at base is the original data; what it holds over it is the segment after the last reset.
+        // Only the segment's first EDIT_BUDGET bytes are stored with setState: the rest are unsaved, kept only in
+        // this page until it reloads, and the page says so.
+        const utf8 = new TextEncoder();
+        const byteSize = (text) => utf8.encode(text).length;
+        const kb = (n) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+        const jsonSafe = (v) =>
+          v === null ||
+          typeof v === "string" ||
+          typeof v === "boolean" ||
+          (typeof v === "number" && Number.isFinite(v)) ||
+          (Array.isArray(v) && v.every(jsonSafe)) ||
+          (isPlain(v) && Object.values(v).every(jsonSafe));
+        const editLog = (() => {
+          let entries = []; // { sql, params?, nd?, reset?, bytes }
+          let base = 0;
+          let cursor = 0;
+          let pending = []; // an open transaction's statements: recorded when it commits
+          let inTxn = false;
+          function entry({ sql, params, nd, reset }) {
+            if (reset) return { reset: true, bytes: 0 };
+            const e = { sql };
+            if (params !== undefined && params !== null) e.params = params;
+            if (nd && nd.length) e.nd = nd;
+            // Parameters JSON cannot hold (blobs) cannot be replayed from state: such a statement stays unsaved.
+            e.bytes = jsonSafe(e.params ?? null) ? byteSize(JSON.stringify(e)) + 1 : Infinity;
+            return e;
+          }
+          const stored = (e) => {
+            const { bytes: _bytes, ...rest } = e;
+            return rest;
+          };
+          function segment() {
+            let from = base;
+            for (let i = cursor - 1; i >= base; i--) {
+              if (entries[i - base].reset) {
+                from = i + 1;
+                break;
+              }
+            }
+            return { from, list: entries.slice(from - base, cursor - base) };
+          }
+          function kept() {
+            const { from, list } = segment();
+            let bytes = 0;
+            let n = 0;
+            while (n < list.length && bytes + list[n].bytes <= EDIT_BUDGET)
+              bytes += list[n++].bytes;
+            const rest = list.slice(n).reduce((s, e) => s + e.bytes, 0);
+            return { from, list, kept: n, bytes, unsaved: list.length - n, unsavedBytes: rest };
+          }
+          function record(items) {
+            entries.length = cursor - base; // a new edit drops the redo tail, as history drops its redo steps
+            for (const it of items) entries.push(entry(it));
+            cursor = base + entries.length;
+          }
+          return {
+            get cursor() {
+              return cursor;
+            },
+            get pending() {
+              return pending.length;
+            },
+            // One statement's outcome: the statements it added to the log, or null. Statements of a transaction
+            // wait for its COMMIT; a ROLLBACK (or an error that ends the transaction) drops them, as SQLite did.
+            observe(o) {
+              const was = inTxn;
+              inTxn = o.autocommit === false;
+              if (o.kind === "error") {
+                if (was && !inTxn) pending = [];
+                return null;
+              }
+              const control = Boolean(o.txn || o.savepoint);
+              if (!o.write && !control) return null;
+              const item = { sql: o.sql, params: o.params, nd: o.nd, write: o.write };
+              if (!was && !inTxn) {
+                if (!o.write) return null;
+                record([item]);
+                return [item];
+              }
+              pending.push(item);
+              if (inTxn) return null;
+              const done = pending;
+              pending = [];
+              if (o.txn === "ROLLBACK" || !done.some((p) => p.write)) return null;
+              record(done);
+              return done;
+            },
+            // A terminated worker loses its open transaction: returns how many statements that dropped.
+            dropPending() {
+              const n = pending.length;
+              pending = [];
+              inTxn = false;
+              return n;
+            },
+            hasEdits: () => segment().list.length > 0 || pending.length > 0,
+            discard() {
+              pending = [];
+              inTxn = false;
+              record([{ reset: true }]);
+            },
+            moveTo(c) {
+              if (!Number.isInteger(c) || c < base || c > base + entries.length)
+                throw new Error(
+                  `sql-workbench: that step's data edits are no longer kept (edit ${c}; kept ${base} to ${base + entries.length})`,
+                );
+              cursor = c;
+              pending = [];
+              inTxn = false;
+            },
+            replay: () =>
+              segment().list.map((e) =>
+                e.params ? { sql: e.sql, params: e.params } : { sql: e.sql },
+              ),
+            kept,
+            // What setState keeps: the stored part of the segment, starting where it starts.
+            persisted() {
+              const k = kept();
+              return { base: k.from, log: k.list.slice(0, k.kept).map(stored), unsaved: k.unsaved };
+            },
+            restore(saved) {
+              entries = saved.log.map(entry);
+              base = saved.base;
+              cursor = base + entries.length;
+            },
+          };
+        })();
+
+        // ---- Database -----------------------------------------------------------------
+        let original = null; // { dbs: [{ name, schema, bytes }], csvs: [{ name, text, table }] }: rebuilt from
+        let sources = []; // { name, kind: "sqlite" | "csv", schema, table?, rows? }
+        let sqliteVersion = "";
+        let dbOpen = false;
+        let dbReady = Promise.resolve();
+        let rebuildQueued = null; // { fresh }: one rebuild waits at a time, whoever asks
+        let editNotes = {
+          replay: null,
+          lost: 0,
+          filesChanged: null,
+          stateError: null,
+          txnDropped: 0,
+        };
         let objects = []; // tables and views: { schema, name, type, rows, columns: [{ name, type, pk, notnull, fk }] }
         let tableNames = new Set(); // lower-case names, for highlighting
-        const capi = () => sqlite3.capi;
-        const cleanError = (err) =>
-          String(err && err.message ? err.message : err).replace(
-            /^SQLITE_\w+:\s*(sqlite3 result code \d+:\s*)?/,
-            "",
-          );
-
-        function exec(sql, bind) {
-          const stmt = db.prepare(sql);
-          try {
-            if (bind) stmt.bind(bind);
-            const columns = stmt.getColumnNames([]);
-            const rows = [];
-            while (stmt.step()) rows.push(stmt.get([]));
-            return { columns, rows };
-          } finally {
-            stmt.finalize();
+        let schemaRead = false;
+        // The original files, CSVs imported, then the edit log replayed. fresh: in a new worker (boot, Cancel).
+        async function openDatabase(fresh) {
+          const t0 = performance.now();
+          dbOpen = false;
+          renderEdits();
+          if (fresh) sqliteVersion = (await dbc.start()).version;
+          const replay = editLog.replay();
+          const r = await dbc.request("open", { ...original, replay });
+          sources = r.sources;
+          editNotes.replay = r.replay.failed
+            ? { ...r.replay.failed, total: replay.length, sql: replay[r.replay.failed.index].sql }
+            : null;
+          dbOpen = true;
+          await readSchema();
+          renderEdits();
+          return { ms: performance.now() - t0, replayed: r.replay.ran };
+        }
+        function rebuild(fresh) {
+          if (rebuildQueued) {
+            rebuildQueued.fresh = rebuildQueued.fresh || fresh;
+            return dbReady;
           }
+          const job = { fresh };
+          rebuildQueued = job;
+          const go = () => {
+            rebuildQueued = null;
+            return openDatabase(job.fresh);
+          };
+          dbReady = dbReady.then(go, go);
+          return dbReady;
         }
-        // A database file's bytes into a schema of the in-memory database (main, or a newly attached one).
-        function deserialize(bytes, schemaName) {
-          // A WAL-mode file reads as rollback-journal once deserialized.
-          if (bytes[18] === 2) bytes[18] = 1;
-          if (bytes[19] === 2) bytes[19] = 1;
-          if (schemaName !== "main") db.exec(`ATTACH ':memory:' AS ${quoteIdent(schemaName)}`);
-          const c = capi();
-          const p = sqlite3.wasm.allocFromTypedArray(bytes);
-          const rc = c.sqlite3_deserialize(
-            db.pointer,
-            schemaName,
-            p,
-            bytes.byteLength,
-            bytes.byteLength,
-            c.SQLITE_DESERIALIZE_FREEONCLOSE | c.SQLITE_DESERIALIZE_RESIZEABLE,
-          );
-          db.checkRc(rc);
-          // Reading the schema proves the file is a database SQLite can open.
-          db.selectValue(`SELECT count(*) FROM ${quoteIdent(schemaName)}.sqlite_schema`);
-        }
-
-        // RFC 4180 CSV: quoted fields with doubled quotes and embedded newlines, CRLF or LF, an optional BOM.
-        function parseCsv(text) {
-          const rows = [];
-          let row = [];
-          let field = "";
-          let i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-          let quoted = false;
-          const n = text.length;
-          while (i < n) {
-            const c = text[i];
-            if (quoted) {
-              if (c === '"') {
-                if (text[i + 1] === '"') {
-                  field += '"';
-                  i += 2;
-                  continue;
-                }
-                quoted = false;
-              } else field += c;
-              i++;
-              continue;
-            }
-            if (c === '"' && field === "") quoted = true;
-            else if (c === ",") {
-              row.push(field);
-              field = "";
-            } else if (c === "\n" || c === "\r") {
-              row.push(field);
-              field = "";
-              rows.push(row);
-              row = [];
-              if (c === "\r" && text[i + 1] === "\n") i++;
-            } else field += c;
-            i++;
-          }
-          if (field !== "" || row.length) {
-            row.push(field);
-            rows.push(row);
-          }
-          return rows.filter((r) => r.length > 1 || r[0] !== "");
-        }
-        // Columns are INTEGER when every value is a whole number, REAL when every value is a number, else TEXT.
-        function inferType(values) {
-          let integer = true;
-          let seen = false;
-          for (const v of values) {
-            if (v === "") continue;
-            seen = true;
-            if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(v.trim())) return "TEXT";
-            if (integer && !/^-?\d{1,15}$/.test(v.trim())) integer = false;
-          }
-          return !seen ? "TEXT" : integer ? "INTEGER" : "REAL";
-        }
-        function uniqueTable(base) {
-          const taken = new Set(objects.concat(listObjects()).map((o) => o.name.toLowerCase()));
-          let name = base;
-          for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${base}_${k}`;
-          return name;
-        }
-        function importCsv(asset, text) {
-          const rows = parseCsv(text);
-          if (rows.length === 0) throw new Error(`${asset.name} is empty`);
-          const seen = new Map();
-          const header = rows[0].map((h, i) => {
-            const base = h.trim() || `column_${i + 1}`;
-            const n = (seen.get(base.toLowerCase()) ?? 0) + 1;
-            seen.set(base.toLowerCase(), n);
-            return n === 1 ? base : `${base}_${n}`;
-          });
-          const body = rows.slice(1);
-          const types = header.map((_, c) => inferType(body.map((r) => r[c] ?? "")));
-          const stem = asset.name.replace(/\.[^.]+$/, "");
-          const wanted =
-            OPTS.tables[asset.name] ??
-            (stem
-              .toLowerCase()
-              .replace(/[^a-z0-9_]+/g, "_")
-              .replace(/^(\d)/, "t_$1")
-              .replace(/^_+|_+$/g, "") ||
-              "data");
-          const table = uniqueTable(wanted);
-          db.exec(
-            `CREATE TABLE ${quoteIdent(table)} (${header.map((h, i) => `${quoteIdent(h)} ${types[i]}`).join(", ")})`,
-          );
-          const insert = db.prepare(
-            `INSERT INTO ${quoteIdent(table)} VALUES (${header.map(() => "?").join(", ")})`,
-          );
-          db.exec("BEGIN");
-          try {
-            for (const r of body) {
-              insert.bind(
-                header.map((_, c) => {
-                  const v = r[c] ?? "";
-                  if (v === "") return null;
-                  return types[c] === "TEXT" ? v : Number(v);
-                }),
-              );
-              insert.stepReset();
-            }
-            db.exec("COMMIT");
-          } catch (err) {
-            db.exec("ROLLBACK");
-            throw err;
-          } finally {
-            insert.finalize();
-          }
-          return { table, rows: body.length };
-        }
-        function listObjects() {
-          if (!db) return [];
-          return exec(
-            "SELECT schema, name, type FROM pragma_table_list WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY schema = 'main' DESC, schema, type, name",
-          ).rows.map(([schema, name, type]) => ({ schema, name, type }));
-        }
-        function readSchema() {
-          objects = listObjects().map((o) => {
-            const fks = new Map(
-              exec('SELECT "from", "table" FROM pragma_foreign_key_list(?, ?)', [
-                o.name,
-                o.schema,
-              ]).rows.map(([from, table]) => [from, table]),
-            );
-            const columns = exec(
-              'SELECT name, type, "notnull", pk FROM pragma_table_xinfo(?, ?) WHERE hidden IN (0, 2, 3)',
-              [o.name, o.schema],
-            ).rows.map(([name, type, notnull, pk]) => ({
-              name,
-              type: type || "",
-              notnull: Boolean(notnull),
-              pk: Number(pk) > 0,
-              fk: fks.get(name) ?? null,
-            }));
-            const rows =
-              o.type === "table"
-                ? Number(db.selectValue(`SELECT count(*) FROM ${qualified(o)}`))
-                : null;
-            return { ...o, columns, rows };
-          });
+        // Latest wins: a schema read that finishes after a newer one is dropped.
+        let schemaSeq = 0;
+        async function readSchema() {
+          const seq = ++schemaSeq;
+          const list = await dbc.request("schema");
+          if (seq !== schemaSeq) return;
+          objects = list;
+          schemaRead = true;
           tableNames = new Set(objects.map((o) => o.name.toLowerCase()));
           renderTree();
           editor.refresh();
@@ -2351,96 +2892,103 @@
         let runSeq = 0;
         let current = null; // the shown run: { id, source, label, sql, base, outcomes, at, ms, stale }
         let active = 0; // the shown result: an index into current's row results, or -1 for Messages
-        let running = false;
+        let running = null; // the run in the worker: { t0, total, done, timer, cancelled }
         const resultSets = () => (current ? current.outcomes.filter((o) => o.kind === "rows") : []);
-        const bigint = (v) =>
-          typeof v === "bigint"
-            ? v >= BigInt(Number.MIN_SAFE_INTEGER) && v <= BigInt(Number.MAX_SAFE_INTEGER)
-              ? Number(v)
-              : v.toString()
-            : v;
-        // One statement; each failure carries where SQLite says it is.
-        // Only these report rows changed; sqlite3_changes keeps the last DML count through DDL and transactions.
-        const DML = new Set(["INSERT", "UPDATE", "DELETE", "REPLACE"]);
-        function runStatement(sql, verb) {
-          const t0 = performance.now();
-          let stmt;
-          try {
-            stmt = db.prepare(sql);
-          } catch (err) {
-            return {
-              kind: "error",
-              message: cleanError(err),
-              offset: capi().sqlite3_error_offset(db.pointer),
-              ms: performance.now() - t0,
-            };
-          }
-          try {
-            if (stmt.columnCount > 0) {
-              const columns = stmt.getColumnNames([]);
-              const rows = [];
-              let truncated = false;
-              while (stmt.step()) {
-                if (rows.length >= OPTS.maxRows) {
-                  truncated = true;
-                  break;
-                }
-                rows.push(stmt.get([]).map(bigint));
-              }
-              return { kind: "rows", columns, rows, truncated, ms: performance.now() - t0 };
-            }
-            stmt.step();
-            return {
-              kind: "done",
-              changes: DML.has(verb) ? db.changes() : null,
-              ms: performance.now() - t0,
-            };
-          } catch (err) {
-            return {
-              kind: "error",
-              message: cleanError(err),
-              offset: capi().sqlite3_error_offset(db.pointer),
-              ms: performance.now() - t0,
-            };
-          } finally {
-            stmt.finalize();
-          }
+        const secs = (t) => `${(t / 1000).toFixed(1)} s`;
+        function showRunning() {
+          $("running").hidden = false;
+          const tick = () => {
+            if (!running) return;
+            const at = Math.min(running.done + 1, running.total);
+            $("running-text").textContent =
+              `${running.total > 1 ? `Running statement ${at} of ${running.total}` : "Running"} · ${secs(performance.now() - running.t0)}`;
+          };
+          tick();
+          // Only while a query runs: the elapsed time is the one thing that moves.
+          running.timer = setInterval(tick, 100);
         }
-        // Runs every statement in text, stopping at the first error. base: where text starts in the editor
-        // (null when the SQL is not the editor's).
+        function hideRunning() {
+          $("running").hidden = true;
+        }
+        // Ends the running query: the worker goes, a fresh one opens the original data and replays the kept edits.
+        function cancelRun() {
+          if (!running || running.cancelled !== null) return false;
+          running.cancelled = performance.now() - running.t0;
+          const dropped = editLog.dropPending();
+          editNotes.txnDropped = dropped;
+          dbc.terminate(new Cancelled(running.cancelled));
+          const restoring = rebuild(true);
+          setStatus(
+            `Cancelled after ${secs(running.cancelled)} · restoring the database…`,
+            "muted",
+          );
+          restoring.then(
+            ({ ms: took, replayed }) =>
+              setStatus(
+                `Cancelled · database restored in ${ms(took)}${replayed ? ` with ${plural(replayed, "kept edit")} replayed` : ""}${dropped ? ` · the open transaction (${plural(dropped, "statement")}) was rolled back` : ""}`,
+                "ok",
+              ),
+            showError,
+          );
+          return true;
+        }
+        // Runs every statement in text in the worker, stopping at the first error. base: where text starts in the
+        // editor (null when the SQL is not the editor's).
         async function runSql(text, { base = null, source = "editor", label = null } = {}) {
-          if (!db) throw new Error("sql-workbench: the database is not open yet");
           if (running) throw new Error("sql-workbench: a query is already running");
           const statements = splitStatements(text);
           if (statements.length === 0) {
             setStatus("Nothing to run: the editor has no SQL there", "muted");
             return null;
           }
-          running = true;
-          $("running").hidden = false;
+          running = {
+            t0: performance.now(),
+            total: statements.length,
+            done: 0,
+            timer: 0,
+            cancelled: null,
+          };
+          showRunning();
           setStatus(`Running ${plural(statements.length, "statement")}…`, "muted");
-          await nextFrame();
           const outcomes = [];
-          const t0 = performance.now();
-          let writes = false;
+          const recorded = [];
+          let cancelled = null;
           try {
-            for (const st of statements) {
-              const o = runStatement(st.sql, st.verb);
-              o.sql = st.sql;
-              o.verb = st.verb;
-              o.start = st.start;
-              o.end = st.end;
-              outcomes.push(o);
-              if (
-                o.kind === "done" &&
-                !/^(SELECT|EXPLAIN|PRAGMA|BEGIN|COMMIT|END|SAVEPOINT|RELEASE)$/.test(st.verb)
-              )
-                writes = true;
-              if (o.kind === "error") break;
-            }
+            await dbReady;
+            running.t0 = performance.now();
+            await dbc.request(
+              "run",
+              {
+                statements: statements.map((st) => ({ sql: st.sql, verb: st.verb })),
+                maxRows: OPTS.maxRows,
+              },
+              (o) => {
+                const st = statements[outcomes.length];
+                Object.assign(o, { sql: st.sql, verb: st.verb, start: st.start, end: st.end });
+                outcomes.push(o);
+                running.done = outcomes.length;
+                recorded.push(...(editLog.observe(o) ?? []));
+              },
+            );
+          } catch (err) {
+            if (!(err instanceof Cancelled)) throw err;
+            cancelled = err;
           } finally {
-            running = false;
-            $("running").hidden = true;
+            clearInterval(running.timer);
+            running = null;
+            hideRunning();
+          }
+          if (cancelled) {
+            const st = statements[outcomes.length];
+            outcomes.push({
+              kind: "cancelled",
+              message: `Cancelled after ${secs(cancelled.ms)}`,
+              sql: st.sql,
+              verb: st.verb,
+              start: st.start,
+              end: st.end,
+              ms: cancelled.ms,
+            });
           }
           const run = {
             id: ++runSeq,
@@ -2450,15 +2998,20 @@
             base,
             outcomes,
             at: Date.now(),
-            ms: performance.now() - t0,
+            ms: outcomes.reduce((n, o) => n + o.ms, 0),
             stale: false,
           };
           showRun(run);
           addLog(run);
-          if (writes) readSchema();
+          if (recorded.length) editsChanged(recorded.filter((o) => o.write));
+          else renderEdits();
+          if (!cancelled && outcomes.some((o) => o.write || o.txn)) readSchema().catch(showError);
+          if (!performance.getEntriesByName("sql-workbench:first-result").length && !cancelled)
+            performance.mark("sql-workbench:first-result");
           return run;
         }
-        const runError = (run) => run && run.outcomes.find((o) => o.kind === "error");
+        const runError = (run) =>
+          run && run.outcomes.find((o) => o.kind === "error" || o.kind === "cancelled");
         // Where an error sits in the editor, when the run came from it and SQLite named a position.
         function errorRange(run, o) {
           if (run.base === null) return null;
@@ -2541,7 +3094,7 @@
           const sets = resultSets();
           const err = runError(run);
           active = sets.length ? 0 : -1;
-          if (err && run.base !== null) {
+          if (err && err.kind === "error" && run.base !== null) {
             const { range } = describeError(run, err);
             editor.markError(range);
             if (range) editor.scrollTo(range.start);
@@ -2629,10 +3182,14 @@
           const err = runError(current);
           const total = splitStatements(current.sql).length;
           const outcome = outcomeText(current.outcomes);
-          sum.textContent = err
-            ? `Statement ${current.outcomes.indexOf(err) + 1} of ${total} failed · ${ms(current.ms)}`
-            : `${plural(total, "statement")} · ${outcome} · ${ms(current.ms)}`;
+          sum.textContent = !err
+            ? `${plural(total, "statement")} · ${outcome} · ${ms(current.ms)}`
+            : err.kind === "cancelled"
+              ? `Statement ${current.outcomes.indexOf(err) + 1} of ${total} cancelled after ${secs(err.ms)}`
+              : `Statement ${current.outcomes.indexOf(err) + 1} of ${total} failed · ${ms(current.ms)}`;
           sum.classList.toggle("stale", current.base !== null && current.stale);
+          // A cancel's own status (the restore) follows from cancelRun.
+          if (err && err.kind === "cancelled") return;
           const text = err
             ? `Failed: ${err.message}`
             : `Ran ${plural(current.outcomes.length, "statement")} · ${outcome} in ${ms(current.ms)}`;
@@ -2643,7 +3200,13 @@
           box.replaceChildren();
           if (!current) return;
           const err = runError(current);
-          if (err) {
+          if (err && err.kind === "cancelled") {
+            const n = el("div", "notice warn");
+            n.setAttribute("role", "alert");
+            const index = current.outcomes.indexOf(err) + 1;
+            n.textContent = `${err.message}${current.outcomes.length > 1 || index > 1 ? ` at statement ${index}` : ""}. The database was rebuilt from the original files and the kept edits; statements after it did not run.`;
+            box.append(n);
+          } else if (err) {
             const { where, range } = describeError(current, err);
             const e = el("div", "error-box");
             e.setAttribute("role", "alert");
@@ -2754,6 +3317,13 @@
             return { key, kind };
           });
         }
+        const MEASURE =
+          /(^|_)(per|avg|average|mean|median|rate|ratio|pct|percent|share|score)(_|$)/i;
+        const SERIES_MAX = 12;
+        function distinct(o, key) {
+          const i = o.keys.indexOf(key);
+          return new Set(o.rows.map((r) => r[i])).size;
+        }
         // The stored spec when its columns are in this result; otherwise a sensible chart of it.
         function chartFor(o, stored = chartSpec) {
           const kinds = columnKinds(o);
@@ -2774,12 +3344,18 @@
           const text = kinds.find((c) => c.kind === "text");
           const xcol = date ?? text ?? null;
           if (xcol) {
-            const y = nums.find((c) => c.key !== xcol.key) ?? null;
+            // The measure: the last number column named like a rate or average, else the last one (a query
+            // usually computes its measure last, after the counts it is made from).
+            const ys = nums.filter((c) => c.key !== xcol.key);
+            const y = ys.findLast((c) => MEASURE.test(c.key)) ?? ys.at(-1) ?? null;
+            // A second category with a few values splits the measure into series.
+            const other = kinds.find((c) => c.key !== xcol.key && c.kind === "text");
+            const series = other && y && distinct(o, other.key) <= SERIES_MAX ? other.key : null;
             return {
               type: date ? "line" : "bar",
               x: xcol.key,
               y: y ? y.key : null,
-              series: null,
+              series,
               aggregate: y ? "sum" : null,
             };
           }
@@ -2943,17 +3519,14 @@
                     ? "OK"
                     : `${plural(o.changes, "row")} affected`
                   : o.message;
-            const status = el(
-              "td",
-              o.kind === "error" ? "bad" : "ok",
-              o.kind === "error" ? "✕" : "✓",
-            );
+            const failed = o.kind === "error" || o.kind === "cancelled";
+            const status = el("td", failed ? "bad" : "ok", failed ? "✕" : "✓");
             const sql = el("td", "sql", o.sql.replace(/\s+/g, " "));
             sql.title = o.sql;
             row.append(
               status,
               sql,
-              el("td", o.kind === "error" ? "bad" : "", result),
+              el("td", failed ? "bad" : "", result),
               el("td", "num", ms(o.ms)),
             );
             body.append(row);
@@ -2965,7 +3538,7 @@
             const td = el(
               "td",
               "muted",
-              `${plural(skipped, "statement")} after the error did not run.`,
+              `${plural(skipped, "statement")} after ${runError(current)?.kind === "cancelled" ? "the cancel" : "the error"} did not run.`,
             );
             td.colSpan = 4;
             row.append(td);
@@ -2987,7 +3560,7 @@
             ? `${plural(tables, "table")}${views ? `, ${plural(views, "view")}` : ""}`
             : "";
           tree.replaceChildren();
-          if (!db) return;
+          if (!schemaRead) return;
           if (objects.length === 0) {
             tree.append(
               el(
@@ -3149,8 +3722,10 @@
           }
         });
         $("schema-refresh").addEventListener("click", () => {
-          readSchema();
-          setStatus(`Schema refreshed: ${plural(objects.length, "object")}`, "muted");
+          readSchema().then(
+            () => setStatus(`Schema refreshed: ${plural(objects.length, "object")}`, "muted"),
+            showError,
+          );
         });
         function preview(o) {
           return runSql(`SELECT * FROM ${qualified(o)} LIMIT ${PREVIEW_LIMIT};`, {
@@ -3408,10 +3983,20 @@
         let editTimer = 0;
         let persistTimer = 0;
         let exporting = false;
-        const getState = () => ({ sql: editor.value, view, chart: { ...chartSpec } });
-        const getValues = () => clone(getState());
+        // History steps also hold the edit log's cursor (edits), so undo and redo move the data with them.
+        const getState = () => ({
+          sql: editor.value,
+          view,
+          chart: { ...chartSpec },
+          edits: editLog.cursor,
+        });
+        const getValues = () => {
+          const { edits: _edits, ...values } = getState();
+          return clone(values);
+        };
         function applyState(raw) {
           const s = isPlain(raw) ? raw : {};
+          if (Number.isInteger(s.edits) && s.edits !== editLog.cursor) moveEdits(s.edits);
           if (typeof s.sql === "string" && s.sql !== editor.value) {
             editor.set(s.sql);
             if (current) current.stale = true;
@@ -3505,25 +4090,227 @@
                 : "";
         });
 
+        // ---- Data edits: the budget, unsaved edits, Discard ---------------------------
+        // A write is one undo step (it holds the edit log's cursor), persisted with the rest of the state.
+        function editsChanged(writes) {
+          const first = firstLine(writes[0].sql).slice(0, 48);
+          commitNow(`Write: ${first}${writes.length > 1 ? ` (+${writes.length - 1})` : ""}`);
+          editNotes.lost = 0;
+          editNotes.txnDropped = 0;
+          renderEdits();
+          persist();
+        }
+        function discardEdits() {
+          if (!editLog.hasEdits()) {
+            setStatus("No edits to discard: the data is the original files", "muted");
+            return dbReady;
+          }
+          if (running) cancelRun();
+          editLog.discard();
+          editNotes = { ...editNotes, replay: null, lost: 0, txnDropped: 0 };
+          const done = rebuild(false);
+          commitNow("Discard Edits");
+          renderEdits();
+          persist();
+          return done.then(() =>
+            setStatus("Discarded the edits: the data is the original files again", "ok"),
+          );
+        }
+        // Undo, redo and history jumps rebuild the database at that step's edits.
+        function moveEdits(target) {
+          if (running) cancelRun();
+          editLog.moveTo(target);
+          editNotes = { ...editNotes, replay: null, txnDropped: 0 };
+          setStatus("Rebuilding the data at this step…", "muted");
+          rebuild(false).then(
+            ({ replayed }) =>
+              setStatus(
+                replayed
+                  ? `Data at this step: the original files with ${plural(replayed, "edit")} replayed`
+                  : "Data at this step: the original files",
+                "ok",
+              ),
+            showError,
+          );
+          renderEdits();
+        }
+        // Everything the user should know about the edits, in the header and the Data Edits panel.
+        let editsSeen = "false|";
+        function renderEdits() {
+          const k = editLog.kept();
+          const n = k.list.length;
+          const nd = k.list.slice(0, k.kept).filter((e) => e.nd);
+          const chip = $("edits-chip");
+          const body = $("edits-body");
+          const notes = [];
+          const note = (kind, text, action) => {
+            const d = el("div", `edits-note ${kind}`);
+            d.append(el("span", "", text));
+            if (action) d.append(action);
+            notes.push(d);
+          };
+          const exportBtn = (label) => {
+            const b = el("button", "btn btn-sm", label);
+            b.type = "button";
+            b.addEventListener("click", () => exportDatabase().catch(showError));
+            return b;
+          };
+          if (editNotes.replay) {
+            const r = editNotes.replay;
+            note(
+              "bad",
+              `Replay stopped at kept edit ${r.index + 1} of ${r.total}: ${r.message}. The data shows the first ${plural(r.index, "edit")}. (${firstLine(r.sql).slice(0, 60)})`,
+            );
+          }
+          if (k.unsaved) {
+            note(
+              "warn",
+              `${plural(k.unsaved, "statement")} (${kb(k.unsavedBytes === Infinity ? 0 : k.unsavedBytes)}${k.unsavedBytes === Infinity ? ", with binary parameters" : ""}) did not fit the ${kb(EDIT_BUDGET)} kept with this workspace. They apply now, but a reload or reopen loses them: export the database to keep them.`,
+              exportBtn("Export .sqlite"),
+            );
+          }
+          if (editLog.pending)
+            note(
+              "info",
+              `An open transaction holds ${plural(editLog.pending, "statement")}. They are kept once it commits; a cancel, reload or ROLLBACK drops them.`,
+            );
+          if (editNotes.txnDropped)
+            note(
+              "warn",
+              `The open transaction (${plural(editNotes.txnDropped, "statement")}) was rolled back.`,
+            );
+          if (editNotes.lost)
+            note(
+              "warn",
+              `${plural(editNotes.lost, "statement")} from the last session did not fit the budget and are gone. The data shows the edits that fit.`,
+            );
+          if (nd.length) {
+            const why = [...new Set(nd.flatMap((e) => e.nd))].slice(0, 3).join(", ");
+            note(
+              "info",
+              `${plural(nd.length, "kept edit")} ${nd.length === 1 ? "uses" : "use"} ${why}: a reload replays ${nd.length === 1 ? "it" : "them"} and gets new values, so that data will differ.`,
+            );
+          }
+          if (editNotes.filesChanged) note("info", editNotes.filesChanged);
+          if (editNotes.stateError)
+            note("bad", `The workspace state was not stored: ${editNotes.stateError}`);
+
+          const head = el("div", "edits-line");
+          head.append(
+            n
+              ? `Edits kept: ${plural(k.kept, "statement")}, ${kb(k.bytes)} of ${kb(EDIT_BUDGET)}`
+              : "No edits: the data is the original files",
+          );
+          const meter = el("div", "meter");
+          const fill = el("span", k.unsaved ? "over" : "");
+          fill.style.width = `${Math.min(100, k.unsaved ? 100 : (k.bytes / EDIT_BUDGET) * 100).toFixed(1)}%`;
+          meter.append(fill);
+          meter.title = `${kb(k.bytes)} of ${kb(EDIT_BUDGET)} of SQL kept with this workspace`;
+          const actions = el("div", "edits-actions");
+          const discard = el("button", "btn btn-sm", "Discard Edits");
+          discard.type = "button";
+          discard.disabled = !editLog.hasEdits();
+          discard.title = "Back to the original files (undo brings the edits back)";
+          discard.addEventListener("click", () => discardEdits().catch(showError));
+          actions.append(discard, exportBtn("Export .sqlite"));
+          const help = el(
+            "p",
+            "edits-help",
+            "Statements that change data (INSERT, UPDATE, CREATE…) are kept with this workspace and replayed over the original files when it opens. The files on disk never change: export the database to save a copy.",
+          );
+          body.replaceChildren(head, meter, ...notes, actions, help);
+
+          const problem = editNotes.replay ? "bad" : k.unsaved || editNotes.lost ? "warn" : "";
+          // The panel opens itself when edits first appear and when something needs the user's attention.
+          const seen = `${n > 0}|${problem}`;
+          if (
+            seen !== editsSeen &&
+            (n > 0 || problem) &&
+            (problem || !editsSeen.startsWith("true"))
+          )
+            document.querySelector('[data-panel="edits"]').open = true;
+          editsSeen = seen;
+          chip.hidden = !n && !problem && !editLog.pending && !notes.length;
+          chip.className = `edits-chip ${problem}`;
+          chip.textContent = editNotes.replay
+            ? "Replay failed"
+            : k.unsaved
+              ? `Unsaved edits: ${plural(k.unsaved, "statement")}`
+              : n
+                ? `${plural(k.kept, "edit")} kept · ${kb(k.bytes)} of ${kb(EDIT_BUDGET)}`
+                : editLog.pending
+                  ? "Open transaction"
+                  : "Data edits";
+          chip.title = `${head.textContent}${notes.length ? `\n${notes.map((x) => x.textContent).join("\n")}` : ""}\nClick for details`;
+          $("edits-count").textContent = n ? String(k.kept) : "";
+          if (!dbOpen) chip.textContent += " · opening…";
+        }
+        // For the agent: whether the data differs from the files, as counts (workspace_state has the log).
+        function editsSummary() {
+          const k = editLog.kept();
+          if (!k.list.length && !editNotes.replay) return { statements: 0 };
+          const out = {
+            statements: k.kept,
+            keptBytes: k.bytes,
+            budgetBytes: EDIT_BUDGET,
+            note: "The user changed the data: these SQL statements are replayed over the files on disk when the workspace opens. The files themselves are unchanged; the user can export a .sqlite.",
+          };
+          if (k.unsaved) out.unsavedStatements = k.unsaved;
+          const nd = k.list.slice(0, k.kept).filter((e) => e.nd).length;
+          if (nd) out.nondeterministic = nd;
+          if (editNotes.replay) out.replayFailedAt = editNotes.replay.index + 1;
+          return out;
+        }
+        $("edits-chip").addEventListener("click", () => {
+          $("inspector").hidden = false;
+          $("work").classList.remove("no-inspector");
+          const panel = document.querySelector('[data-panel="edits"]');
+          panel.open = true;
+          panel.scrollIntoView({ block: "nearest" });
+        });
+
         // ---- Persisted state ----------------------------------------------------------
-        // Kept under T3's 64 KB: the oldest history steps and log entries go first.
+        // Under T3's 64 KB. The edit log goes last and takes at most EDIT_BUDGET; the rest is trimmed to fit, oldest
+        // run log entries and history steps first. The edit summary goes first, so <workspace_context> shows it.
+        const TABLES_KEY = JSON.stringify(OPTS.tables);
+        let sqlCutNoted = false;
+        // History steps whose data a reload can rebuild: those at the stored edits.
+        function storableHistory(h, lo, hi) {
+          const keep = (e) =>
+            !Number.isInteger(e.state?.edits) || (e.state.edits >= lo && e.state.edits <= hi);
+          const active = h.entries[h.index];
+          const entries = h.entries.filter(keep);
+          if (!entries.length)
+            return {
+              ...h,
+              entries: [{ label: "Open", state: { ...active.state, edits: hi } }],
+              index: 0,
+            };
+          let index = entries.indexOf(active);
+          if (index < 0)
+            index = Math.max(
+              0,
+              entries.findLastIndex((e) => h.entries.indexOf(e) < h.index),
+            );
+          return { ...h, entries, index };
+        }
         function persistState() {
-          const h = history.get();
+          const w = editLog.persisted();
+          const writes = { tables: TABLES_KEY, over: filesKey(), ...w };
           const state = {
             v: 1,
-            key: STATE_KEY,
+            edits: editsSummary(),
             sql: editor.value.slice(0, 20000),
-            history: h,
             saved,
             log,
             controls: rt.state(),
             layout: { editor: editorFraction },
+            history: storableHistory(history.get(), w.base, w.base + w.log.length),
+            key: STATE_KEY,
+            writes,
           };
-          let json = JSON.stringify(state);
-          while (
-            json.length > STATE_BUDGET &&
-            (state.history.entries.length > 1 || state.log.length)
-          ) {
+          let size = byteSize(JSON.stringify(state));
+          while (size > STATE_LIMIT && (state.history.entries.length > 1 || state.log.length)) {
             if (state.log.length > 10 || state.history.entries.length <= 1)
               state.log = state.log.slice(0, -5);
             else {
@@ -3534,7 +4321,19 @@
                 index: Math.max(0, state.history.index - drop),
               };
             }
-            json = JSON.stringify(state);
+            size = byteSize(JSON.stringify(state));
+          }
+          // Still too big: the editor's SQL is cut to fit, and the user hears about it once.
+          if (size > STATE_LIMIT) {
+            const over = size - STATE_LIMIT;
+            state.sql = state.sql.slice(0, Math.max(0, state.sql.length - over - 64));
+            if (!sqlCutNoted) {
+              sqlCutNoted = true;
+              setStatus(
+                `The editor's SQL is too long to keep with the workspace: a reload keeps its first ${kb(byteSize(state.sql))}`,
+                "bad",
+              );
+            }
           }
           return state;
         }
@@ -3567,8 +4366,10 @@
               : `${safeName(stem)}-result-${index}.csv`;
           return new File([resultCsv(o, order, columns)], name, { type: "text/csv" });
         }
-        function databaseFile() {
-          const bytes = capi().sqlite3_js_db_export(db.pointer);
+        // The main database as it is now (edits included), from the worker; waits for a running query.
+        async function databaseFile() {
+          await dbReady;
+          const bytes = await dbc.request("export");
           return new File([bytes], `${safeName(stem)}.sqlite`, { type: "application/vnd.sqlite3" });
         }
         async function deliver(files) {
@@ -3585,18 +4386,19 @@
             exporting = false;
           }
         }
-        function exportAll() {
-          if (!db) throw new Error("sql-workbench: the database is not open yet");
+        async function exportAll() {
+          if (!dbOpen) throw new Error("sql-workbench: the database is not open yet");
           const csv = resultFile();
-          return deliver(csv ? [csv, databaseFile()] : [databaseFile()]);
+          const file = await databaseFile();
+          return deliver(csv ? [csv, file] : [file]);
         }
-        function exportResult() {
+        async function exportResult() {
           const csv = resultFile();
           if (!csv)
             throw new Error("sql-workbench: run a query that returns rows to export them as CSV");
           return deliver([csv]);
         }
-        const exportDatabase = () => deliver([databaseFile()]);
+        const exportDatabase = async () => deliver([await databaseFile()]);
 
         // ---- Command palette --------------------------------------------------------
         const extraCommands = [];
@@ -3633,7 +4435,13 @@
             { label: "Filter Tables", hint: "/", run: () => $("schema-filter").focus() },
             { label: "Toggle Schema", hint: "B", run: toggleSchema },
             { label: "Toggle Inspector", hint: "I", run: toggleInspector },
-            { label: "Refresh Schema", hint: "", run: readSchema },
+            { label: "Refresh Schema", hint: "", run: () => readSchema().catch(showError) },
+            { label: "Cancel Query", hint: "Esc", run: cancelRun },
+            {
+              label: "Discard Edits (Back to the Original Data)",
+              hint: "",
+              run: () => discardEdits().catch(showError),
+            },
             { label: "Undo", hint: `${MOD}Z`, run: () => history.undo() },
             { label: "Redo", hint: `${SHIFT}${MOD}Z`, run: () => history.redo() },
             { label: "Clear Run Log", hint: "", run: clearLog },
@@ -3823,6 +4631,18 @@
           },
           true,
         );
+        // Esc cancels a running query from anywhere, unless a completion list or the palette has it.
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (e.key !== "Escape" || !running || !$("complete").hidden || !$("cmd").hidden) return;
+            e.preventDefault();
+            e.stopPropagation();
+            cancelRun();
+          },
+          true,
+        );
+        $("cancel-run").addEventListener("click", cancelRun);
         document.addEventListener("keydown", (e) => {
           const mod = e.metaKey || e.ctrlKey;
           if (mod && !e.altKey && e.key.toLowerCase() === "k") {
@@ -3888,7 +4708,8 @@
             commitNow(label);
             return getValues();
           },
-          addPreset: (name, values) => history.savePreset(name, mergeValues(getState(), values)),
+          // Presets hold the editor, view and chart, never the data.
+          addPreset: (name, values) => history.savePreset(name, mergeValues(getValues(), values)),
           applyPreset: (name) => history.applyPreset(name),
           export: () => exportAll(),
           reservedKeys: [
@@ -3909,6 +4730,7 @@
             "mod+shift+z",
             "mod+/",
             "mod+shift+f",
+            "escape",
           ],
           onCommand: (label, run, hint) => extraCommands.push({ label, run, hint }),
           onBoltOnChange() {
@@ -4048,54 +4870,58 @@
         const showError = (err) => rt.reportError(err);
 
         // ---- Boot -------------------------------------------------------------------
-        async function readAssetBytes(asset) {
-          const blob = asset.file ?? (await (await fetch(asset.url)).blob());
-          return new Uint8Array(await blob.arrayBuffer());
-        }
+        const assetBlob = async (a) => a.file ?? (await (await fetch(a.url)).blob());
         const isCsv = (a) => /text\/csv/.test(a.mimeType || "") || /\.csv$/i.test(a.name || "");
-        async function openSources(assets) {
+        // The original data, read once: database files (known by their header, whatever their name or type says)
+        // under main and attached schemas, and CSVs with the table each imports as.
+        async function readSources(assets) {
           const dbs = [];
           const csvs = [];
+          const taken = new Set(["main", "temp"]);
           for (const a of assets) {
+            const blob = await assetBlob(a);
             if (isCsv(a)) {
-              csvs.push(a);
+              const stemName = a.name.replace(/\.[^.]+$/, "");
+              const table =
+                OPTS.tables[a.name] ??
+                (stemName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_]+/g, "_")
+                  .replace(/^(\d)/, "t_$1")
+                  .replace(/^_+|_+$/g, "") ||
+                  "data");
+              csvs.push({ name: a.name, text: await blob.text(), table, size: blob.size });
               continue;
             }
-            // A database is known by its header, whatever its name or type says.
-            const head = new Uint8Array(
-              await (a.file ?? (await (await fetch(a.url)).blob())).slice(0, 16).arrayBuffer(),
-            );
-            if (String.fromCharCode(...head) === SQLITE_MAGIC) dbs.push(a);
-          }
-          const taken = new Set(["main", "temp"]);
-          for (const [i, a] of dbs.entries()) {
+            const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+            if (String.fromCharCode(...head) !== SQLITE_MAGIC) continue;
             const base =
-              i === 0
+              dbs.length === 0
                 ? "main"
                 : a.name
                     .replace(/\.[^.]+$/, "")
                     .toLowerCase()
                     .replace(/[^a-z0-9_]+/g, "_") || "db";
             let schemaName = base;
-            for (let k = 2; i > 0 && taken.has(schemaName); k++) schemaName = `${base}_${k}`;
+            for (let k = 2; dbs.length > 0 && taken.has(schemaName); k++)
+              schemaName = `${base}_${k}`;
             taken.add(schemaName);
-            try {
-              deserialize(await readAssetBytes(a), schemaName);
-            } catch (err) {
-              throw new Error(
-                `${a.name} could not be opened as a SQLite database: ${cleanError(err)}`,
-              );
-            }
-            sources.push({ name: a.name, kind: "sqlite", schema: schemaName });
+            dbs.push({
+              name: a.name,
+              schema: schemaName,
+              bytes: new Uint8Array(await blob.arrayBuffer()),
+            });
           }
-          for (const a of csvs) {
-            const blob = a.file ?? (await (await fetch(a.url)).blob());
-            const { table, rows } = importCsv(a, await blob.text());
-            sources.push({ name: a.name, kind: "csv", schema: "main", table, rows });
-          }
-          const firstDb = sources.find((s) => s.kind === "sqlite") ?? sources[0];
-          if (firstDb) stem = firstDb.name.replace(/\.[^.]+$/, "");
+          const first = dbs[0] ?? csvs[0];
+          if (first) stem = first.name.replace(/\.[^.]+$/, "");
+          return { dbs, csvs };
         }
+        // Which files the edits were made over: replaying them over other files is said, not hidden.
+        const filesKey = () =>
+          [
+            ...original.dbs.map((d) => `${d.name} ${d.bytes.byteLength}`),
+            ...original.csvs.map((c) => `${c.name} ${c.size}`),
+          ].join(", ");
         function renderMeta() {
           const parts = sources.map((s) =>
             s.kind === "csv"
@@ -4104,11 +4930,25 @@
                 ? s.name
                 : `${s.name} as ${s.schema}`,
           );
-          const version = capi().sqlite3_libversion();
           $("meta").textContent =
-            `${parts.length ? parts.join(" + ") : "Empty database"} · SQLite ${version} · in memory`;
+            `${parts.length ? parts.join(" + ") : "Empty database"} · SQLite ${sqliteVersion} · in memory`;
           $("meta").title =
-            "The database lives in this page. Export saves it as a .sqlite file; changes are not written back to the attached files.";
+            "The database lives in this page, in a worker. Data edits are kept with the workspace and replayed over the files when it opens; the files on disk never change. Export saves a .sqlite file.";
+        }
+        // A stored edit log, checked: it replays only over the same CSV table names.
+        function storedWrites(state) {
+          const w = isPlain(state) && state.v === 1 && isPlain(state.writes) ? state.writes : null;
+          if (!w || w.tables !== TABLES_KEY) return null;
+          if (!Number.isInteger(w.base) || w.base < 0 || !Array.isArray(w.log)) return null;
+          // Replay stops before a damaged entry, and the page counts what it lost.
+          const ok = (e) =>
+            isPlain(e) &&
+            typeof e.sql === "string" &&
+            (e.params === undefined || jsonSafe(e.params));
+          const bad = w.log.findIndex((e) => !ok(e));
+          const log = bad < 0 ? w.log : w.log.slice(0, bad);
+          const unsaved = Number.isInteger(w.unsaved) ? w.unsaved : 0;
+          return { ...w, log, lost: unsaved + (w.log.length - log.length) };
         }
         function defaultQuery() {
           if (OPTS.query.trim()) return OPTS.query;
@@ -4121,6 +4961,8 @@
         }
         // The page does not move until the database is open: the editor and buttons work on it.
         async function boot() {
+          // The worker loads SQLite while the bridge hands over the files.
+          const starting = dbc.start();
           const ready = await ws.ready();
           const savedState = ready.state ?? (await ws.initialState()) ?? null;
           const restored =
@@ -4130,11 +4972,24 @@
             isPlain(savedState.history)
               ? savedState
               : null;
-          sqlite3 = await t3kit.vendor.load("sqlite-wasm");
-          db = new sqlite3.oo1.DB(":memory:");
-          await openSources(ready.assets ?? []);
-          readSchema();
+          original = await readSources(ready.assets ?? []);
+          // Data edits keep across option changes; they replay over the same files and CSV table names.
+          const writes = storedWrites(savedState);
+          if (writes) {
+            editLog.restore(writes);
+            editNotes.lost = writes.lost;
+            if (writes.log.length && typeof writes.over === "string" && writes.over !== filesKey())
+              editNotes.filesChanged = `The files changed since these edits were made (then: ${writes.over}; now: ${filesKey()}). They were replayed over the new files.`;
+          }
+          sqliteVersion = (await starting).version;
+          dbReady = openDatabase(false);
+          await dbReady;
+          performance.mark("sql-workbench:open");
           renderMeta();
+          ws.on?.("state-error", (err) => {
+            editNotes.stateError = err && err.message ? err.message : String(err);
+            renderEdits();
+          });
           if (restored) {
             if (Array.isArray(restored.saved))
               saved = restored.saved.filter(
@@ -4169,7 +5024,13 @@
             state: getState(),
             presetPlaceholder: "Name this state",
           });
-          if (restored) history.set(restored.history);
+          if (restored) {
+            history.set(restored.history);
+            // The data is what the stored log rebuilt: the active step says so.
+            const st = history.get().state;
+            if (isPlain(st) && st.edits !== editLog.cursor)
+              history.set({ state: { ...st, edits: editLog.cursor } });
+          }
           // A control step first pushes any pending SQL edit as its own step.
           historyLink = rt.linkHistory(history, getState, applyState, {
             idleMs: 300,
@@ -4178,7 +5039,19 @@
               historyLink.commit(label);
             },
           });
-          history.on("change", () => {
+          history.on("change", (model, { action }) => {
+            // A preset saved from the History panel holds the editor, view and chart, never the data.
+            if (
+              action === "savePreset" &&
+              model.presets.some((p) => isPlain(p.state) && "edits" in p.state)
+            )
+              history.set({
+                presets: model.presets.map((p) => {
+                  if (!isPlain(p.state)) return p;
+                  const { edits: _edits, ...state } = p.state;
+                  return { ...p, state };
+                }),
+              });
             persist();
             rt.emitChange();
             rt.syncChrome();
@@ -4186,10 +5059,6 @@
           rt.publish({
             // Getters: a run replaces the grids and the chart, so these follow the result on screen.
             instances: {
-              get db() {
-                return db;
-              },
-              sqlite3,
               get grid() {
                 return activeGrid();
               },
@@ -4205,16 +5074,30 @@
               },
             },
             extras: {
-              query(sql, params) {
+              // One statement in the worker, outside the editor and results. A write is kept like any other.
+              async query(sql, params) {
                 if (typeof sql !== "string")
                   throw new TypeError("t3template.query(sql, params?) needs SQL text");
-                const { columns, rows } = exec(sql, params);
-                const keys = uniqueColumns(columns);
+                if (params !== undefined && !Array.isArray(params) && !isPlain(params))
+                  throw new TypeError(
+                    "t3template.query(sql, params?): params is an array or an object",
+                  );
+                await dbReady;
+                const o = await dbc.request("query", { sql, params });
+                if (o.kind === "error") throw new Error(`t3template.query: ${o.message}`);
+                Object.assign(o, { sql, params });
+                const recorded = editLog.observe(o);
+                if (recorded) editsChanged(recorded.filter((r) => r.write));
+                if (o.write || o.txn) await readSchema();
+                const keys = uniqueColumns(o.columns ?? []);
                 return {
                   columns: keys,
-                  rows: rows.map((r) => Object.fromEntries(keys.map((k, i) => [k, bigint(r[i])]))),
+                  rows: (o.rows ?? []).map((r) =>
+                    Object.fromEntries(keys.map((k, i) => [k, r[i]])),
+                  ),
                 };
               },
+              discardEdits: () => discardEdits(),
               async run(sql, label) {
                 if (sql !== undefined) {
                   if (typeof sql !== "string")
@@ -4249,6 +5132,7 @@
           booted = true;
           renderSaved();
           renderLog();
+          renderEdits();
           syncViewButtons();
           persist();
           // The agent's starting SQL runs now; its errors go back to the agent as page errors.
