@@ -8,33 +8,42 @@ export interface KitPrimitive {
   readonly source: string;
 }
 
-/** How the page gets one file of a vendored library (see KitVendor). */
+/** How the page uses one file of a vendored library (see KitVendor). */
 export type KitVendorLoad = "script" | "module" | "bytes";
 
 /** One file taken from a vendored package. */
 export interface KitVendorFile {
-  /** Its base name in the package, unique within the library: what `bytes(name)` and the exports map key. */
+  /** Its base name in the package, unique within the library: what `bytes(name)` and the exports map key it by. */
   readonly name: string;
   /**
-   * `script`: a classic script. `module`: a self-contained ES module, ending
-   * with a call that hands its export list to `t3kit.vendor`. `bytes`: binary
-   * data (wasm) the library's init decodes; it never executes.
+   * Its path in the package, as vendor.json lists it: T3 serves it at that path
+   * under the library's URL, and `t3kit.vendor.file(library, path)` names it so.
+   */
+  readonly path: string;
+  /**
+   * `script`: a classic script, run in order before the modules. `module`: an
+   * ES module, imported; it may import the library's other modules by
+   * relative path. `bytes`: binary data (wasm) fetched for the library's init;
+   * it never executes.
    */
   readonly load: KitVendorLoad;
-  /** The script text, or base64 for `bytes`. */
+  /** The file's text, or base64 for `bytes`. */
   readonly content: string;
 }
 
 /**
  * A third-party library baked into the kit from an npm package pinned to an
- * exact version. Pages run sandboxed with no network, so its files are inlined
- * into every page that names it, ahead of the primitives.
+ * exact version. T3 serves its files and init from one versioned, immutable
+ * URL per library (`vendorLibraryPath`); a page that names it carries only the
+ * `t3kit.vendor` registry and where to find them.
  */
 export interface KitVendor {
   readonly name: string;
   readonly package: string;
   readonly version: string;
   readonly license: string;
+  /** A hash of the version, files and init: part of every URL, so a cache can never serve other bytes. */
+  readonly hash: string;
   readonly files: ReadonlyArray<KitVendorFile>;
   /** The kit's classic script that turns the files into the page's API (`t3kit.vendor.define`). */
   readonly init: string;
@@ -97,7 +106,7 @@ export interface KitTemplateManifest {
   readonly summary: string;
   /** Primitives T3 injects before the template's own scripts. */
   readonly kit: ReadonlyArray<string>;
-  /** Vendored libraries T3 injects before the primitives (`t3kit.vendor.load(name)`). */
+  /** Vendored libraries the page loads with `t3kit.vendor.load(name)`. */
   readonly vendor: ReadonlyArray<string>;
   readonly options: Readonly<Record<string, TemplateOptionSpec>>;
   readonly examples: ReadonlyArray<unknown>;

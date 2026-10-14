@@ -73,6 +73,7 @@ import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
 import * as WorkspaceAssets from "./mutationWorkspace/WorkspaceAssets.ts";
 import * as WorkspacePreview from "./mutationWorkspace/WorkspacePreview.ts";
 import * as WorkspacePreviewBrowser from "./mutationWorkspace/WorkspacePreviewBrowser.ts";
+import * as WorkspaceVendorRoute from "./mutationWorkspace/WorkspaceVendorRoute.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as GitManager from "./git/GitManager.ts";
@@ -711,6 +712,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
+    WorkspaceVendorRoute.layer,
     ServerHttp.layerAttachmentUploadRoute,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,

@@ -6,6 +6,8 @@ import {
   makeWorkspaceKit,
   templateCatalogLine,
   validateTemplateOptions,
+  vendorLibraryFiles,
+  WORKSPACE_VENDOR_ROUTE,
   workspaceKit,
 } from "./index.ts";
 import type { KitPrimitive, KitTemplate, KitVendor } from "./types.ts";
@@ -159,10 +161,16 @@ describe("vendored libraries", () => {
     package: "@example/sql",
     version: "1.2.3",
     license: "MIT",
+    hash: "0123456789abcdef",
     files: [
-      { name: "sql.mjs", load: "module", content: "const s = '</script>';\nt3kit.vendor.ran();" },
-      { name: "sql.wasm", load: "bytes", content: "AGFzbQ==" },
-      { name: "shim.js", load: "script", content: "window.shim = 1;" },
+      {
+        name: "sql.mjs",
+        path: "dist/sql.mjs",
+        load: "module",
+        content: "export const s = '</script>';",
+      },
+      { name: "sql.wasm", path: "dist/sql.wasm", load: "bytes", content: "AGFzbQ==" },
+      { name: "shim.js", path: "shim.js", load: "script", content: "window.shim = 1;" },
     ],
     init: 't3kit.vendor.define("sql", () => 1);',
   };
@@ -179,19 +187,39 @@ describe("vendored libraries", () => {
     return result.value;
   };
 
-  it("injects the registry, then each file and the init, ahead of the core and primitives", () => {
+  it("injects where each library's files are and the registry, ahead of the core and primitives", () => {
     const page = vendorPlan({ template: { id: "query" } });
     assert.deepEqual(
       page.vendor.map((library) => library.name),
       ["sql"],
     );
     const html = vendorKit.inject(page.html, page);
+    const manifest = /<script type="application\/json" id="t3kit-vendor">(.*?)<\/script>/.exec(
+      html,
+    );
+    assert.deepEqual(JSON.parse(manifest?.[1] ?? "null"), {
+      sql: {
+        url: "/api/workspace-vendor/sql/1.2.3/0123456789abcdef/",
+        files: [
+          {
+            name: "sql.mjs",
+            path: "dist/sql.mjs",
+            load: "module",
+            type: "text/javascript; charset=utf-8",
+          },
+          { name: "sql.wasm", path: "dist/sql.wasm", load: "bytes", type: "application/wasm" },
+          {
+            name: "shim.js",
+            path: "shim.js",
+            load: "script",
+            type: "text/javascript; charset=utf-8",
+          },
+        ],
+      },
+    });
     const order = [
+      '<script type="application/json" id="t3kit-vendor">',
       '<script data-t3kit="_vendor">/*vendor runtime*/</script>',
-      '<script type="module" data-t3vendor="sql" data-t3vendor-file="sql.mjs">const s = \'<\\/script>\';',
-      '<script type="application/octet-stream" data-t3vendor="sql" data-t3vendor-file="sql.wasm">AGFzbQ==</script>',
-      '<script data-t3vendor="sql" data-t3vendor-file="shim.js">window.shim = 1;</script>',
-      '<script data-t3vendor="sql" data-t3vendor-file="init.js">t3kit.vendor.define("sql", () => 1);</script>',
       '<script data-t3kit="_core">',
       '<script data-t3kit="develop">',
       '<script id="t3-template-options"',
@@ -201,6 +229,41 @@ describe("vendored libraries", () => {
       order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]!)),
       `${JSON.stringify(order)}\n${html}`,
     );
+    // Library code is never inlined into the page.
+    assert.notInclude(html, "window.shim = 1;");
+    assert.notInclude(html, "AGFzbQ==");
+  });
+
+  it("serves each library file and its init under the library's versioned, hashed path", () => {
+    const dir = "sql/1.2.3/0123456789abcdef/";
+    assert.deepEqual(
+      vendorLibraryFiles(sql).map((file) => [file.path, file.contentType]),
+      [
+        [`${dir}dist/sql.mjs`, "text/javascript; charset=utf-8"],
+        [`${dir}dist/sql.wasm`, "application/wasm"],
+        [`${dir}shim.js`, "text/javascript; charset=utf-8"],
+        [`${dir}init.js`, "text/javascript; charset=utf-8"],
+      ],
+    );
+    const wasm = vendorKit.vendorFile(`${dir}dist/sql.wasm`);
+    assert.deepEqual([...(wasm?.body ?? [])], [0, 0x61, 0x73, 0x6d]);
+    assert.strictEqual(wasm?.etag, '"0123456789abcdef"');
+    // Read once, then shared.
+    assert.strictEqual(vendorKit.vendorFile(`${dir}dist/sql.wasm`)?.body, wasm?.body);
+    assert.strictEqual(
+      new TextDecoder().decode(vendorKit.vendorFile(`${dir}init.js`)?.body),
+      sql.init,
+    );
+    for (const path of [
+      "sql/1.2.4/0123456789abcdef/dist/sql.wasm",
+      "sql/1.2.3/fedcba9876543210/dist/sql.wasm",
+      `${dir}sql.wasm`,
+      `${dir}dist/other.js`,
+      "nosql/1.2.3/0123456789abcdef/dist/sql.wasm",
+    ]) {
+      assert.isUndefined(vendorKit.vendorFile(path), path);
+    }
+    assert.strictEqual(WORKSPACE_VENDOR_ROUTE, "/api/workspace-vendor/");
   });
 
   it("vendors nothing into a template that names no library, or an agent's own page", () => {
@@ -210,7 +273,7 @@ describe("vendored libraries", () => {
     ]) {
       assert.deepEqual(page.vendor, []);
       const html = vendorKit.inject(page.html, page);
-      assert.notInclude(html, "data-t3vendor");
+      assert.notInclude(html, "t3kit-vendor");
       assert.notInclude(html, "vendor runtime");
     }
   });
@@ -453,8 +516,14 @@ describe("shipped templates", () => {
         const html = workspaceKit.inject(page.value.html, page.value);
         for (const name of template.kit)
           assert.include(html, `<script data-t3kit="${name}">`, where);
-        for (const name of template.vendor)
-          assert.include(html, `data-t3vendor="${name}" data-t3vendor-file="init.js"`, where);
+        const vendored = /<script type="application\/json" id="t3kit-vendor">(.*?)<\/script>/.exec(
+          html,
+        );
+        assert.deepEqual(
+          Object.keys(JSON.parse(vendored?.[1] ?? "{}")),
+          [...template.vendor],
+          where,
+        );
         const tag =
           /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
         assert.isNotNull(tag, where);

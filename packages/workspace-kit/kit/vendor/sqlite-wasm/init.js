@@ -4,8 +4,9 @@
  *   sqlite3.oo1.DB(":memory:")   a database (exec, prepare, selectValue, changes, close).
  *   sqlite3.capi                 the C API (sqlite3_deserialize, sqlite3_js_db_export, sqlite3_error_offset).
  *   sqlite3.wasm                 heap helpers (allocFromTypedArray for sqlite3_deserialize).
- * The page is a sandboxed opaque origin with no network and no storage, so:
- *   - the wasm comes from the page itself (bytes("sqlite3.wasm")) through instantiateWasm, never a URL;
+ * The page is a sandboxed opaque origin with no storage, so:
+ *   - the wasm reaches Emscripten as bytes("sqlite3.wasm") (fetched from T3's vendor route before init) through
+ *     instantiateWasm, so Emscripten never resolves a URL of its own;
  *   - the kvvfs VFS (localStorage, which throws here) and the OPFS VFSes (workers, origin storage) are disabled.
  * Example:
  *   const sqlite3 = await t3kit.vendor.load("sqlite-wasm");

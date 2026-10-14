@@ -6,6 +6,7 @@ import type {
   KitTemplateManifest,
   KitVendor,
   KitVendorFile,
+  KitVendorLoad,
 } from "./types.ts";
 
 /** A kit lookup either succeeds or says exactly what to fix. */
@@ -102,32 +103,92 @@ export const templateOptionsTag = (options: Readonly<Record<string, unknown>>) =
 const inlineScript = (attributes: string, source: string) =>
   `<script ${attributes}>${source.replace(/<\/script/gi, "<\\/script")}</script>`;
 
-const vendorFileScript = (library: string, file: KitVendorFile) => {
-  const attributes = `data-t3vendor="${library}" data-t3vendor-file="${file.name}"`;
-  switch (file.load) {
-    case "script":
-      return inlineScript(attributes, file.content);
-    case "module":
-      return inlineScript(`type="module" ${attributes}`, file.content);
-    case "bytes":
-      // Base64 holds no markup, and a script of this type never runs.
-      return `<script type="application/octet-stream" ${attributes}>${file.content}</script>`;
-  }
+/**
+ * Where T3 serves vendored library files. Pages hold it as a root-relative
+ * path and resolve it against their own URL, so the same stored page loads
+ * them from whichever origin serves it: the environment's (directly, over
+ * Tailscale or a tunnel, in every client) or the validation browser's.
+ */
+export const WORKSPACE_VENDOR_ROUTE = "/api/workspace-vendor/";
+
+/** A library's directory under the vendor route: its name, pinned version and content hash. */
+const vendorLibraryPath = (library: KitVendor) =>
+  `${library.name}/${library.version}/${library.hash}/`;
+
+/** The content type a vendored file is served with, and the type `t3kit.vendor.file` gives its Blob. */
+const vendorContentType = (load: KitVendorLoad, path: string) =>
+  load !== "bytes"
+    ? "text/javascript; charset=utf-8"
+    : path.endsWith(".wasm")
+      ? "application/wasm"
+      : "application/octet-stream";
+
+/** One file of a vendored library as the vendor route serves it. */
+interface VendorServedFile {
+  /** Its path under the vendor route. */
+  readonly path: string;
+  readonly contentType: string;
+  /** The library's hash: the bytes at a path never change, since the hash is in it. */
+  readonly etag: string;
+  readonly read: () => Uint8Array;
+}
+
+const fromBase64 = (base64: string) => {
+  const text = atob(base64);
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+  return bytes;
 };
 
-/**
- * The markup that vendors libraries into a page: the `t3kit.vendor` registry,
- * then each library's files and its init, in that order.
- */
-export function vendorScripts(runtime: string, libraries: ReadonlyArray<KitVendor>): string {
-  if (libraries.length === 0) return "";
+/** Every file the vendor route serves for a library: its package files, then the kit's init.js. */
+export function vendorLibraryFiles(library: KitVendor): ReadonlyArray<VendorServedFile> {
+  const dir = vendorLibraryPath(library);
+  const etag = `"${library.hash}"`;
+  const encoder = new TextEncoder();
   return [
-    inlineScript('data-t3kit="_vendor"', runtime),
-    ...libraries.flatMap((library) => [
-      ...library.files.map((file) => vendorFileScript(library.name, file)),
-      inlineScript(`data-t3vendor="${library.name}" data-t3vendor-file="init.js"`, library.init),
+    ...library.files.map((file: KitVendorFile) => ({
+      path: `${dir}${file.path}`,
+      contentType: vendorContentType(file.load, file.path),
+      etag,
+      read: () => (file.load === "bytes" ? fromBase64(file.content) : encoder.encode(file.content)),
+    })),
+    {
+      path: `${dir}init.js`,
+      contentType: vendorContentType("script", "init.js"),
+      etag,
+      read: () => encoder.encode(library.init),
+    },
+  ];
+}
+
+/**
+ * The markup that vendors libraries into a page: a manifest of where each
+ * library's files are (under `baseUrl`, resolved against the page's URL) and
+ * the `t3kit.vendor` registry that loads them on `load(name)`.
+ */
+export function vendorScripts(
+  runtime: string,
+  libraries: ReadonlyArray<KitVendor>,
+  baseUrl: string,
+): string {
+  if (libraries.length === 0) return "";
+  const manifest = Object.fromEntries(
+    libraries.map((library) => [
+      library.name,
+      {
+        url: `${baseUrl}${vendorLibraryPath(library)}`,
+        files: library.files.map((file) => ({
+          name: file.name,
+          path: file.path,
+          load: file.load,
+          type: vendorContentType(file.load, file.path),
+        })),
+      },
     ]),
-  ].join("");
+  );
+  // `\u003c` keeps the JSON valid and rules out a closing tag inside it.
+  const json = JSON.stringify(manifest).replace(/</g, "\\u003c");
+  return `<script type="application/json" id="t3kit-vendor">${json}</script>${inlineScript('data-t3kit="_vendor"', runtime)}`;
 }
 
 /** Lookups, docs, and page assembly over one kit (the generated one, or a fixture in tests). */
@@ -152,6 +213,22 @@ export function makeWorkspaceKit(source: KitSource) {
   if (source.vendor.length > 0 && vendorRuntime === null) {
     throw new Error("The kit vendors libraries but has no vendor runtime.");
   }
+  // Read once, on first request: the route and validation share the bytes.
+  const vendorFilesByPath = new Map(
+    source.vendor.flatMap(vendorLibraryFiles).map((file) => [file.path, file]),
+  );
+  const vendorBodies = new Map<string, Uint8Array>();
+  /** A file the vendor route serves, by its path under the route; undefined for any other path. */
+  const vendorFile = (path: string) => {
+    const file = vendorFilesByPath.get(path);
+    if (file === undefined) return undefined;
+    let body = vendorBodies.get(path);
+    if (body === undefined) {
+      body = file.read();
+      vendorBodies.set(path, body);
+    }
+    return { path, contentType: file.contentType, etag: file.etag, body };
+  };
   const primitiveNames = source.primitives.map((p) => p.name);
   const templateIds = source.templates.map((t) => t.id);
 
@@ -274,7 +351,8 @@ export function makeWorkspaceKit(source: KitSource) {
   };
 
   /**
-   * Inserts the plan's vendored libraries, its primitives (after the kit's
+   * Inserts the vendor registry for the plan's libraries (their files load
+   * from WORKSPACE_VENDOR_ROUTE on `t3kit.vendor.load`), its primitives (after the kit's
    * shared core, if any) and the template options at the start of the
    * document head, so they run before the page's own scripts. T3 then inserts
    * the workspace bridge ahead of them.
@@ -282,7 +360,7 @@ export function makeWorkspaceKit(source: KitSource) {
   const inject = (html: string, plan: WorkspacePagePlan): string => {
     const scripts = [
       ...(plan.vendor.length > 0 && vendorRuntime !== null
-        ? [vendorScripts(vendorRuntime, plan.vendor)]
+        ? [vendorScripts(vendorRuntime, plan.vendor, WORKSPACE_VENDOR_ROUTE)]
         : []),
       ...(plan.primitives.length > 0 && source.core !== null
         ? [inlineScript('data-t3kit="_core"', source.core)]
@@ -309,6 +387,7 @@ export function makeWorkspaceKit(source: KitSource) {
     docs,
     planPage,
     inject,
+    vendorFile,
   };
 }
 

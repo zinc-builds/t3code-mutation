@@ -16,9 +16,12 @@ import {
 } from "@t3tools/shared/mutationWorkspaceChrome";
 import {
   type KitDocs,
+  type KitVendor,
   type WorkspaceKit,
   type WorkspacePagePlan,
   templateOptionsTag,
+  vendorLibraryFiles,
+  WORKSPACE_VENDOR_ROUTE,
   workspaceKit,
 } from "@t3tools/workspace-kit";
 import * as Context from "effect/Context";
@@ -188,6 +191,8 @@ interface ValidationInput {
   readonly html: string;
   readonly level: WorkspaceValidationLevel;
   readonly template: boolean;
+  /** Libraries the page loads from the vendor route, which validation serves from its own origin. */
+  readonly vendor: ReadonlyArray<KitVendor>;
   readonly assetPaths: ReadonlyArray<string>;
   readonly chrome: WorkspaceChrome | undefined;
   readonly previewUrl: string | undefined;
@@ -238,7 +243,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     if (missing.length > 0) return yield* new WorkspaceAssetNotFoundError({ paths: missing });
   });
 
-  // Kit sources (vendored libraries included) go in after prepare, so they never count
+  // Kit sources (and the vendor registry) go in after prepare, so they never count
   // against the page's limits. Each injector inserts at the head start: the bridge, then
   // the kit, then the page.
   const assemble = (plan: WorkspacePagePlan) =>
@@ -320,10 +325,30 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     return { assets, resources, omitted };
   });
 
+  // Encoded for the browser's pipe once per file: a vendored file's bytes never
+  // change while the server runs, and the kit ships only a few.
+  const vendorResources = new Map<string, HeadlessChrome.ServedResource>();
+  /** The vendored files the page may load, at the route paths it resolves against its own origin. */
+  const validationVendorResources = (vendor: ReadonlyArray<KitVendor>) =>
+    vendor.flatMap(vendorLibraryFiles).map((served) => {
+      const routePath = `${WORKSPACE_VENDOR_ROUTE}${served.path}`;
+      let resource = vendorResources.get(routePath);
+      if (resource === undefined) {
+        const file = kit.vendorFile(served.path);
+        if (file === undefined) throw new Error(`The kit does not serve ${served.path}.`);
+        resource = HeadlessChrome.servedResource(file.body, file.contentType);
+        vendorResources.set(routePath, resource);
+      }
+      return [routePath, resource] as const;
+    });
+
   /** Boots the page, then at level `full` runs its export; bounded by the three budgets. */
   const observe = (input: ValidationInput) =>
     Effect.gen(function* () {
       const { assets, resources, omitted } = yield* validationAssets(input.assetPaths);
+      for (const [routePath, resource] of validationVendorResources(input.vendor)) {
+        resources.set(routePath, resource);
+      }
       const host = validationHostScript({
         assets,
         controls: input.chrome === undefined ? {} : resolveWorkspaceChromeValues(input.chrome),
@@ -443,6 +468,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
           html,
           level: input.validation ?? defaultValidationLevel(plan.value.template),
           template: plan.value.template !== undefined,
+          vendor: plan.value.vendor,
           assetPaths: input.assetPaths,
           chrome: chrome?.chrome,
           previewUrl: input.preview?.url,

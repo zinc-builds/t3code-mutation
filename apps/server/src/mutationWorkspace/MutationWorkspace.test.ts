@@ -51,7 +51,8 @@ const fixtureKit = makeWorkspaceKit({
       package: "@example/sql",
       version: "1.2.3",
       license: "MIT",
-      files: [{ name: "sql.wasm", load: "bytes", content: "AGFzbQ==" }],
+      hash: "0123456789abcdef",
+      files: [{ name: "sql.wasm", path: "dist/sql.wasm", load: "bytes", content: "AGFzbQ==" }],
       init: 't3kit.vendor.define("sql", () => 1);',
     },
   ],
@@ -293,13 +294,15 @@ it.layer(NodeServices.layer)("MutationWorkspace shipped templates", (it) => {
           const firstKit = Math.min(
             ...template.kit.map((name) => html.indexOf(`<script data-t3kit="${name}">`)),
           );
-          for (const name of template.vendor) {
-            const init = html.indexOf(`data-t3vendor="${name}" data-t3vendor-file="init.js"`);
+          if (template.vendor.length > 0) {
+            const manifest = html.indexOf('<script type="application/json" id="t3kit-vendor">');
             const registry = html.indexOf('<script data-t3kit="_vendor">');
             assert.isTrue(
-              bridge < registry && registry < init && init < firstKit,
-              `${where}: ${name} is vendored before the kit`,
+              bridge < manifest && manifest < registry && registry < firstKit,
+              `${where}: the vendor registry loads before the kit`,
             );
+            // The libraries load from the vendor route, never from the page.
+            assert.isBelow(html.length, 1024 * 1024, `${where}: no library is inlined`);
           }
           const tag =
             /<script id="t3-template-options" type="application\/json">(.*?)<\/script>/s.exec(html);
@@ -387,9 +390,8 @@ it.layer(NodeServices.layer)("MutationWorkspace template memo", (it) => {
       assert.strictEqual(second, first.replace('{"sql":"select 1"}', '{"sql":"select 2"}'));
       const order = [
         "window.t3.workspace=",
+        '<script type="application/json" id="t3kit-vendor">{"sql":{"url":"/api/workspace-vendor/sql/1.2.3/0123456789abcdef/"',
         '<script data-t3kit="_vendor">window.t3kit_vendor=1;</script>',
-        '<script type="application/octet-stream" data-t3vendor="sql" data-t3vendor-file="sql.wasm">AGFzbQ==</script>',
-        '<script data-t3vendor="sql" data-t3vendor-file="init.js">',
         '<script data-t3kit="viewer">',
         '<script id="t3-template-options"',
         "query()",
@@ -406,7 +408,7 @@ it.layer(NodeServices.layer)("MutationWorkspace template memo", (it) => {
           assetPaths: [],
         })
         .pipe(Effect.flatMap(({ reference }) => readStored(reference.attachmentId)));
-      assert.notInclude(develop, "data-t3vendor");
+      assert.notInclude(develop, "t3kit-vendor");
       assert.notInclude(develop, "t3kit_vendor");
     }).pipe(Effect.provide(layerKitWorkspace(htmlRender)));
   });
@@ -537,6 +539,41 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
       assert.include(input.html, '"name":"sales.csv","mimeType":"text/csv"');
     }).pipe(Effect.scoped, Effect.provide(layerKitWorkspace(htmlRender)));
   });
+
+  it.effect(
+    "serves a template's vendored files at the route paths its page loads them from",
+    () => {
+      const seen: Array<HtmlRender.ObservePageInput> = [];
+      const htmlRender = observing((input) =>
+        Effect.sync(() => {
+          seen.push(input);
+          return Option.some({ problems: [], omitted: 0, settled: true });
+        }),
+      );
+      return Effect.gen(function* () {
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        for (const sql of ["select 1", "select 2"]) {
+          yield* workspace.publish({
+            threadId: thread,
+            template: { id: "query", options: { sql } },
+            title: "Query",
+            assetPaths: [],
+          });
+        }
+        const dir = "/api/workspace-vendor/sql/1.2.3/0123456789abcdef/";
+        const [first, second] = seen;
+        const wasm = first!.resources.get(`${dir}dist/sql.wasm`);
+        assert.strictEqual(wasm?.contentType, "application/wasm");
+        assert.strictEqual(Buffer.from(wasm!.body).toString("latin1"), "AGFzbQ==");
+        assert.strictEqual(
+          first!.resources.get(`${dir}init.js`)?.contentType,
+          "text/javascript; charset=utf-8",
+        );
+        // Encoded for the browser once, however often the template is published.
+        assert.strictEqual(second!.resources.get(`${dir}dist/sql.wasm`), wasm);
+      }).pipe(Effect.provide(layerKitWorkspace(htmlRender)));
+    },
+  );
 
   // Windows ignores the mode, and root opens the file regardless.
   it.effect.skipIf(process.getuid === undefined || process.getuid() === 0)(

@@ -11,6 +11,7 @@
 // the npm package it names, installed in the package that owns the kit (here
 // packages/workspace-kit) and pinned there to that exact version. Anything
 // malformed fails the run; nothing is skipped.
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
@@ -23,6 +24,11 @@ const outFile = NodePath.resolve(here, "../src/generated.ts");
 // Primitives that wire other primitives together must load after them.
 const LOAD_LAST = new Set(["links"]);
 const VENDOR_LOADS = new Set(["script", "module", "bytes"]);
+// A vendored file's path in its package, served as is: plain segments only.
+const VENDOR_PATH = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/;
+// Served next to the library's files, so no vendored file may take its place.
+const VENDOR_INIT_PATH = "init.js";
+const VENDOR_HASH_LENGTH = 16;
 // An exact npm version: no range, tag or URL.
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const OPTION_TYPES = new Set(["string", "number", "integer", "boolean", "array", "object", "null"]);
@@ -93,31 +99,44 @@ function readPrimitives(kitDir) {
 }
 
 /**
- * The epilogue that hands a vendored ES module's exports to t3kit.vendor. The
- * module must be self-contained bundler output: no imports, and its exports in
- * one `export { local as name, ... }` list, which an inline module cannot
- * otherwise hand to the page's classic scripts.
+ * Checks a vendored ES module's static imports. T3 serves a library's files
+ * from one directory laid out as in the package, so a module may import
+ * another module the library vendors by a relative path, and nothing else:
+ * a bare specifier or a file it does not vendor would fail in the page.
  */
-export function vendorModuleEpilogue(source, library, file) {
-  const where = `vendor ${library}: ${file}`;
-  if (/^\s*import\s*(?:["']|[\w$*{][\w$*{}\s,]*\bfrom\s*["'])/m.test(source)) {
-    fail(`${where} imports other modules; vendor a bundled build.`);
+function checkVendorModuleImports(source, file, modulePaths, where) {
+  const specifiers = [
+    ...source.matchAll(
+      /^\s*(?:import|export)\s*(?:[\w$*{][\w$*{}\s,]*\bfrom\s*)?["']([^"']+)["']/gm,
+    ),
+  ].map((match) => match[1]);
+  for (const specifier of specifiers) {
+    const target =
+      specifier.startsWith("./") || specifier.startsWith("../")
+        ? NodePath.posix.normalize(NodePath.posix.join(NodePath.posix.dirname(file), specifier))
+        : null;
+    if (target === null || !modulePaths.has(target)) {
+      fail(
+        `${where} imports "${specifier}"; a vendored module may import only another module the library vendors, by a relative path.`,
+      );
+    }
   }
-  const lists = [...source.matchAll(/^export\s*\{([^}]*)\}\s*;?\s*$/gm)];
-  const declarations = source.match(/^export\s+(?:default|const|let|var|function|async|class)\b/m);
-  if (lists.length !== 1 || declarations !== null) {
-    fail(`${where} must end its exports in one "export { ... }" list.`);
-  }
-  const entries = lists[0][1]
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part !== "")
-    .map((part) => {
-      const match = /^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(part);
-      if (!match) fail(`${where} exports "${part}", which is not "local" or "local as name".`);
-      return `${JSON.stringify(match[2] ?? match[1])}: ${match[1]}`;
-    });
-  return `\n;t3kit.vendor.ran(${JSON.stringify(library)}, ${JSON.stringify(file)}, { ${entries.join(", ")} });\n`;
+}
+
+const sha256 = (bytes) => NodeCrypto.createHash("sha256").update(bytes).digest("hex");
+
+/**
+ * The library's content hash, in every URL T3 serves its files at: it changes
+ * with any file, the init or the version, so a cached file is never stale.
+ */
+function vendorHash(manifest, files, init) {
+  const parts = [
+    manifest.package,
+    manifest.version,
+    ...files.map((file) => `${file.path}\0${file.load}\0${sha256(file.bytes)}`),
+    sha256(init),
+  ];
+  return sha256(parts.join("\n")).slice(0, VENDOR_HASH_LENGTH);
 }
 
 /** The installed package's manifest, which must be the exact version the kit's package pins. */
@@ -178,32 +197,44 @@ export function readVendor(kitDir, packageDir) {
         fail(`${where}/vendor.json needs files: [{ path, load }].`);
       }
       const names = new Set();
-      const files = manifest.files.map((entry, index) => {
+      const read = manifest.files.map((entry, index) => {
         const at = `${where}/vendor.json files[${index}]`;
         if (typeof entry?.path !== "string" || !VENDOR_LOADS.has(entry.load)) {
           fail(`${at} must be { path, load: ${[...VENDOR_LOADS].join(" | ")} }.`);
         }
-        const path = NodePath.resolve(root, entry.path);
-        if (!path.startsWith(root + NodePath.sep) || !NodeFS.existsSync(path)) {
+        if (!VENDOR_PATH.test(entry.path) || entry.path === VENDOR_INIT_PATH) {
+          fail(
+            `${at}: path ${JSON.stringify(entry.path)} must be plain segments (letters, digits, ".", "_", "-") and not ${VENDOR_INIT_PATH}.`,
+          );
+        }
+        const file = NodePath.resolve(root, entry.path);
+        if (!file.startsWith(root + NodePath.sep) || !NodeFS.existsSync(file)) {
           fail(`${at}: ${manifest.package} has no file ${entry.path}.`);
         }
-        const fileName = NodePath.basename(path);
+        const fileName = NodePath.basename(file);
         if (names.has(fileName)) fail(`${at}: two files are named ${fileName}.`);
         names.add(fileName);
-        if (entry.load === "bytes") {
-          return {
-            name: fileName,
-            load: entry.load,
-            content: NodeFS.readFileSync(path).toString("base64"),
-          };
+        return {
+          at,
+          name: fileName,
+          path: entry.path,
+          load: entry.load,
+          bytes: NodeFS.readFileSync(file),
+        };
+      });
+      const modulePaths = new Set(
+        read.filter((file) => file.load === "module").map((file) => file.path),
+      );
+      const files = read.map((file) => {
+        if (file.load === "module") {
+          checkVendorModuleImports(file.bytes.toString("utf8"), file.path, modulePaths, file.at);
         }
-        const text = NodeFS.readFileSync(path, "utf8");
-        // Inside an inline script, "<!--" can keep the closing tag from ending it.
-        if (text.includes("<!--"))
-          fail(`${at}: ${fileName} contains "<!--", which cannot be inlined.`);
-        const content =
-          entry.load === "module" ? text + vendorModuleEpilogue(text, name, fileName) : text;
-        return { name: fileName, load: entry.load, content };
+        return {
+          name: file.name,
+          path: file.path,
+          load: file.load,
+          content: file.bytes.toString(file.load === "bytes" ? "base64" : "utf8"),
+        };
       });
       const init = NodeFS.readFileSync(initPath, "utf8");
       readDocsHeader(init, `${where}/init.js`);
@@ -215,6 +246,7 @@ export function readVendor(kitDir, packageDir) {
         package: manifest.package,
         version: manifest.version,
         license: manifest.license,
+        hash: vendorHash(manifest, read, init),
         files,
         init,
       };

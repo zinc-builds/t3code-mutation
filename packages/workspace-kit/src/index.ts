@@ -20,7 +20,9 @@ export {
   type WorkspaceKit,
   type WorkspacePagePlan,
   type WorkspacePageRequest,
+  vendorLibraryFiles,
   vendorScripts,
+  WORKSPACE_VENDOR_ROUTE,
 } from "./kit.ts";
 export { TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER, validateTemplateOptions } from "./templateOptions.ts";
 export type {
