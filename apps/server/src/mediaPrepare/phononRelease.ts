@@ -75,7 +75,7 @@ const APPLE_SILICON_LOCK = [
   "zstandard==0.25.0",
 ];
 
-// Fermion's CPU engine (Linux, Windows, Intel macOS), per its install docs.
+// Fermion's CPU engine on Linux and Windows, per its install docs.
 // Only the direct requirements are pinned here: no host of these kinds has
 // verified a full lock yet.
 const CPU_REQUIREMENTS = [
@@ -93,13 +93,23 @@ export interface PhononRelease {
   readonly requirements: ReadonlyArray<string>;
 }
 
+// fermion-research itself requires torch<2.3 and numpy<2 on Intel macOS, which
+// the pins above contradict, so there it chooses its own dependencies.
+const INTEL_MAC_REQUIREMENTS = [
+  `fermion-research==${FERMION_VERSION}`,
+  "soundfile==0.14.0",
+  "zstandard==0.25.0",
+];
+
 export const phononRelease = (
   platform: NodeJS.Platform,
   arch: NodeJS.Architecture,
 ): PhononRelease => {
-  const appleSilicon = platform === "darwin" && arch === "arm64";
-  return {
-    id: `fermion-${FERMION_VERSION}-${appleSilicon ? "mlx" : "cpu"}`,
-    requirements: appleSilicon ? APPLE_SILICON_LOCK : CPU_REQUIREMENTS,
-  };
+  if (platform === "darwin" && arch === "arm64") {
+    return { id: `fermion-${FERMION_VERSION}-mlx`, requirements: APPLE_SILICON_LOCK };
+  }
+  if (platform === "darwin") {
+    return { id: `fermion-${FERMION_VERSION}-cpu-intel-mac`, requirements: INTEL_MAC_REQUIREMENTS };
+  }
+  return { id: `fermion-${FERMION_VERSION}-cpu`, requirements: CPU_REQUIREMENTS };
 };
