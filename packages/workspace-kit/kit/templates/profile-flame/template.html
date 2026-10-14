@@ -156,6 +156,7 @@
         grid-template-columns: minmax(0, 1fr) 340px;
         min-height: 0;
       }
+      /* Until fitCanvas sizes the canvas row to the view's depth. */
       .main {
         display: grid;
         grid-template-rows: 108px minmax(200px, 1fr) 300px;
@@ -437,7 +438,7 @@
       </header>
 
       <div class="work">
-        <section class="main" aria-label="Flame canvas, density strip and top functions">
+        <section class="main" id="main" aria-label="Flame canvas, density strip and top functions">
           <div class="strip">
             <div class="strip-head">
               <span>CPU busy over time, idle excluded · drag to brush a window</span>
@@ -1190,6 +1191,24 @@
           },
         });
 
+        // ---- Layout -----------------------------------------------------------------
+        // The canvas row is as tall as the view's rows need (at least CANVAS_MIN, at most what leaves TABLE_MIN for the
+        // table), so a shallow flame graph does not float in empty space and the Top Functions table gets the rest.
+        const STRIP_H = 108;
+        const CANVAS_MIN = 160;
+        const TABLE_MIN = 300;
+        const NARROW = matchMedia("(max-width: 760px)");
+        function fitCanvas() {
+          const main = $("main");
+          if (NARROW.matches) {
+            main.style.gridTemplateRows = "";
+            return;
+          }
+          const room = main.clientHeight - STRIP_H - TABLE_MIN;
+          const h = Math.max(CANVAS_MIN, Math.min(tree.contentHeight() + 4, room));
+          main.style.gridTemplateRows = `${STRIP_H}px ${h}px minmax(0, 1fr)`;
+        }
+
         // ---- Build the page ---------------------------------------------------------
         $("title").textContent = OPTS.title;
         document.title = OPTS.title;
@@ -1217,6 +1236,8 @@
         });
         tree.on("change", noteChange);
         tree.on("select", scheduleRefresh);
+        tree.on("content", fitCanvas);
+        new ResizeObserver(fitCanvas).observe($("main"));
         // The link (created at boot) applies the brush to the tree first; this step then names it.
         density.on("filter", () => queueMicrotask(noteChange));
         grid.on("select", scheduleRefresh);
