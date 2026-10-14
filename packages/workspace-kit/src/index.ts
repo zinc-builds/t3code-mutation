@@ -20,6 +20,7 @@ export {
   type WorkspaceKit,
   type WorkspacePagePlan,
   type WorkspacePageRequest,
+  vendorScripts,
 } from "./kit.ts";
 export { TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER, validateTemplateOptions } from "./templateOptions.ts";
 export type {
@@ -27,6 +28,9 @@ export type {
   KitSource,
   KitTemplate,
   KitTemplateManifest,
+  KitVendor,
+  KitVendorFile,
+  KitVendorLoad,
   TemplateBoltOn,
   TemplateOptionSpec,
   TemplateOptionType,

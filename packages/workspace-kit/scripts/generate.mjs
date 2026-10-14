@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-// Bakes the workspace kit (primitives and templates) into src/generated.ts.
-// The server is bundled, so it cannot read these files from disk at runtime.
+// Bakes the workspace kit (primitives, templates and vendored libraries) into
+// src/generated.ts. The server is bundled, so it cannot read these files from
+// disk at runtime.
 //
 //   node packages/workspace-kit/scripts/generate.mjs   (sources: packages/workspace-kit/kit)
 //
-// <kitDir> holds primitives/<name>.js (and optionally primitives/_core.js)
-// and templates/<id>/{template.html,template.json}. Anything malformed fails
-// the run; nothing is skipped.
+// <kitDir> holds primitives/<name>.js (and optionally primitives/_core.js),
+// templates/<id>/{template.html,template.json}, and vendor/runtime.js with
+// vendor/<name>/{vendor.json,init.js}. A vendored library's files come from
+// the npm package it names, installed in the package that owns the kit (here
+// packages/workspace-kit) and pinned there to that exact version. Anything
+// malformed fails the run; nothing is skipped.
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
@@ -18,6 +22,9 @@ const outFile = NodePath.resolve(here, "../src/generated.ts");
 
 // Primitives that wire other primitives together must load after them.
 const LOAD_LAST = new Set(["links"]);
+const VENDOR_LOADS = new Set(["script", "module", "bytes"]);
+// An exact npm version: no range, tag or URL.
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const OPTION_TYPES = new Set(["string", "number", "integer", "boolean", "array", "object", "null"]);
 const NAME = /^[a-z][a-z0-9-]*$/;
 
@@ -83,6 +90,136 @@ function readPrimitives(kitDir) {
   const corePath = NodePath.join(dir, "_core.js");
   const core = NodeFS.existsSync(corePath) ? NodeFS.readFileSync(corePath, "utf8") : null;
   return { primitives, core };
+}
+
+/**
+ * The epilogue that hands a vendored ES module's exports to t3kit.vendor. The
+ * module must be self-contained bundler output: no imports, and its exports in
+ * one `export { local as name, ... }` list, which an inline module cannot
+ * otherwise hand to the page's classic scripts.
+ */
+export function vendorModuleEpilogue(source, library, file) {
+  const where = `vendor ${library}: ${file}`;
+  if (/^\s*import\s*(?:["']|[\w$*{][\w$*{}\s,]*\bfrom\s*["'])/m.test(source)) {
+    fail(`${where} imports other modules; vendor a bundled build.`);
+  }
+  const lists = [...source.matchAll(/^export\s*\{([^}]*)\}\s*;?\s*$/gm)];
+  const declarations = source.match(/^export\s+(?:default|const|let|var|function|async|class)\b/m);
+  if (lists.length !== 1 || declarations !== null) {
+    fail(`${where} must end its exports in one "export { ... }" list.`);
+  }
+  const entries = lists[0][1]
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .map((part) => {
+      const match = /^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(part);
+      if (!match) fail(`${where} exports "${part}", which is not "local" or "local as name".`);
+      return `${JSON.stringify(match[2] ?? match[1])}: ${match[1]}`;
+    });
+  return `\n;t3kit.vendor.ran(${JSON.stringify(library)}, ${JSON.stringify(file)}, { ${entries.join(", ")} });\n`;
+}
+
+/** The installed package's manifest, which must be the exact version the kit's package pins. */
+function readVendorPackage(packageDir, pkg, version, where) {
+  const owner = JSON.parse(NodeFS.readFileSync(NodePath.join(packageDir, "package.json"), "utf8"));
+  const pinned = owner.devDependencies?.[pkg];
+  if (pinned !== version) {
+    fail(
+      `${where} names ${pkg}@${version}, but ${owner.name} pins ${pkg} to ${JSON.stringify(pinned ?? null)}; add it to devDependencies at exactly ${version}.`,
+    );
+  }
+  const root = NodePath.join(packageDir, "node_modules", ...pkg.split("/"));
+  const manifestPath = NodePath.join(root, "package.json");
+  if (!NodeFS.existsSync(manifestPath)) fail(`${where}: ${pkg} is not installed; run vp i.`);
+  const installed = JSON.parse(NodeFS.readFileSync(manifestPath, "utf8")).version;
+  if (installed !== version) {
+    fail(`${where} names ${pkg}@${version}, but ${installed} is installed; run vp i.`);
+  }
+  return root;
+}
+
+/**
+ * Reads kitDir/vendor: the t3kit.vendor runtime and each library's manifest,
+ * files and init script. Packages resolve from packageDir/node_modules.
+ */
+export function readVendor(kitDir, packageDir) {
+  const dir = NodePath.join(kitDir, "vendor");
+  if (!NodeFS.existsSync(dir)) return { vendorRuntime: null, vendor: [] };
+  const runtimePath = NodePath.join(dir, "runtime.js");
+  if (!NodeFS.existsSync(runtimePath)) fail(`${dir} needs runtime.js, the t3kit.vendor registry.`);
+  const vendorRuntime = NodeFS.readFileSync(runtimePath, "utf8");
+  if (!/t3kit\.vendor\s*=/.test(vendorRuntime))
+    fail("vendor/runtime.js must register t3kit.vendor.");
+  readDocsHeader(vendorRuntime, "vendor/runtime.js");
+  const vendor = NodeFS.readdirSync(dir)
+    .filter((entry) => NodeFS.statSync(NodePath.join(dir, entry)).isDirectory())
+    .toSorted()
+    .map((name) => {
+      const where = `vendor/${name}`;
+      if (!NAME.test(name))
+        fail(`${where}: a library name is lowercase letters, digits and hyphens.`);
+      const manifestPath = NodePath.join(dir, name, "vendor.json");
+      const initPath = NodePath.join(dir, name, "init.js");
+      if (!NodeFS.existsSync(manifestPath) || !NodeFS.existsSync(initPath)) {
+        fail(`${where} needs both vendor.json and init.js.`);
+      }
+      const manifest = JSON.parse(NodeFS.readFileSync(manifestPath, "utf8"));
+      for (const key of ["package", "version", "license"]) {
+        if (typeof manifest[key] !== "string" || manifest[key].trim() === "") {
+          fail(`${where}/vendor.json needs a ${key}.`);
+        }
+      }
+      if (!EXACT_VERSION.test(manifest.version)) {
+        fail(`${where}/vendor.json version must be an exact version, not "${manifest.version}".`);
+      }
+      const root = readVendorPackage(packageDir, manifest.package, manifest.version, where);
+      if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
+        fail(`${where}/vendor.json needs files: [{ path, load }].`);
+      }
+      const names = new Set();
+      const files = manifest.files.map((entry, index) => {
+        const at = `${where}/vendor.json files[${index}]`;
+        if (typeof entry?.path !== "string" || !VENDOR_LOADS.has(entry.load)) {
+          fail(`${at} must be { path, load: ${[...VENDOR_LOADS].join(" | ")} }.`);
+        }
+        const path = NodePath.resolve(root, entry.path);
+        if (!path.startsWith(root + NodePath.sep) || !NodeFS.existsSync(path)) {
+          fail(`${at}: ${manifest.package} has no file ${entry.path}.`);
+        }
+        const fileName = NodePath.basename(path);
+        if (names.has(fileName)) fail(`${at}: two files are named ${fileName}.`);
+        names.add(fileName);
+        if (entry.load === "bytes") {
+          return {
+            name: fileName,
+            load: entry.load,
+            content: NodeFS.readFileSync(path).toString("base64"),
+          };
+        }
+        const text = NodeFS.readFileSync(path, "utf8");
+        // Inside an inline script, "<!--" can keep the closing tag from ending it.
+        if (text.includes("<!--"))
+          fail(`${at}: ${fileName} contains "<!--", which cannot be inlined.`);
+        const content =
+          entry.load === "module" ? text + vendorModuleEpilogue(text, name, fileName) : text;
+        return { name: fileName, load: entry.load, content };
+      });
+      const init = NodeFS.readFileSync(initPath, "utf8");
+      readDocsHeader(init, `${where}/init.js`);
+      if (!init.includes(`t3kit.vendor.define(${JSON.stringify(name)}`)) {
+        fail(`${where}/init.js must call t3kit.vendor.define(${JSON.stringify(name)}, init).`);
+      }
+      return {
+        name,
+        package: manifest.package,
+        version: manifest.version,
+        license: manifest.license,
+        files,
+        init,
+      };
+    });
+  return { vendorRuntime, vendor };
 }
 
 /**
@@ -159,7 +296,7 @@ function checkBoltOn(boltOn, where) {
   return boltOn;
 }
 
-function readTemplates(kitDir, primitiveNames) {
+function readTemplates(kitDir, primitiveNames, vendorNames) {
   const dir = NodePath.join(kitDir, "templates");
   if (!NodeFS.existsSync(dir)) return [];
   return NodeFS.readdirSync(dir)
@@ -183,6 +320,11 @@ function readTemplates(kitDir, primitiveNames) {
       if (!Array.isArray(kit)) fail(`${where}/template.json kit must be an array.`);
       for (const name of kit) {
         if (!primitiveNames.has(name)) fail(`${where}/template.json kit names unknown "${name}".`);
+      }
+      const vendor = manifest.vendor ?? [];
+      if (!Array.isArray(vendor)) fail(`${where}/template.json vendor must be an array.`);
+      for (const name of vendor) {
+        if (!vendorNames.has(name)) fail(`${where}/template.json vendor names unknown "${name}".`);
       }
       const options = manifest.options ?? {};
       if (options === null || typeof options !== "object" || Array.isArray(options)) {
@@ -214,6 +356,7 @@ function readTemplates(kitDir, primitiveNames) {
       return {
         ...manifest,
         kit,
+        vendor,
         options,
         examples,
         html: NodeFS.readFileSync(htmlPath, "utf8"),
@@ -221,11 +364,19 @@ function readTemplates(kitDir, primitiveNames) {
     });
 }
 
-/** Reads and checks a kit directory. */
-export function readKit(kitDir) {
+/**
+ * Reads and checks a kit directory. Vendored packages resolve from
+ * packageDir, the package that pins them (default: the kit's parent).
+ */
+export function readKit(kitDir, packageDir = NodePath.dirname(NodePath.resolve(kitDir))) {
   const { primitives, core } = readPrimitives(kitDir);
-  const templates = readTemplates(kitDir, new Set(primitives.map((p) => p.name)));
-  return { core, primitives, templates };
+  const { vendorRuntime, vendor } = readVendor(kitDir, packageDir);
+  const templates = readTemplates(
+    kitDir,
+    new Set(primitives.map((p) => p.name)),
+    new Set(vendor.map((v) => v.name)),
+  );
+  return { core, vendorRuntime, vendor, primitives, templates };
 }
 
 /** The text of src/generated.ts for a kit. */
@@ -243,14 +394,15 @@ function main() {
   const kitDir = process.argv[2]
     ? NodePath.resolve(process.argv[2])
     : NodeURL.fileURLToPath(new URL("../kit", import.meta.url));
-  const { core, primitives, templates } = readKit(kitDir);
-  NodeFS.writeFileSync(outFile, renderKitModule({ core, primitives, templates }));
+  const kit = readKit(kitDir, NodePath.resolve(here, ".."));
+  NodeFS.writeFileSync(outFile, renderKitModule(kit));
   console.log(
     JSON.stringify({
       out: outFile,
-      core: core !== null,
-      primitives: primitives.map((p) => p.name),
-      templates: templates.map((t) => t.id),
+      core: kit.core !== null,
+      vendor: kit.vendor.map((v) => `${v.package}@${v.version}`),
+      primitives: kit.primitives.map((p) => p.name),
+      templates: kit.templates.map((t) => t.id),
     }),
   );
 }

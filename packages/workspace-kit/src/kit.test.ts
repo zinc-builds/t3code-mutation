@@ -8,7 +8,7 @@ import {
   validateTemplateOptions,
   workspaceKit,
 } from "./index.ts";
-import type { KitPrimitive, KitTemplate } from "./types.ts";
+import type { KitPrimitive, KitTemplate, KitVendor } from "./types.ts";
 
 const primitive = (name: string, source = `t3kit.${name}={};`): KitPrimitive => ({
   name,
@@ -22,6 +22,7 @@ const template: KitTemplate = {
   title: "Photo Develop",
   summary: "Grade one photo.",
   kit: ["develop", "histogram"],
+  vendor: [],
   options: {
     title: { type: "string", default: "Develop" },
     look: { type: "string", enum: ["neutral", "moody"], default: "neutral" },
@@ -40,6 +41,8 @@ const template: KitTemplate = {
 
 const kit = makeWorkspaceKit({
   core: "/*core*/",
+  vendorRuntime: null,
+  vendor: [],
   primitives: [
     primitive("develop", "t3kit.develop={x:'</script>'};"),
     primitive("histogram"),
@@ -112,6 +115,8 @@ describe("kit pages", () => {
     const chrome = { inspector: [{ title: "Light", controls: [] }] };
     const withChrome = makeWorkspaceKit({
       core: null,
+      vendorRuntime: null,
+      vendor: [],
       primitives: [primitive("develop"), primitive("histogram")],
       templates: [{ ...template, chrome }],
     }).planPage({ template: { id: "photo-develop" } });
@@ -127,6 +132,8 @@ describe("kit pages", () => {
     const planWith = (chrome: boolean) => {
       const result = makeWorkspaceKit({
         core: null,
+        vendorRuntime: null,
+        vendor: [],
         primitives: [primitive("develop"), primitive("histogram")],
         templates: [{ ...template, chrome }],
       }).planPage({ template: { id: "photo-develop" } });
@@ -142,6 +149,94 @@ describe("kit pages", () => {
     assert.include(
       kit.inject(page.html, page),
       '<script id="t3-template-options" type="application/json">{}</script>',
+    );
+  });
+});
+
+describe("vendored libraries", () => {
+  const sql: KitVendor = {
+    name: "sql",
+    package: "@example/sql",
+    version: "1.2.3",
+    license: "MIT",
+    files: [
+      { name: "sql.mjs", load: "module", content: "const s = '</script>';\nt3kit.vendor.ran();" },
+      { name: "sql.wasm", load: "bytes", content: "AGFzbQ==" },
+      { name: "shim.js", load: "script", content: "window.shim = 1;" },
+    ],
+    init: 't3kit.vendor.define("sql", () => 1);',
+  };
+  const vendorKit = makeWorkspaceKit({
+    core: "/*core*/",
+    vendorRuntime: "/*vendor runtime*/",
+    vendor: [sql],
+    primitives: [primitive("develop"), primitive("histogram"), primitive("viewer")],
+    templates: [template, { ...template, id: "query", vendor: ["sql"] }],
+  });
+  const vendorPlan = (request: Parameters<typeof vendorKit.planPage>[0]) => {
+    const result = vendorKit.planPage(request);
+    if (!result.ok) throw new Error(result.error);
+    return result.value;
+  };
+
+  it("injects the registry, then each file and the init, ahead of the core and primitives", () => {
+    const page = vendorPlan({ template: { id: "query" } });
+    assert.deepEqual(
+      page.vendor.map((library) => library.name),
+      ["sql"],
+    );
+    const html = vendorKit.inject(page.html, page);
+    const order = [
+      '<script data-t3kit="_vendor">/*vendor runtime*/</script>',
+      '<script type="module" data-t3vendor="sql" data-t3vendor-file="sql.mjs">const s = \'<\\/script>\';',
+      '<script type="application/octet-stream" data-t3vendor="sql" data-t3vendor-file="sql.wasm">AGFzbQ==</script>',
+      '<script data-t3vendor="sql" data-t3vendor-file="shim.js">window.shim = 1;</script>',
+      '<script data-t3vendor="sql" data-t3vendor-file="init.js">t3kit.vendor.define("sql", () => 1);</script>',
+      '<script data-t3kit="_core">',
+      '<script data-t3kit="develop">',
+      '<script id="t3-template-options"',
+      "<script>app()",
+    ].map((markup) => html.indexOf(markup));
+    assert.isTrue(
+      order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]!)),
+      `${JSON.stringify(order)}\n${html}`,
+    );
+  });
+
+  it("vendors nothing into a template that names no library, or an agent's own page", () => {
+    for (const page of [
+      vendorPlan({ template: { id: "photo-develop" } }),
+      vendorPlan({ html: "<p></p>", kit: ["viewer"] }),
+    ]) {
+      assert.deepEqual(page.vendor, []);
+      const html = vendorKit.inject(page.html, page);
+      assert.notInclude(html, "data-t3vendor");
+      assert.notInclude(html, "vendor runtime");
+    }
+  });
+
+  it("refuses a kit whose template names a missing library, or that lacks the registry", () => {
+    assert.throws(
+      () =>
+        makeWorkspaceKit({
+          core: null,
+          vendorRuntime: "/*vendor runtime*/",
+          vendor: [],
+          primitives: [primitive("develop"), primitive("histogram")],
+          templates: [{ ...template, vendor: ["sql"] }],
+        }),
+      'Template "photo-develop" vendors "sql", which the kit lacks.',
+    );
+    assert.throws(
+      () =>
+        makeWorkspaceKit({
+          core: null,
+          vendorRuntime: null,
+          vendor: [sql],
+          primitives: [],
+          templates: [],
+        }),
+      "no vendor runtime",
     );
   });
 });
