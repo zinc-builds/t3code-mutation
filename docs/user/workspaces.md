@@ -12,6 +12,12 @@ The composer stays available while a workspace is open. Each message you send ca
 
 **Export** adds the result to the composer, ready to send, and saves a copy to your machine. Video and audio editors export an edit list and an ffmpeg command rather than a rendered file: send them to the agent and ask it to render, which needs ffmpeg on the machine running T3 Code.
 
+## Editing by What Is Said
+
+To cut footage by its content ("make a 2–3 minute edit of the most insightful things said in this folder"), point the agent at the files or their folder. It first transcribes them on the machine running T3 Code, with a timestamp for every word, then reads the transcripts and builds the editor from them. Your media is used where it lives and is never copied; the only new files are the transcripts, kept in T3 Code's own cache, so asking again later is instant.
+
+Transcription is English only. The first time, T3 Code installs its speech engine (Phonon-2 by Fermion Research) into its home directory and downloads the model (about 160 MB), which takes a minute or two and needs Python 3.12 or newer and ffmpeg on that machine. If either is missing, the agent tells you what to install; set `T3CODE_PYTHON` to use a particular Python. Long batches keep transcribing in the background, and the agent collects the results when they finish.
+
 ## Reviewing a Web Page
 
 Ask for a review workspace on a page, usually your dev server: "open localhost:5173 so I can mark up the design". The workspace shows the live page, refreshes when it changes (a hot reload), and lets you pin notes to elements, so the agent gets exact selectors and styles instead of a screenshot to interpret. T3 Code loads the page in its own headless browser on the machine running it, signed out, and only opens addresses the agent named or that the thread's preview shows. Not available on mobile yet.

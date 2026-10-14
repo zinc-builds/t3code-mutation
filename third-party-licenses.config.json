@@ -162,6 +162,36 @@
       ]
     },
     {
+      "bundles": ["server"],
+      "license": "Apache-2.0",
+      "name": "fermion-research",
+      "sourceUrl": "https://github.com/fermionresearch/phonon",
+      "version": "0.2.11",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0",
+          "preamble": [
+            "On first use of media transcription, T3 installs the fermion-research package from PyPI into a Python environment under its home directory and runs it to transcribe speech. fermion-research is licensed under the Apache License, Version 2.0."
+          ],
+          "copyrights": ["Copyright 2026 Fermion Research"]
+        }
+      ]
+    },
+    {
+      "bundles": ["server"],
+      "license": "CC-BY-4.0",
+      "name": "Phonon-2 by Fermion Research",
+      "sourceUrl": "https://huggingface.co/FermionResearch/Phonon-2",
+      "generatedNotices": [
+        {
+          "licenseId": "CC-BY-4.0",
+          "preamble": [
+            "Media transcription downloads and runs the Phonon-2 speech model (https://huggingface.co/FermionResearch/Phonon-2), Copyright 2026 Fermion Research, licensed under the Creative Commons Attribution 4.0 International licence (CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/). T3 does not modify the model.\n\nPhonon-2 is derived from NVIDIA's Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), (c) NVIDIA Corporation, licensed under CC-BY-4.0. Fermion Research re-trained and quantised the encoder's linear weights to a five-value alphabet and quantised the remaining parameters to 6-bit integer tables; the encoder architecture, TDT decoder, tokenizer and feature-extractor configuration derive from that model."
+          ]
+        }
+      ]
+    },
+    {
       "bundles": ["mobile"],
       "license": "MIT",
       "name": "react-native-uitextview",

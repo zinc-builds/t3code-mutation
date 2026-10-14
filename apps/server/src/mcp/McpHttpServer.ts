@@ -60,6 +60,9 @@ import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
 import * as WorkspaceHandlers from "./toolkits/workspace/handlers.ts";
 import { WorkspaceToolkit } from "./toolkits/workspace/tools.ts";
+import * as MediaHandlers from "./toolkits/media/handlers.ts";
+import { MediaToolkit } from "./toolkits/media/tools.ts";
+import * as MediaPrepare from "../mediaPrepare/MediaPrepare.ts";
 import * as MutationWorkspace from "../mutationWorkspace/MutationWorkspace.ts";
 import * as WorkspaceState from "../mutationWorkspace/WorkspaceState.ts";
 
@@ -806,6 +809,10 @@ export const layerWorkspaceToolkit = toolkitRegistration(
   Layer.provide(HtmlRender.layer),
 );
 
+const layerMediaToolkit = toolkitRegistration(MediaToolkit, MediaHandlers.layer).pipe(
+  Layer.provide(MediaPrepare.layer),
+);
+
 const layerPreviewStandardToolkitRegistration = toolkitRegistration(
   PreviewStandardToolkit,
   PreviewHandlers.layerStandard,
@@ -891,4 +898,5 @@ export const layer = Layer.mergeAll(
   layerDeviceToolkit,
   layerHtmlToolkit,
   layerWorkspaceToolkit,
+  layerMediaToolkit,
 ).pipe(Layer.provideMerge(layerMcpTransport));

@@ -68,7 +68,8 @@ export type T3McpToolSummaryAction =
   | "workspace-mutate"
   | "workspace-restore"
   | "workspace-state"
-  | "workspace-kit-docs";
+  | "workspace-kit-docs"
+  | "media-prepare";
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
@@ -340,6 +341,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   workspace_restore: tool(["Return", "Returning", "Returned", "to chat"], "workspace-restore"),
   workspace_state: tool(["Read", "Reading", "Read", "workspace controls"], "workspace-state"),
   workspace_kit_docs: tool(["Read", "Reading", "Read", "workspace kit docs"], "workspace-kit-docs"),
+  media_prepare: tool(["Prepare", "Preparing", "Prepared", "media"], "media-prepare"),
 };
 
 /**
