@@ -21,6 +21,7 @@ import { TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER } from "@t3tools/workspace-kit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import { MAX_SERVED_FILE_FULL_BYTES } from "../htmlRender/headlessChrome.ts";
 import type { PageObservation } from "../htmlRender/HtmlRender.ts";
 import type { FfmpegCommandCheck } from "./FfmpegDryRun.ts";
 
@@ -81,6 +82,11 @@ export interface WorkspaceValidation {
   readonly skipped?: string;
   /** Asset paths too large to load in validation; the page booted without them. */
   readonly omittedAssets?: ReadonlyArray<string>;
+  /**
+   * What this validation could not check, and why, such as media its browser cannot decode
+   * ("playback not validated: hevc …"). These are limits of the check, not errors in the page.
+   */
+  readonly notValidated?: ReadonlyArray<string>;
   /** With level `full`, once the page booted. */
   readonly export?: WorkspaceExportCheck;
 }
@@ -97,15 +103,32 @@ export function defaultValidationLevel(
   return typeof script === "string" && script.trim() !== "" ? "full" : "boot";
 }
 
-/** An asset the stand-in hands the page, fetched from the validation page's own origin. */
+/**
+ * An asset the stand-in hands the page from the validation page's own origin:
+ * as a File it fetches first, or, when `streamed` (`workspaceAssetStreams`),
+ * as the URL and size, as clients hand video and audio.
+ */
 export interface ValidationAsset {
   readonly name: string;
   readonly mimeType: string;
   readonly path: string;
   readonly url: string;
+  readonly size: number;
+  readonly streamed: boolean;
 }
 
 export const validationAssetUrl = (index: number) => `/t3-validation/asset/${index}`;
+/** A short clip (VP8 picture, Opus sound) every validation browser plays; see `validationStandInMedia.ts`. */
+export const VALIDATION_STAND_IN_MEDIA_URL = "/t3-validation/stand-in.webm";
+/**
+ * Starts the message of a failure that comes from validation's own limits, not
+ * the page: such a console error or exception is reported in `notValidated`.
+ */
+export const VALIDATION_LIMIT_MARKER = "[t3 validation limit]";
+/** How long the stand-in waits for a streamed asset's first frame before it counts as unplayable. */
+const PLAYBACK_PROBE_MS = 1_500;
+/** Streamed assets probed at once, so many 4K clips do not decode together. */
+const PLAYBACK_PROBE_CONCURRENCY = 4;
 
 /** How long after load, or after `initialize` is answered, a quiet page counts as booted. */
 const QUIET_MS = 1_000;
@@ -131,8 +154,12 @@ export const VALIDATION_SANDBOX = `sandbox ${WORKSPACE_FRAME_SANDBOX}`;
  * first, takes over `postMessage` and answers the bridge the way the client
  * would: `initialize` with the assets (or a placeholder photo when there are
  * none, standing in for the thread's attached images) and the chrome's
- * control values; `setChrome` fails without chrome, as in the client, and is
- * otherwise recorded for T3 to check; files the page attaches or downloads
+ * control values. Video and audio arrive as a range-served URL and size, as
+ * clients hand them; one this browser cannot play (no HEVC decoder, say) is
+ * swapped for a stand-in clip and reported as not validated, never as a page
+ * error, and so is a whole-file read of media too large to load here.
+ * `setChrome` fails without chrome, as in the client, and is otherwise
+ * recorded for T3 to check; files the page attaches or downloads
  * are kept for the export report (an export may return those Files, or
  * describe them as `{ name, type, size }`, which must match one the page
  * delivered); every other request succeeds;
@@ -152,6 +179,12 @@ export function validationHostScript(input: {
 }): string {
   const config = JSON.stringify({
     assets: input.assets,
+    standIn: VALIDATION_STAND_IN_MEDIA_URL,
+    marker: VALIDATION_LIMIT_MARKER,
+    maxFullBytes: MAX_SERVED_FILE_FULL_BYTES,
+    probeMs: PLAYBACK_PROBE_MS,
+    probeConcurrency: PLAYBACK_PROBE_CONCURRENCY,
+    assetUrl: WORKSPACE_BRIDGE_METHODS.assetUrl,
     previewUrl: input.previewUrl ?? "http://localhost/",
     previewOpen: WORKSPACE_BRIDGE_METHODS.previewOpen,
     preview: WORKSPACE_BRIDGE_METHODS.preview,
@@ -176,14 +209,14 @@ function quiet(){if(!C.template||published||window.t3template)return settle();ti
 function wait(){if(!window.t3template){timer=setTimeout(wait,50);return;}published=true;arm();}
 function arm(){clearTimeout(timer);timer=setTimeout(quiet,C.quietMs);}
 window.addEventListener("load",arm);
-var V=window.__t3WorkspaceValidation={settled:settled,chromePatches:[],files:[]};
+var V=window.__t3WorkspaceValidation={settled:settled,chromePatches:[],files:[],unplayable:[],notLoaded:[]};
 function message(e){return String(e&&e.message||e);}
 function b64(buffer){var b=new Uint8Array(buffer),s="";for(var i=0;i<b.length;i+=32768)s+=String.fromCharCode.apply(null,b.subarray(i,i+32768));return btoa(s);}
 function describe(f,cmds,budget){var d={name:f.name||"export",type:f.type,size:f.size},steps=[];
 if(/^image\\//.test(f.type)&&f.type!=="image/svg+xml")steps.push(createImageBitmap(f).then(function(b){d.width=b.width;d.height=b.height;b.close();},function(e){d.decodeError=message(e);}));
 if(budget.left>=f.size&&cmds.some(function(c){return c.indexOf(d.name)!==-1;})){budget.left-=f.size;steps.push(f.arrayBuffer().then(function(a){d.base64=b64(a);}));}
 return Promise.all(steps).then(function(){return d;});}
-V.report=function(o){var out={chromePatches:V.chromePatches};
+V.report=function(o){var out={chromePatches:V.chromePatches,unplayable:V.unplayable,notLoaded:V.notLoaded};
 if(!o.export)return Promise.resolve(out);
 var t=window.t3template;if(!t||typeof t.export!=="function"){out.export={available:false};return Promise.resolve(out);}
 V.files=[];
@@ -209,8 +242,26 @@ case "inspect":return Promise.resolve({element:null});
 case "scroll":return Promise.resolve({scrollY:Math.max(0,Number(a.y)||0)});
 case "setViewport":viewport={width:a.viewport.width,height:a.viewport.height};return Promise.resolve({viewport:viewport});
 default:return Promise.resolve({});}}
+var realFetch=window.fetch.bind(window);
+function assetAt(u){var p;try{p=new URL(u,location.href).pathname;}catch(e){return null;}return C.assets.filter(function(a){return a.url===p;})[0]||null;}
+function ranged(input,init){try{return!!(init&&init.headers&&new Headers(init.headers).has("range"))||(input instanceof Request&&input.headers.has("range"));}catch(e){return false;}}
+window.fetch=function(input,init){var a=assetAt(typeof input==="string"?input:input instanceof Request?input.url:String(input));
+if(a&&a.streamed&&a.size>C.maxFullBytes&&!ranged(input,init)){if(V.notLoaded.indexOf(a.path)===-1)V.notLoaded.push(a.path);
+return Promise.reject(new Error(C.marker+" "+a.name+" is "+Math.round(a.size/1048576)+" MB, more than validation reads into a page at once, so code that loads its bytes was not checked."));}
+return realFetch(input,init);};
+function probe(a){return new Promise(function(r){var el=document.createElement(/^audio\\//i.test(a.mimeType)?"audio":"video"),done=false,t;
+function end(err){if(done)return;done=true;clearTimeout(t);el.removeAttribute("src");el.load();r(err);}
+el.muted=true;el.preload="auto";el.crossOrigin="anonymous";
+el.addEventListener("loadeddata",function(){end(el.tagName==="VIDEO"&&!el.videoWidth?"it decoded no picture":null);});
+el.addEventListener("error",function(){end("media error "+(el.error?el.error.code+(el.error.message?" ("+el.error.message+")":""):"?"));});
+t=setTimeout(function(){end("no frame within "+C.probeMs+" ms");},C.probeMs);el.src=a.url;});}
+var free=C.probeConcurrency,queued=[];
+function gated(run){return new Promise(function(r){function go(){free--;run().then(function(v){free++;if(queued.length)queued.shift()();r(v);});}if(free>0)go();else queued.push(go);});}
+function streamed(a){return gated(function(){return probe(a);}).then(function(err){
+if(err)V.unplayable.push({path:a.path,name:a.name,mimeType:a.mimeType,error:err});
+return{name:a.name,mimeType:a.mimeType,source:"file",path:a.path,url:err?C.standIn:a.url,size:a.size};});}
 function assets(){if(C.assets.length===0)return placeholder().then(function(a){return[a];});
-return Promise.all(C.assets.map(function(a){return fetch(a.url).then(function(r){if(!r.ok)throw new Error(a.name+" could not be loaded.");return r.blob();}).then(function(b){return{name:a.name,mimeType:a.mimeType,source:"file",path:a.path,file:new File([b],a.name,{type:a.mimeType})};});}));}
+return Promise.all(C.assets.map(function(a){if(a.streamed)return streamed(a);return fetch(a.url).then(function(r){if(!r.ok)throw new Error(a.name+" could not be loaded.");return r.blob();}).then(function(b){return{name:a.name,mimeType:a.mimeType,source:"file",path:a.path,file:new File([b],a.name,{type:a.mimeType})};});}));}
 window.postMessage=function(m,o,t){
 if(!m||m.jsonrpc!=="2.0"||typeof m.method!=="string"||m.method.indexOf("t3/workspace/")!==0)return post(m,o,t);
 if(m.id==null)return;
@@ -257,6 +308,17 @@ const ExportFileReport = Schema.Struct({
 
 /** What `validationReportExpression` resolves to. */
 export const PageReport = Schema.Struct({
+  /** Streamed assets the validation browser could not play; the page got the stand-in clip. */
+  unplayable: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      name: Schema.String,
+      mimeType: Schema.String,
+      error: Schema.String,
+    }),
+  ),
+  /** Streamed assets whose whole bytes the page asked for (`assetFile`), past what validation reads. */
+  notLoaded: Schema.Array(Schema.String),
   chromePatches: Schema.Array(
     Schema.Union([
       Schema.Struct({ patch: Schema.Unknown }),
@@ -340,6 +402,8 @@ export interface ValidationObservation {
   /** The workspace's chrome, which the page's `setChrome` patches apply to. */
   readonly chrome?: WorkspaceChrome | undefined;
   readonly omittedAssets?: ReadonlyArray<string>;
+  /** The codec of each unplayable asset (`PageReport.unplayable`), by path, as ffprobe names it. */
+  readonly codecs?: ReadonlyMap<string, string> | undefined;
   /** For messages: how long the page had to boot, and the export to run. */
   readonly pageBudget: string;
   readonly exportBudget: string;
@@ -419,9 +483,13 @@ export function shapeValidation(input: ValidationObservation): WorkspaceValidati
   }
   const observation = input.observation.value;
   const exportStart = observation.probe?.problemsBefore ?? observation.problems.length;
-  const all: Array<WorkspaceValidationError> = observation.problems.map((problem, index) =>
-    toError(problem, input.level === "full" && index >= exportStart),
+  const all: Array<WorkspaceValidationError> = observation.problems.flatMap((problem, index) =>
+    problem.text.includes(VALIDATION_LIMIT_MARKER)
+      ? []
+      : [toError(problem, input.level === "full" && index >= exportStart)],
   );
+  const notValidated = notValidatedNotes(input);
+  const limitNote = notValidated.length === 0 ? {} : { notValidated };
   const exported = input.level === "full" ? exportCheck(input, observation, all) : undefined;
   if (input.chrome !== undefined && input.report !== undefined) {
     all.push(...chromePatchErrors(input.chrome, input.report.chromePatches));
@@ -441,8 +509,29 @@ export function shapeValidation(input: ValidationObservation): WorkspaceValidati
     errors: errors.slice(0, MAX_LISTED_ERRORS),
     ...(moreErrors === 0 ? {} : { moreErrors }),
     ...assetNote,
+    ...limitNote,
     ...(exported === undefined ? {} : { export: exported }),
   };
+}
+
+/**
+ * What the stand-in reported it could not check: media the validation browser
+ * cannot play (often HEVC, which T3's headless browser has no decoder for),
+ * and whole-file reads of media past what validation loads.
+ */
+function notValidatedNotes(input: ValidationObservation): ReadonlyArray<string> {
+  const report = input.report;
+  if (report === undefined) return [];
+  return [
+    ...report.unplayable.map(
+      (asset) =>
+        `playback not validated: ${input.codecs?.get(asset.path) ?? `unknown ${asset.mimeType.split("/", 1)[0]} codec`} (${asset.name}). The validation browser cannot play it (${asset.error}), so the page booted with a short stand-in clip in its place; clients play the original from its path.`,
+    ),
+    ...report.notLoaded.map(
+      (assetPath) =>
+        `bytes not validated: the page asked for all of ${assetPath} (assetFile or fetch), which is more than validation reads into a page at once.`,
+    ),
+  ];
 }
 
 /** A validation that could not run, and why. */

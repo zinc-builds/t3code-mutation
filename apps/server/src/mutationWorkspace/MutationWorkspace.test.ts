@@ -3,6 +3,7 @@ import { ThreadId } from "@t3tools/contracts";
 import { makeWorkspaceKit, workspaceKit } from "@t3tools/workspace-kit";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as ByteSize from "effect/ByteSize";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -31,8 +32,11 @@ const htmlRenderWith = (overrides: Partial<HtmlRender.HtmlRender["Service"]> = {
 const htmlRenderStub = htmlRenderWith();
 
 // No export in these tests reaches ffmpeg unless one gives a dry run.
-const ffmpegWith = (dryRun: FfmpegDryRun.FfmpegDryRun["Service"]["dryRun"]) =>
-  Layer.succeed(FfmpegDryRun.FfmpegDryRun, FfmpegDryRun.FfmpegDryRun.of({ dryRun }));
+const ffmpegWith = (
+  dryRun: FfmpegDryRun.FfmpegDryRun["Service"]["dryRun"],
+  codecs: FfmpegDryRun.FfmpegDryRun["Service"]["codecs"] = () =>
+    Effect.die("This test probes no codecs."),
+) => Layer.succeed(FfmpegDryRun.FfmpegDryRun, FfmpegDryRun.FfmpegDryRun.of({ dryRun, codecs }));
 const ffmpegUnused = ffmpegWith(() => Effect.die("This test runs no ffmpeg."));
 
 const fixtureBoltOn = {
@@ -499,8 +503,10 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
         assert.include(input.html, '"controls":{"exposure":-4}');
         const asset = input.resources.get("/t3-validation/asset/0");
         assert.strictEqual(asset?.contentType, "image/jpeg");
+        if (asset === undefined || !("body" in asset))
+          throw new Error("Expected the photo's bytes");
         assert.strictEqual(
-          Buffer.from(Buffer.from(asset!.body).toString("latin1"), "base64").toString(),
+          Buffer.from(Buffer.from(asset.body).toString("latin1"), "base64").toString(),
           "jpeg bytes",
         );
       }).pipe(Effect.scoped, Effect.provide(layerKitWorkspace(htmlRender)));
@@ -541,6 +547,137 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
   });
 
   it.effect(
+    "hands video and audio to the stand-in as range-served files, whatever their size",
+    () => {
+      const seen: Array<HtmlRender.ObservePageInput> = [];
+      const htmlRender = observing((input) =>
+        Effect.sync(() => {
+          seen.push(input);
+          return Option.some({ problems: [], omitted: 0, settled: true });
+        }),
+      );
+      return Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+        // Past the 32 MB a File may take in validation; sparse, so the test writes almost nothing.
+        const clip = path.join(directory, "IMG_0151.MOV");
+        const handle = yield* fileSystem.open(clip, { flag: "w+" });
+        yield* handle.seek(ByteSize.bytes(20 * 1024 * 1024), "start");
+        yield* handle.write(new TextEncoder().encode("moov"));
+        yield* handle.seek(ByteSize.bytes(40 * 1024 * 1024 - 1), "start");
+        yield* handle.write(new Uint8Array(1));
+        const song = path.join(directory, "take.wav");
+        yield* fileSystem.writeFileString(song, "RIFF");
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        const { validation } = yield* workspace.publish({
+          threadId: thread,
+          html: "<html><head></head><body></body></html>",
+          title: "Cut",
+          assetPaths: [clip, song],
+        });
+        assert.isUndefined(validation.omittedAssets);
+        const input = seen[0]!;
+        assert.include(
+          input.html,
+          `"mimeType":"video/quicktime","path":${JSON.stringify(clip)},"url":"/t3-validation/asset/0","size":41943040,"streamed":true`,
+        );
+        assert.include(input.html, '"mimeType":"audio/wav"');
+        const served = input.resources.get("/t3-validation/asset/0");
+        if (served === undefined || !("read" in served))
+          throw new Error("Expected a file resource");
+        assert.strictEqual(served.size, 40 * 1024 * 1024);
+        const bytes = yield* served.read(20 * 1024 * 1024, 4);
+        assert.strictEqual(new TextDecoder().decode(bytes), "moov");
+        // The stand-in clip is there for media this browser cannot play.
+        assert.strictEqual(
+          input.resources.get("/t3-validation/stand-in.webm")?.contentType,
+          "video/webm",
+        );
+      }).pipe(Effect.scoped, Effect.provide(layerKitWorkspace(htmlRender)));
+    },
+  );
+
+  it.effect(
+    "reports media the validation browser cannot play, by codec, and never as page errors",
+    () => {
+      const probed: Array<ReadonlyArray<string>> = [];
+      // Reports what the stand-in would for the clip it was handed: unplayable, and read whole.
+      const htmlRender = observing((input) => {
+        const clip = /"path":("[^"]*IMG_0151\.MOV")/.exec(input.html)![1]!;
+        const path = JSON.parse(clip) as string;
+        return Effect.succeed(
+          Option.some({
+            problems: [
+              {
+                source: "console" as const,
+                text: "Waveform failed: [t3 validation limit] IMG_0151.MOV is 40 MB, more than validation reads into a page at once.",
+              },
+              { source: "console" as const, text: "real bug" },
+            ],
+            omitted: 0,
+            settled: true,
+            probe: {
+              problemsBefore: 2,
+              value: Option.some({
+                chromePatches: [],
+                unplayable: [
+                  {
+                    path,
+                    name: "IMG_0151.MOV",
+                    mimeType: "video/quicktime",
+                    error: "media error 4",
+                  },
+                ],
+                notLoaded: [path],
+              }),
+            },
+          }),
+        );
+      });
+      return Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+        const clip = path.join(directory, "IMG_0151.MOV");
+        yield* fileSystem.writeFileString(clip, "hevc");
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        const { validation } = yield* workspace.publish({
+          threadId: thread,
+          html: "<html><head></head><body></body></html>",
+          title: "Cut",
+          assetPaths: [clip],
+        });
+        assert.deepEqual(probed, [[clip]]);
+        assert.deepEqual(validation, {
+          level: "boot",
+          ok: false,
+          errors: [{ source: "console", message: "real bug" }],
+          notValidated: [
+            "playback not validated: hevc (IMG_0151.MOV). The validation browser cannot play it (media error 4), so the page booted with a short stand-in clip in its place; clients play the original from its path.",
+            `bytes not validated: the page asked for all of ${clip} (assetFile or fetch), which is more than validation reads into a page at once.`,
+          ],
+        });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          layerKitWorkspace(
+            htmlRender,
+            ffmpegWith(
+              () => Effect.die("This test runs no ffmpeg."),
+              (paths) =>
+                Effect.sync(() => {
+                  probed.push(paths);
+                  return new Map(paths.map((assetPath) => [assetPath, "hevc"]));
+                }),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect(
     "serves a template's vendored files at the route paths its page loads them from",
     () => {
       const seen: Array<HtmlRender.ObservePageInput> = [];
@@ -564,7 +701,8 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
         const [first, second] = seen;
         const wasm = first!.resources.get(`${dir}dist/sql.wasm`);
         assert.strictEqual(wasm?.contentType, "application/wasm");
-        assert.strictEqual(Buffer.from(wasm!.body).toString("latin1"), "AGFzbQ==");
+        if (wasm === undefined || !("body" in wasm)) throw new Error("Expected the wasm bytes");
+        assert.strictEqual(Buffer.from(wasm.body).toString("latin1"), "AGFzbQ==");
         assert.strictEqual(
           first!.resources.get(`${dir}init.js`)?.contentType,
           "text/javascript; charset=utf-8",
@@ -675,7 +813,11 @@ const reporting = (
         problems: [],
         omitted: 0,
         settled: true,
-        probe: { problemsBefore: 0, value: Option.some(report) },
+        // Most tests care about other parts; the stand-in always reports both lists.
+        probe: {
+          problemsBefore: 0,
+          value: Option.some({ unplayable: [], notLoaded: [], ...(report as object) }),
+        },
         ...extra,
       });
     }),
@@ -864,6 +1006,8 @@ it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
   it.effect("reports a failed export, what it logged, its bad files and return shape", () => {
     const report = {
       chromePatches: [],
+      unplayable: [],
+      notLoaded: [],
       export: {
         available: true,
         ok: false,

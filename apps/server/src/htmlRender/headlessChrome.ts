@@ -40,18 +40,68 @@ export interface PageProblem {
   readonly text: string;
 }
 
-/** A file the page may fetch from its own origin, as `servedResource` encodes it. */
-export interface ServedResource {
+/** Bytes the page may fetch from its own origin, as `servedResource` encodes them. */
+export interface ServedBytes {
   readonly contentType: string;
   /** The body as base64 bytes, ready for the pipe. */
   readonly body: Uint8Array;
 }
 
+/**
+ * A file the page may fetch from its own origin, read from disk per request
+ * with byte ranges, as the asset route serves media: a `<video>` reads only
+ * what it plays, so a multi-gigabyte clip never crosses the pipe whole.
+ */
+export interface ServedFile {
+  readonly contentType: string;
+  readonly size: number;
+  readonly read: (offset: number, length: number) => Effect.Effect<Uint8Array, ServedFileReadError>;
+}
+
+/** A served file could not be read for a request; the page sees that load fail. */
+export class ServedFileReadError extends Schema.TaggedError<ServedFileReadError>()(
+  "ServedFileReadError",
+  { path: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `${this.path} could not be read for the page.`;
+  }
+}
+
+export type ServedResource = ServedBytes | ServedFile;
+
 /** Serves `bytes` at a path of the page's own origin. */
-export const servedResource = (bytes: Uint8Array, contentType: string): ServedResource => ({
+export const servedResource = (bytes: Uint8Array, contentType: string): ServedBytes => ({
   contentType,
   body: Buffer.from(Buffer.from(bytes).toString("base64"), "latin1"),
 });
+
+/** The most of a served file one response carries; a media element asks again for the rest. */
+const MAX_SERVED_RANGE_BYTES = 4 * 1024 * 1024;
+/** The largest served file a request without a range gets whole; larger ones answer 413. */
+export const MAX_SERVED_FILE_FULL_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The bytes one request for a served file gets: a single `bytes=` range
+ * (clipped to `MAX_SERVED_RANGE_BYTES`), the whole file without one, or null
+ * when the range cannot be satisfied or the whole file is too large.
+ */
+export function servedFileSpan(
+  rangeHeader: string | undefined,
+  size: number,
+): { readonly offset: number; readonly length: number; readonly partial: boolean } | null {
+  if (rangeHeader === undefined) {
+    return size <= MAX_SERVED_FILE_FULL_BYTES ? { offset: 0, length: size, partial: false } : null;
+  }
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+  if (!match || (!match[1] && !match[2])) return null;
+  const first = match[1] ? Number(match[1]) : null;
+  const last = match[2] ? Number(match[2]) : null;
+  const offset = first ?? Math.max(0, size - last!);
+  const end = Math.min(size - 1, first === null || last === null ? size - 1 : last);
+  if (offset >= size || end < offset) return null;
+  return { offset, length: Math.min(end - offset + 1, MAX_SERVED_RANGE_BYTES), partial: true };
+}
 
 const MAX_CONSOLE_MESSAGES = 20;
 const MAX_PAGE_PROBLEMS = 20;
@@ -115,7 +165,10 @@ const decodeExceptionThrown = Schema.decodeUnknownOption(
 const decodeRequestPaused = Schema.decodeUnknownOption(
   Schema.Struct({
     requestId: Schema.String,
-    request: Schema.Struct({ url: Schema.String }),
+    request: Schema.Struct({
+      url: Schema.String,
+      headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    }),
     frameId: Schema.optional(Schema.String),
     resourceType: Schema.optional(Schema.String),
   }),
@@ -355,10 +408,11 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
     requestId: string,
     body: Uint8Array,
     headers: ReadonlyArray<{ readonly name: string; readonly value: string }>,
+    status = 200,
   ) =>
     Queue.offerAll(outgoing, [
       textEncoder.encode(
-        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":200,"responseHeaders":${JSON.stringify(headers)},"body":"`,
+        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":${status},"responseHeaders":${JSON.stringify(headers)},"body":"`,
       ),
       body,
       textEncoder.encode('"}}\0'),
@@ -402,13 +456,73 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       const resource = url.startsWith(`${PAGE_ORIGIN}/`)
         ? page.resources.get(url.slice(PAGE_ORIGIN.length))
         : undefined;
-      if (resource !== undefined) {
+      const crossOrigin =
+        page.sandbox === undefined ? [] : [{ name: "Access-Control-Allow-Origin", value: "*" }];
+      if (resource !== undefined && "body" in resource) {
         return fulfill(sessionId, paused.requestId, resource.body, [
           { name: "Content-Type", value: resource.contentType },
-          ...(page.sandbox === undefined
-            ? []
-            : [{ name: "Access-Control-Allow-Origin", value: "*" }]),
+          ...crossOrigin,
         ]);
+      }
+      if (resource !== undefined) {
+        const headers = paused.request.headers ?? {};
+        const rangeHeader = Object.entries(headers).find(
+          ([name]) => name.toLowerCase() === "range",
+        )?.[1];
+        const span = servedFileSpan(rangeHeader, resource.size);
+        if (span === null) {
+          return fulfill(
+            sessionId,
+            paused.requestId,
+            new Uint8Array(),
+            [
+              ...crossOrigin,
+              ...(rangeHeader === undefined
+                ? []
+                : [{ name: "Content-Range", value: `bytes */${resource.size}` }]),
+            ],
+            rangeHeader === undefined ? 413 : 416,
+          );
+        }
+        return resource.read(span.offset, span.length).pipe(
+          Effect.flatMap((bytes) =>
+            fulfill(
+              sessionId,
+              paused.requestId,
+              Buffer.from(Buffer.from(bytes).toString("base64"), "latin1"),
+              [
+                { name: "Content-Type", value: resource.contentType },
+                { name: "Accept-Ranges", value: "bytes" },
+                { name: "Content-Length", value: String(bytes.byteLength) },
+                ...(span.partial
+                  ? [
+                      {
+                        name: "Content-Range",
+                        value: `bytes ${span.offset}-${span.offset + bytes.byteLength - 1}/${resource.size}`,
+                      },
+                    ]
+                  : []),
+                ...crossOrigin,
+              ],
+              span.partial ? 206 : 200,
+            ),
+          ),
+          // The page sees a failed load, as it would from the asset route.
+          Effect.catch((cause) =>
+            Effect.logWarning("Could not read a file served to a validated page.", {
+              url,
+              cause,
+            }).pipe(
+              Effect.andThen(
+                post(
+                  "Fetch.failRequest",
+                  { requestId: paused.requestId, errorReason: "Failed" },
+                  sessionId,
+                ),
+              ),
+            ),
+          ),
+        );
       }
       // A frame inside the page may show another site; Local Network Access
       // still covers it. The main frame and T3's own origin serve nothing else.
