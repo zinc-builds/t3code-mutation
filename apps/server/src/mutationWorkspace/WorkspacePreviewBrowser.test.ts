@@ -69,6 +69,17 @@ it.effect.skipIf(executable === undefined)(
         const [underOutline] = yield* review.elementsAt(10, 10);
         assert.strictEqual(underOutline!.selector, "h1");
 
+        // T3's stylesheet previews CSS, outlives the highlight and reloads, and goes with "".
+        const fontSize = Effect.map(review.inspect("h1"), (h1) => h1?.styles["font-size"]);
+        yield* review.setStyles("h1 { font-size: 12px !important; }");
+        assert.strictEqual(yield* fontSize, "12px");
+        assert.isTrue(yield* review.highlight(null));
+        assert.strictEqual(yield* fontSize, "12px");
+        yield* review.reload;
+        assert.strictEqual(yield* fontSize, "12px");
+        yield* review.setStyles("");
+        assert.strictEqual(yield* fontSize, "40px");
+
         const full = yield* review.screenshot({ fullPage: true, maxHeight: 1_000 });
         assert.deepStrictEqual([full.width, full.height, full.scrollY], [800, 1_000, 0]);
         assert.strictEqual(yield* review.scrollTo(500), 500);

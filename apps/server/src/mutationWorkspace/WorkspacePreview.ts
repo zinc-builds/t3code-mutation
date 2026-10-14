@@ -262,6 +262,9 @@ const make = Effect.gen(function* () {
         case "setViewport":
           yield* page.setViewport(action.viewport);
           return { _tag: "viewport", viewport: yield* page.viewport } as const;
+        case "setStyles":
+          yield* page.setStyles(action.css);
+          return { _tag: "done" } as const;
         case "reload":
           yield* page.reload;
           return { _tag: "done" } as const;

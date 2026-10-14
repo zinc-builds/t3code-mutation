@@ -58,6 +58,7 @@ const WorkspacePreviewSessionId = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(128),
 );
+export const WORKSPACE_PREVIEW_MAX_STYLES_LENGTH = 65_536;
 const WorkspacePreviewSelector = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(WORKSPACE_PREVIEW_MAX_SELECTOR_LENGTH),
@@ -117,6 +118,10 @@ export const WorkspacePreviewAction = Schema.Union([
   Schema.TaggedStruct("inspect", { selector: WorkspacePreviewSelector }),
   /** Outlines an element in the page, so screenshots show it; null clears it. */
   Schema.TaggedStruct("highlight", { selector: Schema.NullOr(WorkspacePreviewSelector) }),
+  /** Replaces T3's stylesheet in the page, kept across reloads; "" removes it. The site's files are untouched. */
+  Schema.TaggedStruct("setStyles", {
+    css: Schema.String.check(Schema.isMaxLength(WORKSPACE_PREVIEW_MAX_STYLES_LENGTH)),
+  }),
   Schema.TaggedStruct("scroll", { y: Schema.Finite }),
   Schema.TaggedStruct("setViewport", { viewport: WorkspacePreviewViewport }),
   Schema.TaggedStruct("reload", {}),

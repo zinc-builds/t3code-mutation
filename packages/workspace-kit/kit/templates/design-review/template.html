@@ -1029,6 +1029,8 @@
           timer: 0,
           closed: false,
           agentWorking: false,
+          css: "", // T3's stylesheet on the live page: the tweak preview
+          styling: Promise.resolve(),
           pick: false,
           point: null,
           client: null,
@@ -1179,8 +1181,33 @@
           edited(label);
         }
 
-        // ---- Tweak preview on the snapshot (never on the real site) -------------------------------------------
+        // ---- Tweak preview: on the snapshot's nodes, or as T3's stylesheet in the live page (never the site's files)
+        function tweakCss() {
+          if (!tweakPreview) return "";
+          const rules = [];
+          for (const a of annotations()) {
+            const m = meta[a.id];
+            if (!m || !m.element || !Object.keys(m.tweaks).length) continue;
+            const decls = Object.entries(m.tweaks).map(
+              ([prop, value]) => `${prop}: ${value} !important;`,
+            );
+            rules.push(`${m.element.selector} { ${decls.join(" ")} }`);
+          }
+          return rules.join("\n");
+        }
+        function applyLiveTweaks() {
+          const css = tweakCss();
+          if (css === live.css || !live.session || live.closed) return;
+          live.css = css;
+          live.styling = live.styling
+            .then(() => ws.preview.setStyles(css))
+            .then(queueLiveCapture, showError);
+        }
         function applyTweakPreview() {
+          if (mode === "live") {
+            applyLiveTweaks();
+            return;
+          }
           for (const [node, before] of touched) {
             if (before === null) node.removeAttribute("style");
             else node.setAttribute("style", before);
@@ -1560,10 +1587,10 @@
           );
           tools.append(clear);
           frag.append(heading, grid, diff, tools);
-          if (mode === "page") {
+          if (mode === "page" || mode === "live") {
             const check = document.createElement("label");
             check.className = "check";
-            check.innerHTML = `<input type="checkbox" data-f="preview" /> Preview tweaks on the snapshot`;
+            check.innerHTML = `<input type="checkbox" data-f="preview" /> Preview tweaks on the ${mode === "live" ? "live page" : "snapshot"}`;
             check.querySelector("input").addEventListener(
               "change",
               guard((e) => {
@@ -1573,14 +1600,6 @@
               }),
             );
             frag.append(check);
-          } else if (mode === "live") {
-            frag.append(
-              Object.assign(document.createElement("p"), {
-                className: "hint",
-                textContent:
-                  "The live page is not changed: tweaks are proposals in the change list.",
-              }),
-            );
           }
           return frag;
         }
@@ -1828,12 +1847,20 @@
               m.found = !!found;
               if (!found) return;
               const el = liveElement(found);
+              // With the tweak preview on, the page shows tweaked values: keep the real ones for the diff.
+              const real = {};
+              if (live.css) {
+                for (const prop of Object.keys(m.tweaks)) {
+                  if (m.element.styles && prop in m.element.styles)
+                    real[prop] = m.element.styles[prop];
+                }
+              }
               m.element = {
                 ...m.element,
                 selector: el.selector,
                 classes: el.classes,
                 box: el.box,
-                styles: el.styles,
+                styles: { ...el.styles, ...real },
                 text: el.text,
               };
               if (JSON.stringify(a.rect) !== JSON.stringify(el.box)) {
@@ -1862,6 +1889,10 @@
             }
             live.session = r.session;
             live.closed = false;
+            // A new page has no stylesheet: send the tweak preview again.
+            live.css = "";
+            applyLiveTweaks();
+            await live.styling;
           } else {
             setStatus("Reloading the live page");
             await ws.preview.reload();
@@ -2152,6 +2183,18 @@
         }
         // Crops and boxes describe the page as it is: lift the tweak preview while the hand-off is built.
         async function withoutPreview(fn) {
+          if (mode === "live") {
+            if (!live.css) return fn();
+            await live.styling;
+            await ws.preview.setStyles("");
+            await liveCapture();
+            try {
+              return await fn();
+            } finally {
+              await ws.preview.setStyles(live.css);
+              await liveCapture();
+            }
+          }
           if (mode !== "page" || !tweakPreview || touched.size === 0) return fn();
           tweakPreview = false;
           applyTweakPreview();

@@ -57,6 +57,8 @@ export interface WorkspacePreviewPage {
   ) => Effect.Effect<WorkspacePreviewElement | null, WorkspacePreviewError>;
   /** Outlines the element, or clears the outline for null. False when nothing matches. */
   readonly highlight: (selector: string | null) => Effect.Effect<boolean, WorkspacePreviewError>;
+  /** Replaces T3's stylesheet in the page; it is applied again after every load. */
+  readonly setStyles: (css: string) => Effect.Effect<void, WorkspacePreviewError>;
   /** Scrolls the document and returns where it landed. */
   readonly scrollTo: (y: number) => Effect.Effect<number, WorkspacePreviewError>;
 }
@@ -80,6 +82,9 @@ const ACTION_TIMEOUT_MS = 10_000;
 /** Marks T3's own nodes in the reviewed page, which reads and change events skip. */
 const MARK = "data-t3-review";
 const CHANGED_BINDING = "__t3ReviewChanged";
+const STYLES_BINDING = "__t3ReviewStyles";
+/** T3's stylesheet in the page, apart from its highlight outline. */
+const STYLES_MARK = "styles";
 
 const isHostError = Schema.is(
   Schema.Union([
@@ -121,6 +126,17 @@ const CHANGE_OBSERVER_SCRIPT = `(() => {
     }, now - first > 1000 ? 0 : 300);
   }).observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
 })()`;
+
+/** Applies T3's stylesheet again once each new document has parsed. */
+const STYLES_RESTORE_SCRIPT = `document.addEventListener("DOMContentLoaded", () => {
+  window[${JSON.stringify(STYLES_BINDING)}]().then((css) => {
+    if (!css) return;
+    const style = document.createElement("style");
+    style.setAttribute(${JSON.stringify(MARK)}, ${JSON.stringify(STYLES_MARK)});
+    style.textContent = css;
+    document.documentElement.appendChild(style);
+  });
+})`;
 
 /**
  * Reads and marks elements. Coordinates are document CSS pixels. A point
@@ -201,7 +217,7 @@ const REVIEW_SCRIPT = `(call) => {
       return "invalid" in result ? result : { element: result.element ? describe(result.element) : null };
     }
     case "highlight": {
-      for (const node of document.querySelectorAll("[" + mark + "]")) node.remove();
+      for (const node of document.querySelectorAll("[" + mark + "]:not(style)")) node.remove();
       if (call.selector === null) return { matched: true };
       const result = query(call.selector);
       if ("invalid" in result) return result;
@@ -217,6 +233,20 @@ const REVIEW_SCRIPT = `(call) => {
       });
       document.documentElement.appendChild(outline);
       return { matched: true };
+    }
+    case "styles": {
+      let style = document.querySelector("style[" + mark + "]");
+      if (!call.css) {
+        if (style) style.remove();
+        return null;
+      }
+      if (!style) {
+        style = document.createElement("style");
+        style.setAttribute(mark, ${JSON.stringify(STYLES_MARK)});
+        document.documentElement.appendChild(style);
+      }
+      style.textContent = call.css;
+      return null;
     }
     case "scroll":
       scrollTo(call.y);
@@ -273,11 +303,14 @@ export const makePlaywrightPreviewPage = Effect.fn("WorkspacePreviewBrowser.make
     viewport: WorkspacePreviewViewport,
     onEvent: (event: WorkspacePreviewPageEvent) => void,
   ) {
+    const styles = { css: "" };
     yield* Effect.tryPromise({
       try: async () => {
         await page.setViewportSize(viewport);
         await page.exposeBinding(CHANGED_BINDING, () => onEvent("mutated"));
+        await page.exposeBinding(STYLES_BINDING, () => styles.css);
         await page.addInitScript(CHANGE_OBSERVER_SCRIPT);
+        await page.addInitScript(STYLES_RESTORE_SCRIPT);
       },
       catch: failed,
     });
@@ -287,11 +320,11 @@ export const makePlaywrightPreviewPage = Effect.fn("WorkspacePreviewBrowser.make
     });
     page.on("crash", () => onEvent("closed"));
     page.on("close", () => onEvent("closed"));
-    return reviewPage(page);
+    return reviewPage(page, styles);
   },
 );
 
-const reviewPage = (page: Page): WorkspacePreviewPage => {
+const reviewPage = (page: Page, styles: { css: string }): WorkspacePreviewPage => {
   const navigate = (run: () => Promise<unknown>) =>
     Effect.tryPromise({
       try: run,
@@ -361,6 +394,15 @@ const reviewPage = (page: Page): WorkspacePreviewPage => {
             ? Effect.fail(invalidSelector(result.invalid))
             : Effect.succeed(result.matched),
         ),
+      ),
+    setStyles: (css) =>
+      review<null>(page, { op: "styles", css }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            styles.css = css;
+          }),
+        ),
+        Effect.asVoid,
       ),
     scrollTo: (y) => review<number>(page, { op: "scroll", y }),
   };

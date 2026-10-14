@@ -35,6 +35,7 @@ interface FakePage {
   url: string;
   viewport: WorkspacePreviewViewport;
   highlighted: string | null;
+  styles: string;
   readonly onEvent: (event: WorkspacePreviewBrowser.WorkspacePreviewPageEvent) => void;
   readonly closed: Deferred.Deferred<void>;
 }
@@ -51,6 +52,7 @@ const fakeBrowser = (pages: Array<FakePage>) =>
             url: "about:blank",
             viewport,
             highlighted: null,
+            styles: "",
             onEvent,
             closed,
           };
@@ -87,6 +89,10 @@ const fakeBrowser = (pages: Array<FakePage>) =>
                 if (selector !== null && selector !== "#hero") return false;
                 page.highlighted = selector;
                 return true;
+              }),
+            setStyles: (css) =>
+              Effect.sync(() => {
+                page.styles = css;
               }),
             scrollTo: (y) => Effect.succeed(y),
           };
@@ -222,6 +228,10 @@ it.effect("acts on the thread's own session and shapes each result", () =>
 
       yield* act({ _tag: "highlight", selector: "#hero" });
       assert.strictEqual(pages[0]!.highlighted, "#hero");
+      assert.deepStrictEqual(yield* act({ _tag: "setStyles", css: "h1 { color: red; }" }), {
+        _tag: "done",
+      });
+      assert.strictEqual(pages[0]!.styles, "h1 { color: red; }");
       assert.strictEqual(
         yield* reason(act({ _tag: "highlight", selector: ".missing" })),
         "invalid-selector",
