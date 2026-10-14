@@ -95,6 +95,16 @@ export const AssetCreateUrlResult = Schema.Struct({
   ),
   /** Pixel size read from the image header, so a client can reserve the exact box before the bytes arrive. */
   imageDimensions: Schema.optional(AssetImageDimensions),
+  /**
+   * For a `workspace-asset`: the file's size in bytes and the Content-Type the URL serves it with, read
+   * when the URL was minted, so a client knows both without fetching the file.
+   */
+  file: Schema.optional(
+    Schema.Struct({
+      size: NonNegativeInt,
+      contentType: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+    }),
+  ),
 });
 export type AssetCreateUrlResult = typeof AssetCreateUrlResult.Type;
 

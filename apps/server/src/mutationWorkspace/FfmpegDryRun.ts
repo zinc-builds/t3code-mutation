@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 
 import * as ProcessRunner from "../processRunner.ts";
 import { planFfmpegDryRun, stderrTail } from "./ffmpegCommand.ts";
@@ -48,10 +49,40 @@ export class FfmpegDryRun extends Context.Service<
     readonly dryRun: (
       input: FfmpegDryRunInput,
     ) => Effect.Effect<Option.Option<ReadonlyArray<FfmpegCommandCheck>>>;
+    /**
+     * The codec of each file's first video stream (audio for an audio-only file), as ffprobe names
+     * it ("hevc", "aac"), by path. A file ffprobe cannot read, or every file when ffprobe is not on
+     * PATH, is left out.
+     */
+    readonly codecs: (paths: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, string>>;
   }
 >()("t3/mutationWorkspace/FfmpegDryRun") {}
 
 const MAX_STDERR_BYTES = 64 * 1024;
+const CODEC_PROBE_TIMEOUT = Duration.seconds(2);
+
+const decodeProbe = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      streams: Schema.Array(
+        Schema.Struct({
+          codec_type: Schema.optional(Schema.String),
+          codec_name: Schema.optional(Schema.String),
+        }),
+      ),
+    }),
+  ),
+);
+
+/** The first video stream's codec in ffprobe's JSON, else the first audio stream's. */
+export function firstCodec(json: string): string | undefined {
+  const probe = Option.getOrUndefined(decodeProbe(json));
+  if (probe === undefined) return undefined;
+  const of = (type: string) =>
+    probe.streams.find((stream) => stream.codec_type === type && stream.codec_name !== undefined)
+      ?.codec_name;
+  return of("video") ?? of("audio");
+}
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -104,7 +135,54 @@ const make = Effect.gen(function* () {
     return Option.some(checks);
   }, Effect.scoped);
 
+  const codecs = Effect.fn("FfmpegDryRun.codecs")(function* (paths: ReadonlyArray<string>) {
+    const found = new Map<string, string>();
+    if (paths.length === 0) return found;
+    const ffprobe = yield* resolveCommandPath("ffprobe");
+    if (ffprobe === null) return found;
+    yield* Effect.forEach(
+      paths,
+      (filePath) =>
+        runner
+          .run({
+            command: ffprobe,
+            args: [
+              "-v",
+              "error",
+              "-show_entries",
+              "stream=codec_type,codec_name",
+              "-of",
+              "json",
+              filePath,
+            ],
+            timeout: CODEC_PROBE_TIMEOUT,
+            timeoutBehavior: "timedOutResult",
+            maxOutputBytes: MAX_STDERR_BYTES,
+            outputMode: "truncate",
+          })
+          .pipe(
+            Effect.map((result) => {
+              const codec =
+                result.timedOut || result.code !== 0 ? undefined : firstCodec(result.stdout);
+              if (codec !== undefined) found.set(filePath, codec);
+            }),
+          ),
+      { concurrency: 4, discard: true },
+    );
+    return found;
+  });
+
   return FfmpegDryRun.of({
+    codecs: (paths) =>
+      codecs(paths).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+        Effect.catch((cause) =>
+          Effect.logWarning("Could not probe media codecs.", { cause }).pipe(
+            Effect.as(new Map<string, string>()),
+          ),
+        ),
+      ),
     dryRun: (input) =>
       dryRun(input).pipe(
         Effect.provideService(FileSystem.FileSystem, fileSystem),

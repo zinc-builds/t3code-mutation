@@ -39,6 +39,32 @@ export const WORKSPACE_MAX_ASSETS = 16;
 // The RPC contract's state error names the limit, so the contract owns it.
 export { WORKSPACE_MAX_STATE_BYTES } from "@t3tools/contracts";
 
+/**
+ * Whether a workspace asset of this type reaches the page as a URL that plays
+ * it from where it is stored, rather than as bytes copied in before the page
+ * starts: video and audio do, every other type arrives as a File. The rule is
+ * the type alone, so a page knows from `mimeType` which shape it gets, and
+ * every host (web, mobile, publish-time validation) applies the same one.
+ */
+export function workspaceAssetStreams(mimeType: string): boolean {
+  return /^(?:video|audio)\//i.test(mimeType.trim());
+}
+
+/**
+ * An asset as a host answers `initialize` with it: the bytes for most types,
+ * or, for streamed types (`workspaceAssetStreams`), a URL that serves them in
+ * place with byte ranges, and their size. The bridge gives the page the same
+ * shape, with `url` and `size` filled in for a File too.
+ */
+export type WorkspaceBridgeAsset<F = File> = {
+  readonly name: string;
+  readonly mimeType: string;
+} & (
+  | { readonly source: "attachment"; readonly attachmentId: string }
+  | { readonly source: "file"; readonly path: string }
+) &
+  ({ readonly file: F } | { readonly url: string; readonly size: number });
+
 /** A file the agent handed the workspace, served from the environment host. */
 export interface WorkspaceAssetReference {
   /** Absolute path on the environment host. */
@@ -185,6 +211,11 @@ export const WORKSPACE_BRIDGE_METHODS = {
   preview: "t3/workspace/preview",
   /** Notification from the host: the live preview loaded, navigated, changed, or closed. */
   previewChanged: "t3/workspace/preview-changed",
+  /**
+   * Notification from the host: a streamed asset's URL was re-minted before the old one expires,
+   * as `{ index, name, url }` by its place in `initialize`'s assets.
+   */
+  assetUrl: "t3/workspace/asset-url",
   ...WORKSPACE_CHROME_BRIDGE_METHODS,
 } as const;
 
@@ -360,10 +391,14 @@ if(d.method===M.composerSize&&d.params&&typeof d.params.height==="number"){compo
 if(d.method===M.agentStatus&&d.params){emit("agent-status",d.params.status);}
 if(d.method===M.stateError&&d.params){emit("state-error",new Error(String(d.params.message||"The workspace controls were not saved.")));}
 if(d.method===M.previewChanged&&d.params){emit("preview-changed",d.params);}
+if(d.method===M.assetUrl&&d.params&&assetList){var u=assetList[d.params.index];if(u&&!u.file&&u.name===d.params.name&&typeof d.params.url==="string"){u.url=d.params.url;emit("asset-url",{name:u.name,url:u.url});}}
 if(d.method===${JSON.stringify(HOST_CONTEXT_CHANGED_METHOD)}&&d.params&&d.params.styles){var t=d.params.theme==="light"?"light":"dark";setTimeout(function(){emit("theme",{appearance:t});});}
 });
-var initialized=null;
-function init(){if(!initialized){initialized=request(M.initialize).then(function(r){var assets=(r&&r.assets||[]).map(function(a){return{name:a.name,mimeType:a.mimeType,source:a.source,path:a.path,attachmentId:a.attachmentId,file:a.file,url:URL.createObjectURL(a.file)};});return{state:r?r.state:undefined,assets:assets};},function(e){initialized=null;throw e;});}return initialized;}
+var initialized=null,assetList=null;
+function toAsset(a){var o={name:a.name,mimeType:a.mimeType,source:a.source,path:a.path,attachmentId:a.attachmentId};if(a.file){o.file=a.file;o.size=a.file.size;o.url=URL.createObjectURL(a.file);}else{o.size=a.size;o.url=a.url;}return o;}
+function init(){if(!initialized){initialized=request(M.initialize).then(function(r){var assets=(r&&r.assets||[]).map(toAsset);assetList=assets;return{state:r?r.state:undefined,assets:assets};},function(e){initialized=null;throw e;});}return initialized;}
+function assetFile(name){return init().then(function(r){var a=r.assets.filter(function(x){return x.name===name;})[0];if(!a)throw new Error("No workspace asset is named "+JSON.stringify(String(name))+".");if(a.file)return a.file;
+return fetch(a.url).then(function(res){if(!res.ok)throw new Error(a.name+" could not be loaded (HTTP "+res.status+").");return res.blob();}).then(function(b){return new File([b],a.name,{type:a.mimeType});});});}
 var slot=null,lastRect="";
 function report(){var r=slot&&slot.isConnected?slot.getBoundingClientRect():null;var rect=r&&r.width>0?{x:r.left,y:r.top,width:r.width,height:r.height}:null;var key=JSON.stringify(rect);if(key===lastRect)return;lastRect=key;notify(M.composerSlot,{rect:rect});}
 function sizeSlot(){if(slot&&composerHeight>0)slot.style.minHeight=composerHeight+"px";}
@@ -382,6 +417,7 @@ window.t3.workspace={
 ready:function(){return init();},
 assets:function(){return init().then(function(r){return r.assets;});},
 initialState:function(){return init().then(function(r){return r.state;});},
+assetFile:assetFile,
 setState:function(state){lastState=state;if(stateTimer)clearTimeout(stateTimer);stateTimer=setTimeout(function(){stateTimer=null;notify(M.setState,{state:lastState});},250);},
 send:function(text,opts){return request(M.send,{text:String(text),files:opts&&opts.files!=null?toFiles(opts.files):undefined});},
 attach:function(files){return request(M.attach,{files:toFiles(files)});},
@@ -422,11 +458,14 @@ export const WORKSPACE_PAGE_GUIDE = [
   "Design it like the professional application this task deserves (a Lightroom-style develop panel for photos, a multi-track timeline for video, a mixer for audio, a grid for data), dense and purposeful, built for this user's request and their media. Keys reach the page only while it has focus, so give every shortcut a visible button too, and ignore shortcuts while focus is in a text field.",
   "Make it look native to T3: style every surface, border, text, and control with the theme variables listed below (var(--background), var(--card), var(--border), var(--foreground), var(--muted-foreground), var(--primary), var(--ring), var(--radius), var(--font-sans)), never with hardcoded colors or fonts, so it matches the app around it in light and dark mode. --background is the thread's own canvas; give a media viewport a neutral surround derived from it, such as color-mix(in oklab, var(--background), #777 9%). Only the user's media and data keep their own colors.",
   "Place the chat where an assistant panel belongs by adding one empty element with the attribute data-t3-composer, at least 320px wide, at the bottom of a fixed-height column (for example an inspector sidebar), not inside a scrolling area, with nothing after it, padded like any panel. T3 lays its native composer over it bottom-aligned, sets its min-height to the composer's height, and follows it when it moves; on('composer-size', cb) reports that height. Without one, the composer docks along the bottom edge.",
-  "The page runs in an opaque-origin sandbox that allows only scripts and forms: localStorage, sessionStorage, IndexedDB, and cookies throw or are absent (many libraries touch them on import, so load only libraries that tolerate this); alert, confirm, and prompt do nothing, so build confirmations into the page; window.open, <a download>, and the clipboard do not work; http(s) links open in the user's browser. Images from other origins taint a canvas unless served with CORS; blob: URLs from assets do not.",
+  "The page runs in an opaque-origin sandbox that allows only scripts and forms: localStorage, sessionStorage, IndexedDB, and cookies throw or are absent (many libraries touch them on import, so load only libraries that tolerate this); alert, confirm, and prompt do nothing, so build confirmations into the page; window.open, <a download>, and the clipboard do not work; http(s) links open in the user's browser. Images from other origins taint a canvas unless served with CORS; asset URLs are served with CORS, and blob: URLs do not taint.",
   "Pass the page inline as html: never write it, or a scratch copy of it, into the user's project or anywhere else on disk.",
   "Bridge API on window.t3.workspace. Boot with const { state, assets } = await t3.workspace.ready(); it rejects with an Error when loading fails, and calling it again retries.",
-  'assets: [{name, mimeType, source, path, attachmentId, file, url}]. source is "attachment" for each image the user attached in this thread (attachmentId identifies it; other attachment types are not included) and "file" for each path you passed as `assets` (path is that absolute path). Name media by path or attachmentId in anything the page sends back, so you can apply the edit to the original. mimeType may be generic, so check the extension too. url is a blob: URL for <img>, canvas, <video>, and <audio>.',
-  "Keep <video> and <audio> elements you draw from in the document (visually hidden, not display:none) and seek them to force a frame, or the browser never decodes one; decode audio for waveforms with an OfflineAudioContext's decodeAudioData(await file.arrayBuffer()).",
+  'assets: [{name, mimeType, source, path, attachmentId, size, url, file}]. source is "attachment" for each image the user attached in this thread (attachmentId identifies it; other attachment types are not included) and "file" for each path you passed as `assets` (path is that absolute path). Name media by path or attachmentId in anything the page sends back, so you can apply the edit to the original. mimeType may be generic, so check the extension too. size is in bytes.',
+  'A video/* or audio/* asset has no file: its url is an http(s) URL that plays the file from where it is stored, with byte ranges, so the page opens at once however large the media is. Use it as a <video> or <audio> src, and set element.crossOrigin = "anonymous" before src: the URL is served with CORS, and without it Web Audio hears silence and a canvas drawn from the element is tainted. Never gate on canPlayType (it answers "" for .mov files that play). Every other asset has file (its bytes, already loaded) and url, a blob: URL of it, for <img> and canvas.',
+  "await t3.workspace.assetFile(name) resolves to any asset's bytes as a File. For video and audio it downloads the whole file into the page (a 40 MB clip costs 40 MB, more over a remote connection), so call it only when the page needs the bytes, such as decoding a waveform with an OfflineAudioContext's decodeAudioData(await file.arrayBuffer()), one file at a time, and never to play media.",
+  'Streamed URLs expire, and T3 renews them first: on("asset-url", ({ name, url }) => …) hands over the new one (the asset object\'s url already holds it). Swap it into each element playing that asset, keeping its place: note currentTime and paused, set src, restore currentTime, and play() again unless it was paused (t3kit.links.swapMediaSrc(element, url) does this). Keep <video> and <audio> elements you draw from in the document (visually hidden, not display:none) and seek them to force a frame, or the browser never decodes one.',
+
   "state is what your page last stored in this thread (it survives rebuilds), or undefined. It may come from an older version of your page, so merge it over your defaults and ignore keys you no longer use.",
   "setState(object) replaces the stored state: compact JSON under 64KB, never media or datasets, with a version field and everything needed to look the same after a rebuild or reload (control values, selection, zoom, playhead, open panels). Call it whenever any of these change; it is debounced and flushed when the page leaves, and on('state-error', cb) gets an Error when storing fails (T3 already tells the user). You read it with workspace_state, and T3 adds it to each message the user sends while the workspace is open.",
   "send(text, { files }) posts a chat message as the user, with optional files attached to that same message (Files named like edit.json; a bare Blob is named export). T3 accepts it only during the user's click or key press, so call it directly in the handler, with any files prepared beforehand, before slow work. Keep the text short and human; put machine-readable payloads in files. attach(fileOrFiles) puts files in the composer for the user to send with their own words; download(blobOrFile, name) saves a file to the user's machine. Each returns a promise that resolves, or rejects with an Error that says why; T3 already shows failed downloads and loads to the user.",

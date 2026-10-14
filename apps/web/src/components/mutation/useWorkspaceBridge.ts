@@ -1,4 +1,10 @@
 import {
+  planWorkspaceAssets,
+  startWorkspaceAssetUrlRefresher,
+  streamedWorkspaceAssets,
+  type PlannedWorkspaceAsset,
+} from "@t3tools/client-runtime/state/mutation-workspace-assets";
+import {
   workspaceAgentStatusNotification,
   workspaceAssetSources,
   workspaceBridgeFailureTitle,
@@ -6,7 +12,6 @@ import {
   workspaceErrorMessage,
   workspaceInitialPageState,
   workspaceStateErrorNotification,
-  type WorkspaceAssetSource,
 } from "@t3tools/client-runtime/state/mutation-workspace-host";
 import {
   createWorkspacePreviewHost,
@@ -31,8 +36,9 @@ import { mutationWorkspaceEnvironment } from "~/state/mutationWorkspace";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { toastManager } from "../ui/toast";
-import { useWorkspaceAssetFetcher } from "./useWorkspaceAssets";
+import { fetchWorkspaceAssetBytes, useWorkspaceAssetMinter } from "./useWorkspaceAssets";
 import { loadWorkspaceAsset, workspaceAssetKey } from "./workspaceAssetCache";
+import { loadWorkspaceBridgeAssets } from "./workspaceBridgeAssets";
 import { setWorkspaceChromePageState } from "./workspaceChromeStore";
 
 export interface WorkspaceBridgeOptions {
@@ -52,20 +58,6 @@ export interface WorkspaceBridgeOptions {
   readonly onAttachFiles: (files: ReadonlyArray<File>) => void;
   readonly onRestore: () => void;
 }
-
-/**
- * A file handed to the page at initialize; Files clone into its opaque origin
- * as they are. Each carries what the agent knows it by, so the page can name it
- * in what it sends back.
- */
-type WorkspaceBridgeAsset = {
-  readonly name: string;
-  readonly mimeType: string;
-  readonly file: File;
-} & (
-  | { readonly source: "attachment"; readonly attachmentId: string }
-  | { readonly source: "file"; readonly path: string }
-);
 
 const commandError = (result: {
   readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
@@ -120,10 +112,10 @@ export function useWorkspaceBridge(
     reportFailure: false,
   });
   const registry = useContext(RegistryContext);
-  const fetchAsset = useWorkspaceAssetFetcher();
+  const mintAsset = useWorkspaceAssetMinter();
   // Read on every message, so the bridge sees current props without
   // re-subscribing (which would drop requests in flight).
-  const live = { options, readState, updateState, fetchAsset, previewOpen, previewAct, registry };
+  const live = { options, readState, updateState, mintAsset, previewOpen, previewAct, registry };
   const latest = useRef(live);
   useEffect(() => {
     latest.current = live;
@@ -142,18 +134,22 @@ export function useWorkspaceBridge(
     const startedAt = performance.now();
     let prefetchedAssets = 0;
     let initializedAssets = 0;
+    let streamedAssets = 0;
     // Attachments never change, so pages share them; a file is fetched per page
     // unless it was prefetched for this one.
-    const fetchAsset = (source: WorkspaceAssetSource) => {
+    const fetchAsset = (asset: PlannedWorkspaceAsset) => {
       const { environmentId } = latest.current.options;
       const loaded = loadWorkspaceAsset(
-        workspaceAssetKey(environmentId, source.resource),
-        source.resource._tag === "attachment",
-        () => latest.current.fetchAsset(environmentId, source.resource, source.name),
+        workspaceAssetKey(environmentId, asset.source.resource),
+        asset.source.resource._tag === "attachment",
+        () => fetchWorkspaceAssetBytes(asset.url, asset.source.name),
       );
       if (loaded.prefetched) prefetchedAssets += 1;
       return loaded.blob;
     };
+    // Renews the streamed URLs the page holds; replaced when the page initializes again.
+    let urlRefresher: ReturnType<typeof startWorkspaceAssetUrlRefresher> | null = null;
+    let lastUrlFailure: string | null = null;
 
     const initialize = async () => {
       const { environmentId, threadId, workspace, threadImages } = latest.current.options;
@@ -163,24 +159,37 @@ export function useWorkspaceBridge(
           if (result._tag !== "Success") throw commandError(result);
           return result.value.state;
         });
-      const files = workspaceAssetSources(threadId, workspace, threadImages).map(
-        async (source): Promise<WorkspaceBridgeAsset> => {
-          const blob = await fetchAsset(source);
-          const mimeType = source.mimeType ?? blob.type;
-          const file = new File([blob], source.name, { type: mimeType });
-          return source.source === "attachment"
-            ? {
-                name: source.name,
-                mimeType,
-                source: "attachment",
-                attachmentId: source.attachmentId,
-                file,
-              }
-            : { name: source.name, mimeType, source: "file", path: source.path, file };
-        },
+      const planned = planWorkspaceAssets(
+        workspaceAssetSources(threadId, workspace, threadImages),
+        (resource) => latest.current.mintAsset(environmentId, resource),
       );
-      const [storedState, assets] = await Promise.all([state, Promise.all(files)]);
+      const [storedState, plan] = await Promise.all([state, planned]);
+      const assets = await loadWorkspaceBridgeAssets(plan, fetchAsset);
+      const streamed = streamedWorkspaceAssets(plan);
       initializedAssets = assets.length;
+      streamedAssets = streamed.length;
+      urlRefresher?.dispose();
+      urlRefresher = startWorkspaceAssetUrlRefresher({
+        assets: streamed,
+        mint: async (resource) =>
+          (await latest.current.mintAsset(latest.current.options.environmentId, resource)).url,
+        notify: (message) => {
+          lastUrlFailure = null;
+          post(message);
+        },
+        // The page keeps its current URLs, which still work for a while; the user
+        // hears once per distinct failure that its media may stop.
+        onError: (error) => {
+          const message = workspaceErrorMessage(error);
+          if (message === lastUrlFailure) return;
+          lastUrlFailure = message;
+          toastManager.add({
+            type: "error",
+            title: "Couldn't renew the workspace's media links",
+            description: `${message} Retrying; playback stops if this keeps failing.`,
+          });
+        },
+      });
       return { state: workspaceInitialPageState(storedState), assets };
     };
 
@@ -272,7 +281,7 @@ export function useWorkspaceBridge(
               // The page draws its media in the frame after it has them.
               requestAnimationFrame(() => {
                 console.debug(
-                  `[workspace] ${workspace.title}: first frame ${Math.round(performance.now() - startedAt)}ms after the page started loading (${prefetchedAssets}/${initializedAssets} assets prefetched)`,
+                  `[workspace] ${workspace.title}: first frame ${Math.round(performance.now() - startedAt)}ms after the page started loading (${initializedAssets} assets: ${streamedAssets} streamed, ${prefetchedAssets} prefetched)`,
                 );
               });
             }
@@ -338,6 +347,7 @@ export function useWorkspaceBridge(
     return () => {
       window.removeEventListener("message", receive);
       previewHost.dispose();
+      urlRefresher?.dispose();
       // The page is gone or no longer trusted, so its slot no longer holds the composer.
       latest.current.options.onComposerSlotChange(null);
     };

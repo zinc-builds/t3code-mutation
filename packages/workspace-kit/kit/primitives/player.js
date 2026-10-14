@@ -8,14 +8,15 @@
  *          Timeline span = start .. start + (out - in) / speed (speed 0.0625..16). No start = right after the previous
  *          clip. Gaps play as an empty stage. color { brightness, contrast, saturation, temp: -100..100 (0 = none),
  *          look?: 'warm'|'cool'|'vintage'|'punch'|'mono' }.
- *   media  { [src]: Blob | File | URL }; clip.src (or t3-edl/1 clip.source) is looked up here. A src missing from media
- *          must itself be a URL (blob:, data:, http(s):, /, ./, ../). Blobs become object URLs the player revokes.
+ *   media  { [src]: asset url | Blob | File }; clip.src (or t3-edl/1 clip.source) is looked up here, else it must be a
+ *          URL. http(s) URLs play in place with crossOrigin 'anonymous'; Blobs become object URLs the player revokes.
  *   track  id of the track to play. Default: the first non-audio, non-hidden track with clips. One track, no compositing.
  *   controls false = picture only (no scrub bar, transport or clip badge).
  * Instance
  *   get()  -> { value, time, duration, playing, clipIndex, clipId, loop, muted, volume } (JSON-serialisable)
  *   set({ value?, media?, track?, time?, playing?, loop?, muted?, volume? }) -> Promise. Never emits 'change'.
- *          A value that changes only color/volume/label restyles live (no reseek); otherwise the playhead is kept.
+ *          A value that changes only color/volume/label restyles live (no reseek); otherwise (a renewed media URL
+ *          too) the playhead and play state are kept.
  *   play() / seek(t) / toggle() -> Promise. pause(). seek keeps the play state; rapid seeks coalesce to the newest.
  *   time() / duration() -> timeline seconds.   clipAt(t) -> { index, id, sourceTime } | null (null in a gap)
  *   frame(t = time(), { maxSide = 1920, filtered = true }) -> Promise<HTMLCanvasElement>: still at timeline t with
@@ -29,10 +30,9 @@
  *   'ended'      payload get(); never fires while loop is on.   'error' { message }; playback stops.
  * Keys (player focused): Space/K play-pause, L play, Left/Right frame (Shift = 1 s), Home/End, M mute.
  *   Click the picture to play/pause. The scrub bar shows the clips; a drag resumes playback on release.
- * Performance: the clock is requestVideoFrameCallback, so nothing runs while paused (rAF only while playing a gap).
- *   Colour is a compositor CSS filter. frame() downscales via createImageBitmap on its own hidden decoder.
+ * Performance: requestVideoFrameCallback clock, idle while paused; CSS-filter colour; frame() on a hidden decoder.
  * Example
- *   const p = t3kit.player.create(el, { value: timeline.get(), media: { 'clip.mp4': blob } });
+ *   const p = t3kit.player.create(el, { value: timeline.get(), media: { 'clip.mp4': asset.url } });
  *   p.on('timeupdate', ({ time }) => movePlayhead(time));      // keep a timeline in sync
  *   timeline.on('change', (v) => p.set({ value: v }));         // edits re-sequence; colour-only edits restyle live
  *   await p.play();
@@ -47,6 +47,13 @@
   const MIN_SPEED = 0.0625; // HTMLMediaElement.playbackRate limits
   const MAX_SPEED = 16;
   const URL_RE = /^(blob:|data:|https?:|file:|\.{0,2}\/)/;
+  // An http(s) source (a workspace asset URL, served with CORS) loads with crossOrigin 'anonymous': without it Web
+  // Audio hears silence from the element and frames drawn from it taint their canvas. blob: and data: stay as they are.
+  function setSource(el, url) {
+    if (/^https?:$/.test(new URL(url, document.baseURI).protocol)) el.crossOrigin = "anonymous";
+    else el.removeAttribute("crossorigin");
+    el.src = url;
+  }
   const SET_KEYS = ["value", "media", "track", "time", "playing", "loop", "muted", "volume"];
   const EVENTS = ["change", "timeupdate", "ended", "error"];
   const COLOR_KEYS = ["brightness", "contrast", "saturation", "temp"];
@@ -504,7 +511,7 @@
       applyLook(s);
       if (s.url !== c.url) {
         s.url = c.url;
-        s.el.src = c.url;
+        setSource(s.el, c.url);
       }
       // Assigning src runs the load algorithm, which resets the rate, so the rate comes after it.
       s.el.defaultPlaybackRate = c.speed;
@@ -937,7 +944,7 @@
       const token = ++grabToken;
       if (grabber.dataset.url !== c.url) {
         grabber.dataset.url = c.url;
-        grabber.src = c.url;
+        setSource(grabber, c.url);
       }
       await seekVideo(grabber, sourceAt(idx, clampT(t)), () => token !== grabToken);
       const vw = grabber.videoWidth;

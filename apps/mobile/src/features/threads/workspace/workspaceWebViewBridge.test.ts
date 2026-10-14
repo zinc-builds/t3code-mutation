@@ -1,5 +1,5 @@
 import { WORKSPACE_BRIDGE_METHODS } from "@t3tools/shared/mutationWorkspace";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   readWorkspaceWebViewMessage,
@@ -152,5 +152,84 @@ describe("workspace scripts", () => {
 
   it("answers initialize with null for a page that stored nothing", () => {
     expect(workspaceInitializeScript("w1", undefined, [])).toContain('("w1",null,[])');
+  });
+});
+
+/** Runs the outer page's relay with stand-ins for the WebView and the page frame. */
+function loadOuterPage(fetch: (url: string) => Promise<Response>) {
+  const html = workspaceOuterDocument("https://env/api/assets/page/doc.html", SECRET);
+  const script = /<script>([\s\S]*)<\/script>/.exec(html)![1]!;
+  const toPage: Array<unknown> = [];
+  const frame = {
+    addEventListener: () => undefined,
+    contentWindow: { postMessage: (message: unknown) => toPage.push(message) },
+    src: "",
+  };
+  const window: Record<string, unknown> = {
+    addEventListener: () => undefined,
+    ReactNativeWebView: { postMessage: () => undefined },
+  };
+  new Function("window", "document", "fetch", "navigator", script)(
+    window,
+    { getElementById: () => frame },
+    fetch,
+    {},
+  );
+  const initialize = window.__t3WorkspaceInitialize as (
+    id: string,
+    state: unknown,
+    assets: ReadonlyArray<unknown>,
+  ) => void;
+  return { initialize, toPage };
+}
+
+describe("outer page initialize", () => {
+  it("hands video and audio over by URL without fetching them, and fetches everything else", async () => {
+    const fetched: Array<string> = [];
+    const { initialize, toPage } = loadOuterPage(async (url) => {
+      fetched.push(url);
+      return new Response("region,total");
+    });
+    initialize("w1", null, [
+      {
+        name: "IMG_0151.MOV",
+        mimeType: "video/quicktime",
+        source: "file",
+        path: "/Volumes/X10/IMG_0151.MOV",
+        url: "https://env/api/assets/a/IMG_0151.MOV",
+        stream: true,
+        size: 643_000_000,
+      },
+      {
+        name: "sales.csv",
+        mimeType: "text/csv",
+        source: "file",
+        path: "/work/sales.csv",
+        url: "https://env/api/assets/b/sales.csv",
+        stream: false,
+      },
+    ]);
+    await vi.waitFor(() => expect(toPage).toHaveLength(1));
+    expect(fetched).toEqual(["https://env/api/assets/b/sales.csv"]);
+    const answer = toPage[0] as {
+      id: string;
+      result: { assets: Array<Record<string, unknown>> };
+    };
+    expect(answer.id).toBe("w1");
+    expect(answer.result.assets[0]).toEqual({
+      name: "IMG_0151.MOV",
+      mimeType: "video/quicktime",
+      source: "file",
+      attachmentId: undefined,
+      path: "/Volumes/X10/IMG_0151.MOV",
+      url: "https://env/api/assets/a/IMG_0151.MOV",
+      size: 643_000_000,
+    });
+    const csv = answer.result.assets[1]!.file as File;
+    expect([csv.name, csv.type, await csv.text()]).toEqual([
+      "sales.csv",
+      "text/csv",
+      "region,total",
+    ]);
   });
 });

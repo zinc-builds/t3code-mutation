@@ -407,6 +407,10 @@
       "types": "./src/state/mutationWorkspaceActive.ts",
       "default": "./src/state/mutationWorkspaceActive.ts"
     },
+    "./state/mutation-workspace-assets": {
+      "types": "./src/state/mutationWorkspaceAssets.ts",
+      "default": "./src/state/mutationWorkspaceAssets.ts"
+    },
     "./state/mutation-workspace-host": {
       "types": "./src/state/mutationWorkspaceHost.ts",
       "default": "./src/state/mutationWorkspaceHost.ts"

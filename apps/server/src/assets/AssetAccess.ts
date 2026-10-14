@@ -193,6 +193,8 @@ export type ResolvedAsset =
       readonly mimeType?: string;
       readonly file?: OpenMediaFile;
       readonly renderIntent?: "mcp-app";
+      /** Readable cross-origin (`Access-Control-Allow-Origin: *`); see `WORKSPACE_ASSET_CORS_HEADERS`. */
+      readonly crossOrigin?: true;
     }
   | {
       readonly kind: "bytes";
@@ -524,6 +526,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   let fileName: string;
   let sourcePath: string | undefined;
   let imageDimensions: ImageDimensions | null = null;
+  let servedFile: { readonly size: number; readonly contentType: string } | null = null;
 
   switch (input.resource._tag) {
     case "media-file": {
@@ -562,6 +565,8 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
                 path: asset.path,
                 device: asset.file.info.dev.toString(),
                 inode: asset.file.info.ino.toString(),
+                size: Number(asset.file.info.size),
+                contentType: asset.mimeType,
               },
         ),
         Effect.scoped,
@@ -581,6 +586,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
         expiresAt,
       };
       fileName = path.basename(opened.path);
+      servedFile = { size: opened.size, contentType: opened.contentType };
       break;
     }
     case "workspace-file": {
@@ -872,6 +878,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
     expiresAt,
     ...(sourcePath !== undefined ? { sourcePath } : {}),
     ...(imageDimensions !== null ? { imageDimensions } : {}),
+    ...(servedFile !== null ? { file: servedFile } : {}),
   };
 });
 
@@ -991,6 +998,7 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
           path: asset.path,
           file: asset.file,
           mimeType: asset.mimeType,
+          crossOrigin: true,
           ...(asset.download ? { download: true, fileName: path.basename(asset.path) } : {}),
         } satisfies ResolvedAsset)
       : null;

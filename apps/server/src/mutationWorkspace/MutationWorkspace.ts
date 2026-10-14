@@ -4,6 +4,7 @@ import * as NodeCrypto from "node:crypto";
 import type { ThreadId } from "@t3tools/contracts";
 import {
   injectWorkspaceBridge,
+  workspaceAssetStreams,
   WORKSPACE_KIT_DOCS_TOOL_NAME,
   WORKSPACE_MAX_TITLE_LENGTH,
   workspacePreviewOrigin,
@@ -33,7 +34,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import { readMediaFileHeader } from "../assets/MediaFile.ts";
+import { readMediaFileHeader, readMediaFileRange } from "../assets/MediaFile.ts";
 import { openWorkspaceAsset } from "../assets/WorkspaceAssetFile.ts";
 import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import { createAttachmentId } from "../attachmentStore.ts";
@@ -52,12 +53,16 @@ import {
   VALIDATION_SANDBOX,
   VALIDATION_SETTLED_EXPRESSION,
   validationAssetUrl,
+  VALIDATION_STAND_IN_MEDIA_URL,
   validationHostScript,
   validationReportExpression,
   type ValidationAsset,
   type WorkspaceValidation,
   type WorkspaceValidationLevel,
 } from "./workspaceValidation.ts";
+import { VALIDATION_STAND_IN_WEBM } from "./validationStandInMedia.ts";
+
+const standInMedia = HeadlessChrome.servedResource(VALIDATION_STAND_IN_WEBM, "video/webm");
 
 export class WorkspaceAssetNotFoundError extends Schema.TaggedError<WorkspaceAssetNotFoundError>()(
   "WorkspaceAssetNotFoundError",
@@ -287,12 +292,32 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         );
   };
 
-  /** The assets validation can hand the page, served from its own origin, and the ones left out. */
+  /** One read of a streamed asset for the validation page, through the file the route would open. */
+  const readAssetRange = (assetPath: string, offset: number, length: number) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const asset = yield* openAsset(assetPath);
+        if (asset === null) return yield* new WorkspaceAssetNotFoundError({ paths: [assetPath] });
+        return yield* readMediaFileRange(asset.path, asset.file, offset, length);
+      }),
+    ).pipe(
+      Effect.mapError(
+        (cause) => new HeadlessChrome.ServedFileReadError({ path: assetPath, cause }),
+      ),
+    );
+
+  /**
+   * The assets validation can hand the page, served from its own origin, and the ones left out.
+   * Video and audio are served from disk with byte ranges, as the asset route serves them, so
+   * none is left out and none is read whole; the others are read in, within a budget.
+   */
   const validationAssets = Effect.fn("MutationWorkspace.validationAssets")(function* (
     assetPaths: ReadonlyArray<string>,
   ) {
     const assets: Array<ValidationAsset> = [];
-    const resources = new Map<string, HeadlessChrome.ServedResource>();
+    const resources = new Map<string, HeadlessChrome.ServedResource>([
+      [VALIDATION_STAND_IN_MEDIA_URL, standInMedia],
+    ]);
     const omitted: Array<string> = [];
     let total = 0;
     for (const assetPath of assetPaths) {
@@ -302,12 +327,15 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
           const asset = yield* openAsset(assetPath);
           if (asset === null) return yield* new WorkspaceAssetNotFoundError({ paths: [assetPath] });
           const size = Number(asset.file.info.size);
+          if (workspaceAssetStreams(asset.mimeType)) {
+            return { mimeType: asset.mimeType, size, bytes: null };
+          }
           if (size > MAX_VALIDATION_ASSET_BYTES || total + size > MAX_VALIDATION_ASSETS_BYTES) {
             return null;
           }
           total += size;
           const bytes = yield* readMediaFileHeader(asset.path, asset.file, size);
-          return { mimeType: asset.mimeType, bytes };
+          return { mimeType: asset.mimeType, size, bytes };
         }),
       );
       if (served === null) {
@@ -315,12 +343,23 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         continue;
       }
       const url = validationAssetUrl(assets.length);
-      resources.set(url, HeadlessChrome.servedResource(served.bytes, served.mimeType));
+      resources.set(
+        url,
+        served.bytes === null
+          ? {
+              contentType: served.mimeType,
+              size: served.size,
+              read: (offset, length) => readAssetRange(assetPath, offset, length),
+            }
+          : HeadlessChrome.servedResource(served.bytes, served.mimeType),
+      );
       assets.push({
         name: path.basename(assetPath),
         mimeType: served.mimeType,
         path: assetPath,
         url,
+        size: served.size,
+        streamed: served.bytes === null,
       });
     }
     return { assets, resources, omitted };
@@ -394,6 +433,10 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         );
       }
       const { observation, report, omitted } = observed.value;
+      const codecs =
+        report === undefined || report.unplayable.length === 0
+          ? undefined
+          : yield* ffmpegDryRun.codecs(report.unplayable.map((asset) => asset.path));
       const { commands, files } =
         report === undefined ? { commands: [], files: [] } : exportFfmpegInputs(report);
       const ffmpeg =
@@ -418,6 +461,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         ffmpeg,
         chrome: input.chrome,
         omittedAssets: omitted,
+        codecs,
         pageBudget: VALIDATION_PAGE_BUDGET[input.level],
         exportBudget: VALIDATION_EXPORT_BUDGET,
       });

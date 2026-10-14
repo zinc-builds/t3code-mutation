@@ -21,10 +21,13 @@ import * as Predicate from "effect/Predicate";
  *   whether the user had just touched the page when it arrived.
  * - React Native → page: `__t3WorkspaceReceive(message)`, and
  *   `__t3WorkspaceInitialize(id, state, assets)`, which fetches each asset's
- *   signed URL into a File before answering the page's `initialize`.
+ *   signed URL into a File before answering the page's `initialize`, except
+ *   video and audio, which the page plays from their URL and gets as the URL
+ *   and size.
  *
  * The outer page is loaded with the environment's origin as its base URL, so
- * those asset fetches are same-origin and need no CORS. Every frame can reach
+ * those asset fetches are same-origin and need no CORS. The page's own media
+ * loads are cross-origin from its opaque origin, which the asset route allows. Every frame can reach
  * `ReactNativeWebView`, so the outer page wraps what it relays with a secret
  * only it holds, and React Native drops anything else. Once the page frame
  * loads a second time (it navigated itself), the outer page stops relaying.
@@ -64,14 +67,18 @@ const readWireFile = (file: WireFile): WorkspaceEncodedFile => ({
 /** An asset React Native hands the outer page for the page's `initialize`. */
 export type WorkspaceWebViewAsset = {
   readonly name: string;
-  /** Null when only the response knows it (a host file). */
-  readonly mimeType: string | null;
+  readonly mimeType: string;
   /** A signed asset URL on the environment's origin. */
   readonly url: string;
 } & (
   | { readonly source: "attachment"; readonly attachmentId: string }
   | { readonly source: "file"; readonly path: string }
-);
+) &
+  (
+    | { readonly stream: false }
+    /** Handed to the page as `url` and `size`, never fetched (`workspaceAssetStreams`). */
+    | { readonly stream: true; readonly size: number }
+  );
 
 export type WorkspaceWebViewMessage =
   | {
@@ -183,7 +190,9 @@ var active=!navigator.userActivation||navigator.userActivation.isActive;
 queue=queue.then(function(){return encode(d).then(function(m){if(live)relay(m,active);},function(err){fail(d&&d.id,err&&err.message||"The file could not be read.");});});});
 window.__t3WorkspaceReceive=function(m){toPage(m);};
 window.__t3WorkspaceInitialize=function(id,state,assets){
-Promise.all(assets.map(function(a){return fetch(a.url).then(function(r){if(!r.ok)throw new Error(a.name+" could not be loaded (HTTP "+r.status+").");return r.blob();}).then(function(b){var type=a.mimeType||b.type;return{name:a.name,mimeType:type,source:a.source,attachmentId:a.attachmentId,path:a.path,file:new File([b],a.name,{type:type})};});}))
+Promise.all(assets.map(function(a){var who={name:a.name,mimeType:a.mimeType,source:a.source,attachmentId:a.attachmentId,path:a.path};
+if(a.stream){who.url=a.url;who.size=a.size;return who;}
+return fetch(a.url).then(function(r){if(!r.ok)throw new Error(a.name+" could not be loaded (HTTP "+r.status+").");return r.blob();}).then(function(b){who.file=new File([b],a.name,{type:a.mimeType});return who;});}))
 .then(function(files){toPage({jsonrpc:"2.0",id:id,result:{state:state===null?undefined:state,assets:files}});},
 function(err){var message=err&&err.message||"The workspace's files could not be loaded.";fail(id,message);relay({t3:"assets-failed",message:message},false);});};
 frame.src=${jsonForScript(src)};

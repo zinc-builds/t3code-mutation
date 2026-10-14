@@ -212,3 +212,25 @@ describe("FfmpegDryRun with the host's ffmpeg", () => {
     20_000,
   );
 });
+
+describe("firstCodec", () => {
+  it("names a file's picture codec, or its sound codec when it has no picture", () => {
+    const streams = (...list: ReadonlyArray<Record<string, string>>) =>
+      JSON.stringify({ streams: list });
+    // An iPhone clip: HEVC picture, AAC sound, and metadata tracks with no codec name.
+    expect(
+      FfmpegDryRun.firstCodec(
+        streams(
+          { codec_type: "data" },
+          { codec_name: "aac", codec_type: "audio" },
+          { codec_name: "hevc", codec_type: "video" },
+        ),
+      ),
+    ).toBe("hevc");
+    expect(FfmpegDryRun.firstCodec(streams({ codec_name: "flac", codec_type: "audio" }))).toBe(
+      "flac",
+    );
+    expect(FfmpegDryRun.firstCodec(streams())).toBeUndefined();
+    expect(FfmpegDryRun.firstCodec("not json")).toBeUndefined();
+  });
+});

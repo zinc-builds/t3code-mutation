@@ -561,9 +561,11 @@
         const played = (c) => (c.out - c.in) / c.speed;
 
         // ---- Shared state ----------------------------------------------------------
-        const files = {}; // source name -> File
+        // Sources play from where they are stored: the player gets each asset's URL, never its bytes.
+        const media = {}; // source name -> asset URL (renewed in place on 'asset-url')
         const probes = {}; // source name -> { duration, width, height }
-        const peakCache = new Map();
+        const peakCache = new Map(); // source name -> peaks, once the source was selected
+        let sourceBytes = null; // { src, file }: the selected source's bytes, read for its waveform
         const thumbKeys = new Map();
         const exact = new Map(); // clip id -> last source { in, out, speed }, so view round trips stay exact
         const presets = new Map();
@@ -641,36 +643,46 @@
         }
 
         // ---- Media probing and analysis --------------------------------------------
-        function probe(file) {
+        // Metadata only: the browser reads the header by range, however large the clip.
+        function probe(asset) {
           return new Promise((resolve, reject) => {
-            const url = URL.createObjectURL(file);
             const v = document.createElement("video");
             v.preload = "metadata";
             v.muted = true;
+            v.crossOrigin = "anonymous";
+            const done = () => {
+              v.removeAttribute("src");
+              v.load();
+            };
             v.onloadedmetadata = () => {
-              URL.revokeObjectURL(url);
-              if (!Number.isFinite(v.duration) || v.duration <= 0)
-                reject(new Error(`Video Edit: cannot read the duration of ${file.name}`));
-              else resolve({ duration: v.duration, width: v.videoWidth, height: v.videoHeight });
+              const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight };
+              done();
+              if (!Number.isFinite(info.duration) || info.duration <= 0)
+                reject(new Error(`Video Edit: cannot read the duration of ${asset.name}`));
+              else resolve(info);
             };
             v.onerror = () => {
-              URL.revokeObjectURL(url);
-              reject(new Error(`Video Edit: cannot decode ${file.name}`));
+              done();
+              reject(new Error(`Video Edit: cannot decode ${asset.name}`));
             };
-            v.src = url;
+            v.src = asset.url;
           });
         }
 
-        function peaksFor(src) {
-          if (!peakCache.has(src)) peakCache.set(src, computePeaks(src));
-          return peakCache.get(src);
+        // The selected source's bytes, for its waveform and Sound-track peaks: assetFile reads the whole
+        // file (a 40 MB clip is a 40 MB download), so only the source being trimmed is read, one at a time.
+        async function bytesOf(src) {
+          if (sourceBytes?.src !== src) {
+            sourceBytes = { src, file: window.t3.workspace.assetFile(src) };
+          }
+          return sourceBytes.file;
         }
 
-        async function computePeaks(src) {
+        async function computePeaks(src, file) {
           const ctx = new AudioContext();
           let buffer;
           try {
-            buffer = await ctx.decodeAudioData(await files[src].arrayBuffer());
+            buffer = await ctx.decodeAudioData(await file.arrayBuffer());
           } catch (err) {
             throw new Error(
               `Video Edit: cannot decode the audio of ${src} (every source needs a sound track): ${err.message}`,
@@ -726,7 +738,7 @@
           const plan = [];
           opts.clips.forEach((c, i) => {
             const src = c.source ?? names[0];
-            if (!files[src]) {
+            if (!media[src]) {
               console.warn(
                 `video-edit: clips[${i}].source "${src}" is not an attached video (${names.join(", ")}), skipped`,
               );
@@ -830,7 +842,7 @@
             Array.isArray(t.clips) &&
             t.clips.length &&
             Array.isArray(edl.markers) &&
-            t.clips.every((c) => files[c.src] && isNum(c.in) && isNum(c.out) && isNum(c.speed)),
+            t.clips.every((c) => media[c.src] && isNum(c.in) && isNum(c.out) && isNum(c.speed)),
           );
         }
 
@@ -1117,15 +1129,33 @@
               if (token !== mediaToken) return;
             }
             await timeline.setThumbnails(c.id, frames);
-            const peaks = await peaksFor(c.src);
             if (token !== mediaToken) return;
-            if (timeline.get().tracks[1].clips.some((x) => x.id === `${c.id}-a`)) {
-              timeline.setWaveform(`${c.id}-a`, peaks, {
-                in: 0,
-                out: probes[c.src].duration / c.speed,
-              });
-            }
+            paintPeaks(c);
             thumbKeys.set(c.id, key);
+          }
+        }
+
+        // A Sound clip shows its source's peaks once that source has been selected (and so read).
+        function paintPeaks(c) {
+          const peaks = peakCache.get(c.src);
+          if (!peaks || !timeline.get().tracks[1].clips.some((x) => x.id === `${c.id}-a`)) return;
+          timeline.setWaveform(`${c.id}-a`, peaks, {
+            in: 0,
+            out: probes[c.src].duration / c.speed,
+          });
+        }
+
+        async function loadSourceWave(src) {
+          const file = await bytesOf(src);
+          if (wfSrc !== src) return;
+          await waveform.setMedia(file);
+          if (wfSrc === src) {
+            wfReady = true;
+            syncWaveSelection();
+          }
+          if (!peakCache.has(src)) {
+            peakCache.set(src, await computePeaks(src, file));
+            for (const c of clipsOf(adapter.get())) if (c.src === src) paintPeaks(c);
           }
         }
 
@@ -1137,13 +1167,7 @@
           if (c.src !== wfSrc) {
             wfSrc = c.src;
             wfReady = false;
-            const src = c.src;
-            waveform.setMedia(files[src]).then(() => {
-              if (wfSrc === src) {
-                wfReady = true;
-                syncWaveSelection();
-              }
-            });
+            loadSourceWave(c.src).catch(report);
           } else if (wfReady) {
             syncWaveSelection();
           }
@@ -2187,10 +2211,11 @@
           );
           if (!videos.length)
             throw new Error("Video Edit needs at least one video asset in the workspace");
-          for (const a of videos) {
-            files[a.name] = a.file;
-            probes[a.name] = await probe(a.file);
-          }
+          const infos = await Promise.all(videos.map(probe));
+          videos.forEach((a, i) => {
+            media[a.name] = a.url;
+            probes[a.name] = infos[i];
+          });
           const saved = ws.state ?? (await window.t3.workspace.initialState()) ?? null;
           const restored = isObj(saved) && saved.v === 1 && restorable(saved.edl) ? saved : null;
           const edl = restored ? { ...restored.edl, playhead: 0 } : freshEdl(videos);
@@ -2201,11 +2226,13 @@
           adapter = makeAdapter(timeline);
           player = window.t3kit.player.create(ui.player, {
             value: edl,
-            media: files,
+            media,
             controls: false,
             fps: FPS,
           });
           playerLink = window.t3kit.links.playerTimeline(player, adapter);
+          // T3 renews each source URL before it expires; the player swaps it in at the same frame.
+          window.t3kit.links.assetUrls(media, { players: [player] });
           waveform = window.t3kit.waveform.create(ui.waveform, { height: 72, overview: false });
           history = window.t3kit.history.create(ui.history, {
             title: "History",

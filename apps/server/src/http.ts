@@ -137,6 +137,35 @@ export function assetResponseHeaders(
   };
 }
 
+/**
+ * What a `workspace-asset` response adds so a workspace page can read it. The page runs at an opaque
+ * origin (`Origin: null`), cross-origin to every asset URL, and without CORS Web Audio hears silence
+ * from a `<video>` playing the URL and a canvas drawn from it is tainted, so `player.frame()`, stills
+ * and audio filters break. `*` grants no credentials, and the signed token in the path is already the
+ * whole capability: anyone holding the URL can play or download the file without CORS. Echoing
+ * `null` instead would admit every opaque document just the same.
+ */
+export const WORKSPACE_ASSET_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length",
+} as const;
+
+/**
+ * The answer to a CORS preflight for an asset URL, which a page's `fetch` with a `Range` header that
+ * is not CORS-safelisted (more than one range, say) triggers. It admits nothing by itself: the GET
+ * that follows still needs the signed token.
+ */
+export const assetPreflightResponse = () =>
+  HttpServerResponse.empty({
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD",
+      "Access-Control-Allow-Headers": "range, if-range",
+      "Access-Control-Max-Age": "600",
+    },
+  });
+
 /** A single byte range for native media readers; unsupported range syntax uses the full file. */
 function assetByteRange(header: string, size: bigint) {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
@@ -168,12 +197,16 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
     readonly mimeType?: string;
     readonly file?: OpenMediaFile;
     readonly renderIntent?: "mcp-app";
+    readonly crossOrigin?: true;
   },
   rangeHeader?: string,
   ifRangeHeader?: string,
   method: "GET" | "HEAD" = "GET",
 ) {
-  const headers = assetResponseHeaders(asset.path, asset);
+  const headers: Record<string, string> = {
+    ...assetResponseHeaders(asset.path, asset),
+    ...(asset.crossOrigin ? WORKSPACE_ASSET_CORS_HEADERS : {}),
+  };
   if (
     asset.renderIntent === "mcp-app" &&
     !asset.download &&
@@ -265,7 +298,7 @@ export const layerBrowserApiCors = Layer.unwrap(
     // origin — a tailnet name, a LAN IP, a phone. Browser dev normally proxies
     // through Vite and is same-origin (no preflight at all), so this is a
     // safety net for the desktop renderer and any direct-to-backend caller.
-    return HttpRouter.cors({
+    const cors = HttpMiddleware.cors({
       ...(devOrigin
         ? {
             allowedOrigins: [devOrigin, ...DESKTOP_RENDERER_ORIGINS, ...config.devAllowedOrigins],
@@ -276,6 +309,19 @@ export const layerBrowserApiCors = Layer.unwrap(
       allowedHeaders: browserApiCorsAllowedHeaders,
       maxAge: 600,
     });
+    // Asset URLs are read by workspace pages at an opaque origin, which no allowlist above admits,
+    // so their preflight is answered here, ahead of it.
+    return HttpRouter.middleware(
+      (httpApp) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          if (request.method === "OPTIONS" && request.url.startsWith(`${ASSET_ROUTE_PREFIX}/`)) {
+            return assetPreflightResponse();
+          }
+          return yield* cors(httpApp);
+        }),
+      { global: true },
+    );
   }),
 );
 
