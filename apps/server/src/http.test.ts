@@ -185,6 +185,78 @@ describe("browser API CORS", () => {
   });
 });
 
+describe("workspace asset CORS", () => {
+  // Dev admits an explicit origin list, which never includes a workspace page's opaque `null`.
+  const devHandler = () => {
+    const layerRoute = Layer.effectDiscard(
+      Effect.gen(function* () {
+        const router = yield* HttpRouter.HttpRouter;
+        yield* router.add(
+          "GET",
+          "/api/assets/*",
+          HttpServerResponse.empty({ headers: ServerHttp.WORKSPACE_ASSET_CORS_HEADERS }),
+        );
+        yield* router.add("GET", "/api/environment", HttpServerResponse.empty());
+      }),
+    );
+    const layerConfig = Layer.effect(
+      ServerConfig.ServerConfig,
+      Effect.map(
+        Effect.flatMap(
+          Layer.build(ServerConfig.layerTest(process.cwd(), { prefix: "http-asset-cors-test-" })),
+          (context) => Effect.succeed(Context.get(context, ServerConfig.ServerConfig)),
+        ),
+        (config) => ({ ...config, devUrl: new URL("http://localhost:5733") }),
+      ),
+    );
+    const layerApp = Layer.merge(layerRoute, ServerHttp.layerBrowserApiCors).pipe(
+      Layer.provide(layerConfig),
+      Layer.provide(NodeServices.layer),
+    );
+    return HttpRouter.toWebHandler(layerApp, { disableLogger: true });
+  };
+
+  it("answers an opaque-origin page's preflight for an asset URL, and only for asset URLs", async () => {
+    const { handler, dispose } = devHandler();
+    try {
+      const preflight = (path: string) =>
+        handler(
+          new Request(`http://127.0.0.1:3773${path}`, {
+            method: "OPTIONS",
+            headers: {
+              origin: "null",
+              "access-control-request-method": "GET",
+              "access-control-request-headers": "range",
+            },
+          }),
+        );
+      const asset = await preflight("/api/assets/token/clip.mov");
+      expect(asset.status).toBe(204);
+      expect(asset.headers.get("access-control-allow-origin")).toBe("*");
+      expect(asset.headers.get("access-control-allow-headers")).toContain("range");
+      const api = await preflight("/api/environment");
+      expect(api.headers.get("access-control-allow-origin")).toBeNull();
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("keeps an asset response readable from the page under dev's origin allowlist", async () => {
+    const { handler, dispose } = devHandler();
+    try {
+      const response = await handler(
+        new Request("http://127.0.0.1:3773/api/assets/token/clip.mov", {
+          headers: { origin: "null", range: "bytes=0-1" },
+        }),
+      );
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(response.headers.get("access-control-expose-headers")).toContain("Content-Range");
+    } finally {
+      await dispose();
+    }
+  });
+});
+
 const layerFileResponse = Layer.mergeAll(NodeHttpPlatform.layer, NodeServices.layer);
 
 const makeStaticRequest = Effect.fn("HttpTest.makeStaticRequest")(function* (staticDir: string) {
