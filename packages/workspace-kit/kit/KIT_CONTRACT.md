@@ -6,7 +6,7 @@ The kit is a library of pro-grade UI primitives that T3 Code injects into agent-
 
 - Runs inside a sandboxed, opaque-origin iframe (`sandbox="allow-scripts allow-forms"`): no localStorage/sessionStorage/IndexedDB/cookies, no alert/confirm/prompt, no window.open, no `<a download>`, no clipboard. Don't touch them, even defensively.
 - No network assumptions: no CDN imports. Self-contained vanilla JS (ES2022), no build step, no dependencies.
-- Media arrives as `File`/`Blob` objects and `blob:` URLs (from `t3.workspace.assets()`), so canvases are never tainted.
+- Media arrives from `t3.workspace.assets()` by type. Video and audio (`video/*`, `audio/*`) arrive as an http(s) `url` that plays the file from where it is stored, with byte ranges, plus `size`, and no bytes: a primitive that takes media accepts that URL and loads it into `<video>`/`<audio>` with `crossOrigin = 'anonymous'` (the URL is served with CORS; without it Web Audio hears silence and canvases drawn from the element are tainted). blob: and data: URLs load as they are. Every other type arrives as a `File` plus a `blob:` URL. `await t3.workspace.assetFile(name)` reads any asset's bytes, the whole file, so call it only for work that needs samples (a waveform's decode), never to play media. A streamed URL is renewed before it expires (`'asset-url'`); `t3kit.links.assetUrls` and `swapMediaSrc` keep players and elements on the new one.
 - Theme: T3 injects CSS custom properties on `:root` that change live between dark and light: `--background --foreground --muted --muted-foreground --card --card-foreground --popover --border --input --ring --primary --primary-foreground --accent --accent-foreground --destructive --warning --success --info --chart-1…--chart-6 --radius --font-sans --font-mono`. Use ONLY these for colour, radius and font (`var(--border)`, never hex). For canvas drawing, read them with `getComputedStyle(document.documentElement)` at draw time, and redraw when `document.documentElement` style or `#t3-theme` changes. The kit gives you `t3kit.theme.onChange(cb)` for this; see Shared Helpers.
 - Performance: render on demand. No idle `requestAnimationFrame` loops, no continuous CSS animations. Debounce expensive work. 24MP photos and 4K video must stay responsive (use downscaled previews and full-res only on export).
 
@@ -35,7 +35,7 @@ The file MUST start with a JSDoc block of at most 40 lines: one-line purpose, `c
 
 ## Demo
 
-`demos/<name>.html`: a standalone page that loads `../tools/theme.css` (via `<link rel=stylesheet>`) and `../primitives/<name>.js` (via `<script src>`), then exercises the primitive with media from `../media/` (`sonoma.jpg`, `photo.jpg`, `horizon.jpg`, `clip.mp4`, `trips.csv`). Load media with `fetch()` into a Blob and create a `blob:` URL, as a workspace would. The demo must render something meaningful within 2 seconds with no console errors.
+`demos/<name>.html`: a standalone page that loads `../tools/theme.css` (via `<link rel=stylesheet>`) and `../primitives/<name>.js` (via `<script src>`), then exercises the primitive with media from `../media/` (`sonoma.jpg`, `photo.jpg`, `horizon.jpg`, `clip.mp4`, `trips.csv`). Load media as a workspace gets it: images and data with `fetch()` into a Blob and a `blob:` URL, video and audio by their relative URL (`../media/clip.mp4`, served with ranges and CORS by `serve.mjs` and `snap.mjs`). The demo must render something meaningful within 2 seconds with no console errors.
 
 ## Verifying
 

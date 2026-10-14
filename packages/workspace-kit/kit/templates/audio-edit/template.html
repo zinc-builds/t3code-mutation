@@ -1345,14 +1345,17 @@
           if (!src) throw new Error(`Source "${name}" is not attached`);
           if (media.loaded === name) return state.duration;
           ui.playEdit = false;
-          const { duration } = await boot$.wf.setMedia(src.file);
+          // The waveform draws and plays every decoded sample, so it needs the whole file whatever its source:
+          // assetFile reads it once (a 40 MB file is a 40 MB download) and the overview peaks reuse those bytes.
+          const file = await window.t3.workspace.assetFile(name);
+          const { duration } = await boot$.wf.setMedia(file);
           if (!(duration > 0)) throw new Error(`"${name}" has no decodable audio.`);
           media.loaded = name;
           media.durations.set(name, duration);
           $("ae-source-name").textContent = name;
           if (media.list.length > 1) $("ae-source").value = name;
           if (!media.peaks.has(name)) {
-            computePeaks(src.file)
+            computePeaks(file)
               .then((peaks) => {
                 media.peaks.set(name, peaks);
                 scheduleDraw();

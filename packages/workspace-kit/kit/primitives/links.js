@@ -26,6 +26,8 @@
  *   otherwise its active state is applied. sources { Label: instance }: each instance's 'change' pushes a step named
  *   Label once it is idle for idleMs (a drag = one step). thumb() -> canvas | Blob | ImageBitmap for each step.
  *   link.commit(label) pushes getValues() now. sync(): apply the active state again.
+ * links.assetUrls(media, { players?, elements? }) -> link   on t3.workspace 'asset-url' (a streamed URL renewed before
+ *   it expires) sets media[name] and players' media, and swaps elements[name]. swapMediaSrc(el, url) keeps time/play.
  *
  * Example:
  *   const media = { 'clip.mp4': blob };
@@ -322,7 +324,75 @@
     return makeLink(offs, fromGrid);
   }
 
+  // An http(s) source loads with CORS, so Web Audio hears it and canvases drawn from it stay readable.
+  function setSource(el, url) {
+    if (/^https?:$/.test(new URL(url, document.baseURI).protocol)) el.crossOrigin = "anonymous";
+    else el.removeAttribute("crossorigin");
+    el.src = url;
+  }
+
+  /** Points a media element at a renewed URL of the same file, at the same time, playing if it was. */
+  function swapMediaSrc(el, url) {
+    if (!(el instanceof HTMLMediaElement))
+      throw new TypeError("t3kit.links.swapMediaSrc: el must be an <audio> or <video> element");
+    if (el.getAttribute("src") === url) return Promise.resolve();
+    const time = el.currentTime;
+    const paused = el.paused;
+    const rate = el.playbackRate;
+    return new Promise((resolve, reject) => {
+      const ac = new AbortController();
+      el.addEventListener(
+        "loadedmetadata",
+        () => {
+          ac.abort();
+          el.playbackRate = rate;
+          el.currentTime = time;
+          if (paused) resolve();
+          else el.play().then(resolve, reject);
+        },
+        { signal: ac.signal },
+      );
+      el.addEventListener(
+        "error",
+        () => {
+          ac.abort();
+          reject(
+            new Error(
+              `t3kit.links.swapMediaSrc: the renewed URL failed (media error ${el.error ? el.error.code : "?"})`,
+            ),
+          );
+        },
+        { signal: ac.signal },
+      );
+      setSource(el, url);
+    });
+  }
+
+  function assetUrls(media, { players = [], elements = {} } = {}) {
+    const ws = window.t3 && window.t3.workspace;
+    if (!ws || typeof ws.on !== "function")
+      throw new Error("t3kit.links.assetUrls: needs the T3 workspace bridge (window.t3.workspace)");
+    if (!media || typeof media !== "object")
+      throw new TypeError(
+        "t3kit.links.assetUrls: media must be the { [name]: url } map the players use",
+      );
+    for (const p of players) need(p, ["set"], "player");
+    const off = ws.on("asset-url", ({ name, url }) => {
+      if (Object.hasOwn(media, name)) {
+        media[name] = url;
+        for (const p of players) p.set({ media }).catch((err) => console.error(err));
+      }
+      const el = elements[name];
+      if (el) swapMediaSrc(el, url).catch((err) => console.error(err));
+    });
+    return makeLink([off], () => {
+      for (const p of players) p.set({ media });
+    });
+  }
+
   t3kit.links = {
+    assetUrls,
+    swapMediaSrc,
     playerTimeline,
     developHistogram,
     curvesDevelop,

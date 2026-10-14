@@ -2,7 +2,7 @@
  * t3kit.waveform: audio waveform for a media Blob with zoom/scroll, region selection, playhead and playback.
  *
  * create(container, options?)   all optional
- *   media     Blob | File | blob: URL decoded now (else call setMedia); inst.ready is its Promise
+ *   media     Blob | File | URL decoded now (else setMedia); inst.ready is its Promise. Plays the decoded samples.
  *   value     initial { selection, zoom }       height  minimum track height px (default 160)
  *   controls  built-in toolbar (default true)   overview  navigator bar under the track (default true)
  *   follow    keep playhead in view while playing (default true)   loop  loop selection (default false)
@@ -14,7 +14,7 @@
  *
  * Instance
  *   get() -> value        set({ selection?, zoom? })  no 'change'; selection null clears; bad numbers throw
- *   setMedia(blobOrUrl) -> Promise<{ duration }>   Web Audio decode (video files work); playhead -> 0
+ *   setMedia(blobOrUrl) -> Promise<{ duration }>   decodes every sample (video files work; a URL downloads whole)
  *   play()  pause()  seek(sec)  playSelection({ loop? })   sample-accurate stop / loop at selection end
  *   getPlayhead()  getDuration()  isPlaying()  scrollTo(sec) centres view   on(event, cb) -> unsubscribe
  *   setAudioChain(build | null)  playback runs through build(ctx, input) -> last AudioNode (connected to the speakers);
@@ -34,7 +34,7 @@
  * Example
  *   const wf = t3kit.waveform.create(el, { height: 200 });
  *   wf.on('change', (v) => console.log(v.selection, v.zoom));
- *   await wf.setMedia(blob);                       // or a blob: URL
+ *   await wf.setMedia(await t3.workspace.assetFile(name));   // the bytes, read once
  *   wf.set({ selection: { start: 1, end: 4 }, zoom: 2 });
  *   wf.playSelection();
  */
