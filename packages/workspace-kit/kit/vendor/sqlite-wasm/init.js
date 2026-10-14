@@ -4,6 +4,7 @@
  *   sqlite3.oo1.DB(":memory:")   a database (exec, prepare, selectValue, changes, close).
  *   sqlite3.capi                 the C API (sqlite3_deserialize, sqlite3_js_db_export, sqlite3_error_offset).
  *   sqlite3.wasm                 heap helpers (allocFromTypedArray for sqlite3_deserialize).
+ * A page that runs SQLite in a Worker (sql-workbench) takes the same files from t3kit.vendor.file and these settings.
  * The page is a sandboxed opaque origin with no network and no storage, so:
  *   - the wasm comes from the page itself (bytes("sqlite3.wasm")) through instantiateWasm, never a URL;
  *   - the kvvfs VFS (localStorage, which throws here) and the OPFS VFSes (workers, origin storage) are disabled.

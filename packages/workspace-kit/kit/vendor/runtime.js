@@ -7,6 +7,9 @@
  *   resolves to what init returns (see vendor/<name>/init.js). Rejects when the library is not vendored into this
  *   page, one of its modules failed to run, or its init throws.
  * t3kit.vendor.names() -> string[]   the libraries vendored into this page.
+ * t3kit.vendor.file(name, path) -> Promise<Blob>   one of the library's files as vendor.json lists it ("dist/x.wasm"),
+ *   as the package ships it (a module without the hand-over epilogue), typed text/javascript or application/wasm.
+ *   For code that runs the library elsewhere, such as a Worker. Rejects when the library or file is not vendored.
  * Library side (init.js and the generated module epilogue; templates do not call these):
  *   define(name, init({ exports, bytes }) -> api | Promise<api>)   exports: { [moduleFile]: { [name]: value } };
  *     bytes(file) -> Uint8Array decodes one of the library's binary files.
@@ -46,6 +49,23 @@
     return out;
   }
 
+  // Inline delivery keys a file by its name, unique within a library (the generator enforces it).
+  const TYPES = { js: "text/javascript", mjs: "text/javascript", wasm: "application/wasm" };
+  async function file(name, path) {
+    const base = String(path).split("/").pop();
+    const el = tags(name, "").find(
+      (tag) => tag.dataset.t3vendorFile === base && base !== "init.js",
+    );
+    if (!el) throw new Error(`t3kit.vendor.file: ${name} has no file "${path}"`);
+    const type = TYPES[base.split(".").pop()] ?? "application/octet-stream";
+    if (el.type === "application/octet-stream") return new Blob([bytes(name, base)], { type });
+    const text = el.textContent;
+    const epilogue = text.lastIndexOf("\n;t3kit.vendor.ran(");
+    return new Blob([el.type === "module" && epilogue >= 0 ? text.slice(0, epilogue) : text], {
+      type,
+    });
+  }
+
   async function start(name) {
     await parsed();
     const init = inits.get(name);
@@ -72,6 +92,7 @@
       return loads.get(name);
     },
     names: () => [...inits.keys()],
+    file,
     define(name, init) {
       if (typeof init !== "function")
         throw new TypeError(`t3kit.vendor.define(${name}): needs a function`);
