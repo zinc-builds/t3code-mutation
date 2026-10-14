@@ -37,6 +37,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnStart from "./ProviderTurnStartService.ts";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
+import * as WorkspaceTurnContext from "../mutationWorkspace/WorkspaceTurnContext.ts";
 
 const isDomainEvent = Schema.is(OrchestrationV2DomainEvent);
 
@@ -131,6 +132,9 @@ it("does not commit running state when inherited background routing cannot be re
         }),
         Layer.mock(RunExecutionService.RunExecutionServiceV2)({ startRootRun }),
         Layer.mock(RuntimePolicy.RuntimePolicyV2)({}),
+        Layer.mock(WorkspaceTurnContext.WorkspaceTurnContext)({
+          forUserMessage: () => Effect.succeed(""),
+        }),
       ),
     ),
   );
@@ -171,6 +175,8 @@ function makeLocalCommandHarness(input: {
   readonly writeFailure?: unknown;
   /** Loads the thread and starts the run, then fails every later state read. */
   readonly failReadsAfterRunning?: boolean;
+  /** What the thread's open workspace adds to a user's message. */
+  readonly workspaceContext?: string;
 }) {
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
   const threadId = ThreadId.make("thread-native-account-command");
@@ -527,6 +533,9 @@ function makeLocalCommandHarness(input: {
         Layer.mock(RuntimePolicy.RuntimePolicyV2)({
           resolve: () => Effect.succeed({} as never),
         }),
+        Layer.mock(WorkspaceTurnContext.WorkspaceTurnContext)({
+          forUserMessage: () => Effect.succeed(input.workspaceContext ?? ""),
+        }),
       ),
     ),
   );
@@ -754,6 +763,25 @@ effectIt.effect("does not mistake a failed state read for a superseded run", () 
     expect(startCheck._tag).toBe("ProjectionStoreReadError");
     expect(finalizeCheck._tag).toBe("ProjectionStoreReadError");
   }),
+);
+
+effectIt.effect(
+  "hands the provider an open workspace's controls without changing the message",
+  () =>
+    Effect.gen(function* () {
+      const workspaceContext = '<workspace_context>\n{"v":1,"exposure":0.6}\n</workspace_context>';
+      const harness = makeLocalCommandHarness({
+        text: "Make it warmer",
+        failReadsAfterRunning: true,
+        workspaceContext,
+      });
+
+      yield* harness.start;
+
+      const started = harness.startRootRun.mock.calls[0]?.[0];
+      expect(started?.message.text).toBe(`${workspaceContext}\n\nMake it warmer`);
+      expect(harness.projection().messages.at(-1)?.text).toBe("Make it warmer");
+    }),
 );
 
 effectIt.effect("does not overwrite a run interrupted while its thread loads", () =>

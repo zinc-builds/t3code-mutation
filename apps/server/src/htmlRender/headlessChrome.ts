@@ -1,4 +1,5 @@
 import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -33,7 +34,77 @@ export interface ConsoleMessage {
   readonly text: string;
 }
 
+/** Something that went wrong while a page ran: an uncaught exception or an error it logged. */
+export interface PageProblem {
+  readonly source: "exception" | "console";
+  readonly text: string;
+}
+
+/** Bytes the page may fetch from its own origin, as `servedResource` encodes them. */
+export interface ServedBytes {
+  readonly contentType: string;
+  /** The body as base64 bytes, ready for the pipe. */
+  readonly body: Uint8Array;
+}
+
+/**
+ * A file the page may fetch from its own origin, read from disk per request
+ * with byte ranges, as the asset route serves media: a `<video>` reads only
+ * what it plays, so a multi-gigabyte clip never crosses the pipe whole.
+ */
+export interface ServedFile {
+  readonly contentType: string;
+  readonly size: number;
+  readonly read: (offset: number, length: number) => Effect.Effect<Uint8Array, ServedFileReadError>;
+}
+
+/** A served file could not be read for a request; the page sees that load fail. */
+export class ServedFileReadError extends Schema.TaggedError<ServedFileReadError>()(
+  "ServedFileReadError",
+  { path: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `${this.path} could not be read for the page.`;
+  }
+}
+
+export type ServedResource = ServedBytes | ServedFile;
+
+/** Serves `bytes` at a path of the page's own origin. */
+export const servedResource = (bytes: Uint8Array, contentType: string): ServedBytes => ({
+  contentType,
+  body: Buffer.from(Buffer.from(bytes).toString("base64"), "latin1"),
+});
+
+/** The most of a served file one response carries; a media element asks again for the rest. */
+const MAX_SERVED_RANGE_BYTES = 4 * 1024 * 1024;
+/** The largest served file a request without a range gets whole; larger ones answer 413. */
+export const MAX_SERVED_FILE_FULL_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The bytes one request for a served file gets: a single `bytes=` range
+ * (clipped to `MAX_SERVED_RANGE_BYTES`), the whole file without one, or null
+ * when the range cannot be satisfied or the whole file is too large.
+ */
+export function servedFileSpan(
+  rangeHeader: string | undefined,
+  size: number,
+): { readonly offset: number; readonly length: number; readonly partial: boolean } | null {
+  if (rangeHeader === undefined) {
+    return size <= MAX_SERVED_FILE_FULL_BYTES ? { offset: 0, length: size, partial: false } : null;
+  }
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+  if (!match || (!match[1] && !match[2])) return null;
+  const first = match[1] ? Number(match[1]) : null;
+  const last = match[2] ? Number(match[2]) : null;
+  const offset = first ?? Math.max(0, size - last!);
+  const end = Math.min(size - 1, first === null || last === null ? size - 1 : last);
+  if (offset >= size || end < offset) return null;
+  return { offset, length: Math.min(end - offset + 1, MAX_SERVED_RANGE_BYTES), partial: true };
+}
+
 const MAX_CONSOLE_MESSAGES = 20;
+const MAX_PAGE_PROBLEMS = 20;
 const MAX_CONSOLE_TEXT_CHARS = 500;
 const VIEWPORT_HEIGHT = 800;
 const MAX_CAPTURE_HEIGHT = 4_000;
@@ -94,7 +165,10 @@ const decodeExceptionThrown = Schema.decodeUnknownOption(
 const decodeRequestPaused = Schema.decodeUnknownOption(
   Schema.Struct({
     requestId: Schema.String,
-    request: Schema.Struct({ url: Schema.String }),
+    request: Schema.Struct({
+      url: Schema.String,
+      headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    }),
     frameId: Schema.optional(Schema.String),
     resourceType: Schema.optional(Schema.String),
   }),
@@ -127,27 +201,42 @@ const CONSOLE_LEVELS: Readonly<Record<string, ConsoleMessage["level"]>> = {
   assert: "error",
 };
 
+type ObservedMessage = ConsoleMessage & { readonly source: "console" | "exception" | "browser" };
+
 /** Everything the page logs, uncaught exceptions, and the browser's own load errors. */
-const consoleMessageFromEvent = (method: string, params: unknown): ConsoleMessage | undefined => {
+const consoleMessageFromEvent = (method: string, params: unknown): ObservedMessage | undefined => {
   if (method === "Runtime.consoleAPICalled") {
     const event = Option.getOrUndefined(decodeConsoleApiCalled(params));
     const level = event === undefined ? undefined : CONSOLE_LEVELS[event.type];
-    return event && level ? { level, text: event.args.map(remoteObjectText).join(" ") } : undefined;
+    return event && level
+      ? { source: "console", level, text: event.args.map(remoteObjectText).join(" ") }
+      : undefined;
   }
   if (method === "Runtime.exceptionThrown") {
     const details = Option.getOrUndefined(decodeExceptionThrown(params))?.exceptionDetails;
     return details
-      ? { level: "error", text: details.exception?.description ?? details.text }
+      ? {
+          source: "exception",
+          level: "error",
+          text: details.exception?.description ?? details.text,
+        }
       : undefined;
   }
   if (method === "Log.entryAdded") {
     const entry = Option.getOrUndefined(decodeLogEntryAdded(params))?.entry;
     return entry && (entry.level === "error" || entry.level === "warning")
-      ? { level: entry.level, text: entry.url ? `${entry.text} ${entry.url}` : entry.text }
+      ? {
+          source: "browser",
+          level: entry.level,
+          text: entry.url ? `${entry.text} ${entry.url}` : entry.text,
+        }
       : undefined;
   }
   return undefined;
 };
+
+const clip = (text: string) =>
+  text.length > MAX_CONSOLE_TEXT_CHARS ? `${text.slice(0, MAX_CONSOLE_TEXT_CHARS)}…` : text;
 
 // Resolves after web fonts load and two frames paint, so late layout lands in the capture.
 const SETTLE_EXPRESSION =
@@ -160,6 +249,30 @@ const MEASURE_EXPRESSION =
 const Ignored = Schema.Unknown;
 const Navigation = Schema.Struct({ errorText: Schema.optional(Schema.String) });
 const Measured = Schema.Struct({ result: Schema.Struct({ value: Schema.Finite }) });
+const Evaluated = Schema.Struct({
+  result: Schema.Struct({ value: Schema.optional(Schema.Unknown) }),
+  exceptionDetails: Schema.optional(
+    Schema.Struct({
+      text: Schema.String,
+      exception: Schema.optional(Schema.Struct({ description: Schema.optional(Schema.String) })),
+    }),
+  ),
+});
+
+/** A follow-up step `observeHtmlPage` runs once the page has settled. */
+export interface PageProbe {
+  /** Evaluates to a promise of a JSON value. */
+  readonly expression: string;
+  readonly budget: Duration.Input;
+}
+
+/** What a probe returned. */
+export interface PageProbeResult {
+  /** How many of the page's problems were reported before the probe started. */
+  readonly problemsBefore: number;
+  /** The probe's value; None when it ran past its budget. */
+  readonly value: Option.Option<unknown>;
+}
 
 interface PageEvents {
   /** The page's main frame, which only ever shows `PAGE_URL`. */
@@ -169,6 +282,26 @@ interface PageEvents {
   loaded: Deferred.Deferred<void, BrowserFailure> | undefined;
   readonly consoleMessages: Array<ConsoleMessage>;
   omittedConsoleMessages: number;
+  /** Other files the page's origin serves, by path. */
+  readonly resources: ReadonlyMap<string, ServedResource>;
+  /** Console messages at any level that start with one of these are problems too. */
+  readonly problemPrefixes: ReadonlyArray<string>;
+  /** A `sandbox` CSP the page is served under, which makes its origin opaque. */
+  readonly sandbox: string | undefined;
+  readonly problems: Array<PageProblem>;
+  omittedProblems: number;
+}
+
+/** What `openPage` serves and watches beyond the page itself. */
+interface PageOptions {
+  readonly resources?: ReadonlyMap<string, ServedResource>;
+  readonly problemPrefixes?: ReadonlyArray<string>;
+  /**
+   * Serves the page under this `sandbox` CSP, as T3 serves documents to its clients. The page's origin is then
+   * opaque, so its own resources are served with `Access-Control-Allow-Origin: *` for module, fetch, and
+   * `crossorigin` loads.
+   */
+  readonly sandbox?: string | undefined;
 }
 
 /**
@@ -181,6 +314,12 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
   readonly executable: string;
   readonly noSandbox: boolean;
   readonly profileDirectory: string;
+  /**
+   * WebGL through SwiftShader, Chrome's CPU renderer, for pages that only
+   * boot with it (kit primitives develop photos in WebGL2). Without it the
+   * browser runs with no GPU at all, which is cheaper.
+   */
+  readonly webgl?: boolean;
 }) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const proxyPort = yield* publicProxy.pipe(
@@ -198,7 +337,9 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
           "--remote-debugging-pipe",
           "--no-first-run",
           "--no-default-browser-check",
-          "--disable-gpu",
+          ...(input.webgl === true
+            ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+            : ["--disable-gpu"]),
           "--hide-scrollbars",
           "--mute-audio",
           "--block-new-web-contents",
@@ -259,13 +400,19 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       ),
     ).pipe(Effect.asVoid);
 
-  // Serves the page. Its body is shared bytes between two small JSON halves,
-  // queued together, so loading a page of up to 25 MiB at several widths never
-  // copies it on this side.
-  const fulfillPage = (sessionId: string, requestId: string, body: Uint8Array) =>
+  // Serves the page or a resource. Its body is shared bytes between two small
+  // JSON halves, queued together, so loading a page of up to 25 MiB at several
+  // widths never copies it on this side.
+  const fulfill = (
+    sessionId: string,
+    requestId: string,
+    body: Uint8Array,
+    headers: ReadonlyArray<{ readonly name: string; readonly value: string }>,
+    status = 200,
+  ) =>
     Queue.offerAll(outgoing, [
       textEncoder.encode(
-        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":200,"responseHeaders":[{"name":"Content-Type","value":"text/html; charset=utf-8"}],"body":"`,
+        `{"id":${++nextId},"sessionId":${JSON.stringify(sessionId)},"method":"Fetch.fulfillRequest","params":{"requestId":${JSON.stringify(requestId)},"responseCode":${status},"responseHeaders":${JSON.stringify(headers)},"body":"`,
       ),
       body,
       textEncoder.encode('"}}\0'),
@@ -299,7 +446,83 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       const body = page.body;
       const url = paused.request.url.split("#", 1)[0]!;
       if (url === PAGE_URL && body !== undefined) {
-        return fulfillPage(sessionId, paused.requestId, body);
+        return fulfill(sessionId, paused.requestId, body, [
+          { name: "Content-Type", value: "text/html; charset=utf-8" },
+          ...(page.sandbox === undefined
+            ? []
+            : [{ name: "Content-Security-Policy", value: page.sandbox }]),
+        ]);
+      }
+      const resource = url.startsWith(`${PAGE_ORIGIN}/`)
+        ? page.resources.get(url.slice(PAGE_ORIGIN.length))
+        : undefined;
+      const crossOrigin =
+        page.sandbox === undefined ? [] : [{ name: "Access-Control-Allow-Origin", value: "*" }];
+      if (resource !== undefined && "body" in resource) {
+        return fulfill(sessionId, paused.requestId, resource.body, [
+          { name: "Content-Type", value: resource.contentType },
+          ...crossOrigin,
+        ]);
+      }
+      if (resource !== undefined) {
+        const headers = paused.request.headers ?? {};
+        const rangeHeader = Object.entries(headers).find(
+          ([name]) => name.toLowerCase() === "range",
+        )?.[1];
+        const span = servedFileSpan(rangeHeader, resource.size);
+        if (span === null) {
+          return fulfill(
+            sessionId,
+            paused.requestId,
+            new Uint8Array(),
+            [
+              ...crossOrigin,
+              ...(rangeHeader === undefined
+                ? []
+                : [{ name: "Content-Range", value: `bytes */${resource.size}` }]),
+            ],
+            rangeHeader === undefined ? 413 : 416,
+          );
+        }
+        return resource.read(span.offset, span.length).pipe(
+          Effect.flatMap((bytes) =>
+            fulfill(
+              sessionId,
+              paused.requestId,
+              Buffer.from(Buffer.from(bytes).toString("base64"), "latin1"),
+              [
+                { name: "Content-Type", value: resource.contentType },
+                { name: "Accept-Ranges", value: "bytes" },
+                { name: "Content-Length", value: String(bytes.byteLength) },
+                ...(span.partial
+                  ? [
+                      {
+                        name: "Content-Range",
+                        value: `bytes ${span.offset}-${span.offset + bytes.byteLength - 1}/${resource.size}`,
+                      },
+                    ]
+                  : []),
+                ...crossOrigin,
+              ],
+              span.partial ? 206 : 200,
+            ),
+          ),
+          // The page sees a failed load, as it would from the asset route.
+          Effect.catch((cause) =>
+            Effect.logWarning("Could not read a file served to a validated page.", {
+              url,
+              cause,
+            }).pipe(
+              Effect.andThen(
+                post(
+                  "Fetch.failRequest",
+                  { requestId: paused.requestId, errorReason: "Failed" },
+                  sessionId,
+                ),
+              ),
+            ),
+          ),
+        );
       }
       // A frame inside the page may show another site; Local Network Access
       // still covers it. The main frame and T3's own origin serve nothing else.
@@ -317,16 +540,26 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
     }
     const consoleMessage = consoleMessageFromEvent(message.method, message.params);
     if (!consoleMessage) return Effect.void;
+    const text = clip(consoleMessage.text.replaceAll(PAGE_URL, PAGE_NAME));
+    // Problems are kept apart, so a chatty page cannot crowd them out.
+    const problemSource =
+      consoleMessage.source === "exception"
+        ? "exception"
+        : consoleMessage.source === "console" &&
+            (consoleMessage.level === "error" ||
+              page.problemPrefixes.some((prefix) => consoleMessage.text.startsWith(prefix)))
+          ? "console"
+          : undefined;
+    if (problemSource !== undefined) {
+      if (page.problems.length < MAX_PAGE_PROBLEMS) {
+        page.problems.push({ source: problemSource, text });
+      } else page.omittedProblems += 1;
+    }
     if (page.consoleMessages.length >= MAX_CONSOLE_MESSAGES) {
       page.omittedConsoleMessages += 1;
       return Effect.void;
     }
-    const text = consoleMessage.text.replaceAll(PAGE_URL, PAGE_NAME);
-    page.consoleMessages.push({
-      level: consoleMessage.level,
-      text:
-        text.length > MAX_CONSOLE_TEXT_CHARS ? `${text.slice(0, MAX_CONSOLE_TEXT_CHARS)}…` : text,
-    });
+    page.consoleMessages.push({ level: consoleMessage.level, text });
     return Effect.void;
   };
 
@@ -398,7 +631,7 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
     });
 
   /** A fresh page at `width`; each `load` navigates it and measures the settled layout. */
-  const openPage = Effect.fnUntraced(function* (width: number) {
+  const openPage = Effect.fnUntraced(function* (width: number, options: PageOptions = {}) {
     const { targetId } = yield* send(
       "Target.createTarget",
       { url: "about:blank" },
@@ -416,6 +649,11 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       loaded: undefined,
       consoleMessages: [],
       omittedConsoleMessages: 0,
+      resources: options.resources ?? new Map(),
+      problemPrefixes: options.problemPrefixes ?? [],
+      sandbox: options.sandbox,
+      problems: [],
+      omittedProblems: 0,
     };
     pages.set(sessionId, events);
     yield* send("Page.enable", {}, Ignored, sessionId);
@@ -452,8 +690,8 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
       sessionId,
     );
 
-    /** Loads a page from `pageBody`, so callers loading it often encode it once. */
-    const load = Effect.fnUntraced(function* (body: Uint8Array, urlFragment: string) {
+    /** Navigates to a page from `pageBody` and waits for its load event. */
+    const open = Effect.fnUntraced(function* (body: Uint8Array, urlFragment: string) {
       const loaded = yield* Deferred.make<void, BrowserFailure>();
       events.body = body;
       events.loaded = loaded;
@@ -467,6 +705,11 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
         return yield* new HtmlRenderBrowserError({ reason: "the page could not be opened" });
       }
       yield* Deferred.await(loaded);
+    });
+
+    /** Loads a page from `pageBody`, so callers loading it often encode it once. */
+    const load = Effect.fnUntraced(function* (body: Uint8Array, urlFragment: string) {
+      yield* open(body, urlFragment);
       yield* send(
         "Runtime.evaluate",
         { expression: SETTLE_EXPRESSION, awaitPromise: true },
@@ -505,13 +748,58 @@ const launchBrowser = Effect.fnUntraced(function* (input: {
             },
           ];
 
+    /** Loads a page, then waits for the promise `settledExpression` evaluates to. */
+    const observe = Effect.fnUntraced(function* (
+      body: Uint8Array,
+      urlFragment: string,
+      settledExpression: string,
+    ) {
+      yield* open(body, urlFragment);
+      yield* send(
+        "Runtime.evaluate",
+        { expression: settledExpression, awaitPromise: true },
+        Ignored,
+        sessionId,
+      );
+    });
+
+    /**
+     * Evaluates `expression` in the loaded page, awaiting a returned promise,
+     * and returns its value as JSON. A thrown error is a page problem.
+     */
+    const evaluate = (expression: string) =>
+      send(
+        "Runtime.evaluate",
+        { expression, awaitPromise: true, returnByValue: true },
+        Evaluated,
+        sessionId,
+      ).pipe(
+        Effect.flatMap((evaluated) =>
+          evaluated.exceptionDetails === undefined
+            ? Effect.succeed(evaluated.result.value)
+            : Effect.fail(
+                new HtmlRenderBrowserError({
+                  reason: "the page's probe threw",
+                  cause:
+                    evaluated.exceptionDetails.exception?.description ??
+                    evaluated.exceptionDetails.text,
+                }),
+              ),
+        ),
+      );
+
+    const problems = (): { problems: ReadonlyArray<PageProblem>; omitted: number } => ({
+      problems: [...events.problems],
+      omitted: events.omittedProblems,
+    });
+
     // Frees the page in the browser once it is no longer needed.
     const close = send("Target.closeTarget", { targetId }, Ignored).pipe(
       Effect.ensuring(Effect.sync(() => pages.delete(sessionId))),
       Effect.ignore,
     );
 
-    return { load, screenshot, consoleMessages, close };
+    return { load, observe, evaluate, screenshot, consoleMessages, problems, close };
   });
 
   return { openPage };
@@ -596,4 +884,54 @@ export const measureHtmlHeights = Effect.fn("headlessChrome.measureHtmlHeights")
       ),
     { concurrency: MEASURE_CONCURRENCY },
   );
+}, Effect.scoped);
+
+/**
+ * Loads `html`, with WebGL, and reports what went wrong while it booted: uncaught
+ * exceptions, console errors, and console messages starting with one of
+ * `problemPrefixes`. The page may fetch `resources` from its own origin. It
+ * gets `budget` from navigation to load and to settle (`settledExpression`
+ * evaluates to a promise); whatever it reported by then is the answer.
+ */
+export const observeHtmlPage = Effect.fn("headlessChrome.observeHtmlPage")(function* (input: {
+  readonly executable: string;
+  readonly noSandbox: boolean;
+  readonly html: string;
+  readonly width: number;
+  readonly urlFragment: string;
+  readonly resources: ReadonlyMap<string, ServedResource>;
+  readonly problemPrefixes: ReadonlyArray<string>;
+  readonly sandbox?: string | undefined;
+  readonly settledExpression: string;
+  readonly budget: Duration.Input;
+  /** Runs once the page has settled; skipped when it never does. */
+  readonly probe?: PageProbe | undefined;
+}) {
+  const path = yield* Path.Path;
+  const directory = yield* scratchDirectory;
+  const browser = yield* launchBrowser({
+    executable: input.executable,
+    noSandbox: input.noSandbox,
+    profileDirectory: path.join(directory, "profile"),
+    webgl: true,
+  });
+  const page = yield* browser.openPage(input.width, {
+    resources: input.resources,
+    problemPrefixes: input.problemPrefixes,
+    sandbox: input.sandbox,
+  });
+  const settled = yield* page
+    .observe(pageBody(input.html), input.urlFragment, input.settledExpression)
+    .pipe(Effect.timeoutOption(input.budget));
+  const probe = input.probe;
+  if (Option.isNone(settled) || probe === undefined) {
+    return { ...page.problems(), settled: Option.isSome(settled) };
+  }
+  const problemsBefore = page.problems().problems.length;
+  const value = yield* page.evaluate(probe.expression).pipe(Effect.timeoutOption(probe.budget));
+  return {
+    ...page.problems(),
+    settled: true,
+    probe: { problemsBefore, value } satisfies PageProbeResult,
+  };
 }, Effect.scoped);

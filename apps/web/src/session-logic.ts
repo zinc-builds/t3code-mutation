@@ -25,7 +25,12 @@ import {
 import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { turnItemDetailRevision } from "@t3tools/client-runtime/work-log/item-detail";
 import type { McpAppReference } from "@t3tools/shared/mcpApp";
-import { htmlRenderFromToolItem, mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
+import type { WorkspaceReference } from "@t3tools/shared/mutationWorkspace";
+import {
+  htmlRenderFromToolItem,
+  mcpAppFromToolItem,
+  workspaceFromToolItem,
+} from "@t3tools/shared/toolOutput";
 import {
   contextCompactionLabel,
   workEntryIndicatesToolFailure,
@@ -143,6 +148,14 @@ export type TimelineEntry = (
       readonly createdAt: string;
       readonly runId: RunId | null;
       readonly htmlRender: HtmlRenderReference;
+    }
+  | {
+      /** A workspace a completed `workspace_mutate` call built, reopenable where the call happened. */
+      readonly id: string;
+      readonly kind: "workspace";
+      readonly createdAt: string;
+      readonly runId: RunId | null;
+      readonly workspace: WorkspaceReference;
     }
   | {
       /** An MCP App a completed tool call captured, hosted where the call happened. */
@@ -725,6 +738,22 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         createdAt,
         runId: item.runId,
         htmlRender,
+        ...attemptMetadata,
+      });
+      continue;
+    }
+
+    const workspace =
+      item.type === "dynamic_tool" && item.status === "completed"
+        ? workspaceFromToolItem(item)
+        : undefined;
+    if (workspace !== undefined) {
+      entries.push({
+        id: item.id,
+        kind: "workspace",
+        createdAt,
+        runId: item.runId,
+        workspace,
         ...attemptMetadata,
       });
       continue;

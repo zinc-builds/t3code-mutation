@@ -1,0 +1,2027 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Slide Deck</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 40px minmax(0, 1fr);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0 4px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 40%;
+      }
+      .meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .sep {
+        width: 1px;
+        height: 18px;
+        background: var(--border);
+        margin: 0 2px;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover:not(:disabled) {
+        background: var(--muted);
+        border-color: var(--input);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn[aria-pressed="true"] {
+        border-color: var(--primary);
+      }
+      .btn-primary,
+      .btn-primary:hover:not(:disabled) {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+      .btn-sm {
+        height: 22px;
+        padding: 0 6px;
+        font-size: 11px;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+
+      .field {
+        width: 100%;
+        box-sizing: border-box;
+        height: 26px;
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+      }
+      textarea.field {
+        height: auto;
+        padding: 5px 6px;
+        resize: vertical;
+        line-height: 1.45;
+      }
+      .seg {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 2px;
+        padding: 2px;
+        margin: 4px 0 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+      }
+      .seg button {
+        height: 22px;
+        border: 0;
+        border-radius: calc(var(--radius) - 6px);
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .group {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin: 8px 0 3px;
+        color: var(--muted-foreground);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .group kbd {
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .hint {
+        margin: 6px 0 0;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: 208px minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      .rail {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-right: 1px solid var(--border);
+      }
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 30px;
+        flex: 0 0 auto;
+        padding: 0 10px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+      }
+      .section-head span:last-child {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 400;
+      }
+      .slide-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 8px 8px 8px 4px;
+        display: grid;
+        gap: 6px;
+        align-content: start;
+        scrollbar-width: thin;
+        outline: none;
+      }
+      .slide-item {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr);
+        gap: 2px 4px;
+        padding: 4px 4px 4px 0;
+        border: 0;
+        border-radius: calc(var(--radius) - 4px);
+        background: transparent;
+        color: var(--foreground);
+        text-align: left;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .slide-item:hover .slide-thumb {
+        border-color: var(--input);
+      }
+      .slide-num {
+        grid-row: 1 / span 2;
+        align-self: start;
+        padding-top: 2px;
+        text-align: right;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 10px;
+      }
+      .slide-thumb {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        display: block;
+        box-sizing: border-box;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        object-fit: contain;
+      }
+      .slide-label {
+        display: flex;
+        gap: 6px;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .slide-label b {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-weight: 500;
+        color: var(--foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .slide-item[aria-current="true"] .slide-thumb {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 1px var(--primary);
+      }
+      .slide-item[aria-current="true"] .slide-num {
+        color: var(--primary);
+      }
+      .rail-foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 8px;
+        border-top: 1px solid var(--border);
+      }
+
+      .center {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) 24px;
+        min-width: 0;
+        min-height: 0;
+      }
+      .view {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+      #editor {
+        position: absolute;
+        inset: 0;
+      }
+      /* Deck history owns undo: the layers' own Undo/Redo (and the separator before them) would bypass it. */
+      #editor [data-cmd="undo"],
+      #editor [data-cmd="redo"],
+      #editor .t3k-layers-toolbar > .t3k-layers-sep:nth-last-child(3) {
+        display: none;
+      }
+      .app[data-layers="off"] #editor .t3k-layers-panel {
+        display: none;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-left: 1px solid var(--border);
+      }
+      .panels {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 10px;
+        cursor: pointer;
+        font-weight: 600;
+        user-select: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "+";
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+      }
+      .panel[open] > summary::after {
+        content: "\2212";
+      }
+      .panel-body {
+        padding: 2px 10px 10px;
+        min-width: 0;
+      }
+      .readout {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 4px 8px;
+        align-items: center;
+      }
+      .readout .k {
+        color: var(--muted-foreground);
+      }
+      .readout .v {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chips {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+        margin: 4px 0 8px;
+      }
+      .chip {
+        height: 24px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        cursor: pointer;
+      }
+      .chip:hover {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .chip[aria-pressed="true"] {
+        box-shadow:
+          0 0 0 2px var(--background),
+          0 0 0 4px var(--foreground);
+      }
+      .accent-row {
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr);
+        gap: 6px;
+        align-items: center;
+      }
+      .swatch {
+        width: 26px;
+        height: 26px;
+        box-sizing: border-box;
+        border-radius: calc(var(--radius) - 4px);
+        border: 1px solid var(--border);
+      }
+      .keys {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 4px 12px;
+        margin: 4px 0 0;
+      }
+      .keys dt {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--foreground);
+        white-space: nowrap;
+      }
+      .keys dd {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-width: 320px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .composer:empty {
+        padding: 0;
+        border-top: 0;
+      }
+
+      .presenter {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) 32px;
+        background: var(--background);
+      }
+      .presenter-stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+        padding: 16px;
+        cursor: pointer;
+      }
+      .presenter-stage img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        box-shadow: 0 0 0 1px var(--border);
+      }
+      .presenter-foot {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 12px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .presenter-foot .spacer {
+        flex: 1 1 auto;
+      }
+      .progress {
+        flex: 0 0 120px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--muted);
+        overflow: hidden;
+      }
+      .progress i {
+        display: block;
+        height: 100%;
+        background: var(--primary);
+      }
+
+      .offscreen {
+        position: fixed;
+        left: -10000px;
+        top: 0;
+        width: 1280px;
+        height: 960px;
+        pointer-events: none;
+      }
+
+      @media (max-width: 1180px) {
+        .work {
+          grid-template-columns: 184px minmax(0, 1fr) 330px;
+        }
+        .hide-md {
+          display: none;
+        }
+      }
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          grid-template-rows: auto auto;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 16px;
+        }
+        .title {
+          max-width: none;
+        }
+        .meta {
+          flex-basis: 100%;
+          order: 9;
+        }
+        .tools {
+          flex-wrap: wrap;
+        }
+        .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .rail {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .slide-list {
+          grid-auto-flow: column;
+          grid-auto-columns: 150px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 8px 16px;
+        }
+        .center {
+          height: 70vh;
+        }
+        .inspector {
+          border-left: 0;
+        }
+        .panels {
+          overflow: visible;
+        }
+        .section-head,
+        .rail-foot,
+        .panel-body,
+        .panel > summary {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .composer {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app" data-layers="on">
+      <header class="bar">
+        <h1 class="title" id="title">Slide Deck</h1>
+        <span class="meta" id="meta">Opening deck</span>
+        <div class="tools" id="extra-tools"></div>
+        <div class="tools">
+          <button class="btn" id="undo" type="button" title="Undo (Ctrl or Cmd+Z)" disabled>
+            Undo
+          </button>
+          <button class="btn" id="redo" type="button" title="Redo (Ctrl or Cmd+Shift+Z)" disabled>
+            Redo
+          </button>
+          <span class="sep"></span>
+          <button
+            class="btn"
+            id="layers-toggle"
+            type="button"
+            aria-pressed="true"
+            title="Show or hide the layer list and layer inspector (L)"
+          >
+            Layers <kbd class="hide-md">L</kbd>
+          </button>
+          <button class="btn" id="present" type="button" title="Present in this frame (P)">
+            Present <kbd class="hide-md">P</kbd>
+          </button>
+          <button
+            class="btn btn-primary"
+            id="export"
+            type="button"
+            title="Export every slide as PNG plus the deck as JSON (E)"
+          >
+            Export <kbd class="hide-md">E</kbd>
+          </button>
+        </div>
+      </header>
+      <div class="work">
+        <aside class="rail" aria-label="Slides">
+          <div class="section-head"><span>Slides</span><span id="count"></span></div>
+          <div
+            class="slide-list"
+            id="slide-list"
+            tabindex="0"
+            aria-label="Slide list. Up and Down select, Delete removes, Alt+Up and Alt+Down reorder."
+          ></div>
+          <div class="rail-foot">
+            <button class="btn btn-sm" id="new" type="button" title="New slide after this one (N)">
+              New <kbd>N</kbd>
+            </button>
+            <button
+              class="btn btn-sm"
+              id="dup"
+              type="button"
+              title="Duplicate this slide (Shift+D)"
+            >
+              Duplicate
+            </button>
+            <button class="btn btn-sm" id="up" type="button" title="Move up (Alt+Up)">Up</button>
+            <button class="btn btn-sm" id="down" type="button" title="Move down (Alt+Down)">
+              Down
+            </button>
+            <button
+              class="btn btn-sm"
+              id="del"
+              type="button"
+              title="Delete this slide (Delete in the slide list)"
+            >
+              Delete
+            </button>
+          </div>
+        </aside>
+        <section class="center" aria-label="Slide canvas">
+          <div class="view"><div id="editor"></div></div>
+          <div class="status" id="status" role="status"></div>
+        </section>
+        <aside class="inspector" aria-label="Slide inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="slide" open>
+              <summary>Slide</summary>
+              <div class="panel-body">
+                <div class="group"><span>Layout</span><kbd>Alt+1–3</kbd></div>
+                <div class="seg" id="layout-seg" role="group" aria-label="Layout">
+                  <button type="button" data-layout="title">Title</button>
+                  <button type="button" data-layout="body">Body</button>
+                  <button type="button" data-layout="image">Image</button>
+                </div>
+                <div class="group"><label for="f-title">Title</label></div>
+                <input
+                  class="field"
+                  id="f-title"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div class="group">
+                  <label for="f-body">Body</label><span>One line per point</span>
+                </div>
+                <textarea class="field" id="f-body" rows="5" spellcheck="false"></textarea>
+                <div class="group"><label for="f-image">Image</label></div>
+                <select class="field" id="f-image"></select>
+                <div class="row">
+                  <button
+                    class="btn btn-sm"
+                    id="reset"
+                    type="button"
+                    title="Put the title, body, accent and image back where the layout places them"
+                  >
+                    Reset Layout
+                  </button>
+                </div>
+                <p class="hint">
+                  Drag, scale or restyle anything on the canvas. Text edits re-flow the copy and
+                  keep your moves.
+                </p>
+              </div>
+            </details>
+            <details class="panel" data-panel="theme" open>
+              <summary>Theme</summary>
+              <div class="panel-body">
+                <div class="group"><span>Accent</span></div>
+                <div
+                  class="chips"
+                  id="accent-chips"
+                  role="group"
+                  aria-label="Accent colour from the theme"
+                ></div>
+                <div class="accent-row">
+                  <span class="swatch" id="accent-swatch"></span>
+                  <input
+                    class="field"
+                    id="f-accent"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Accent as a CSS colour or theme token"
+                  />
+                </div>
+                <p class="hint">
+                  Slides draw with the T3 theme (card, foreground, muted), so they follow light and
+                  dark.
+                </p>
+              </div>
+            </details>
+            <details class="panel" data-panel="deck" open>
+              <summary>Deck</summary>
+              <div class="panel-body"><div class="readout" id="deck-info"></div></div>
+            </details>
+            <details class="panel" data-panel="history">
+              <summary>History</summary>
+              <div class="panel-body"><div id="history" style="height: 280px"></div></div>
+            </details>
+            <details class="panel" data-panel="keys">
+              <summary>Shortcuts</summary>
+              <div class="panel-body">
+                <dl class="keys">
+                  <dt>N</dt>
+                  <dd>New slide</dd>
+                  <dt>Shift+D</dt>
+                  <dd>Duplicate slide</dd>
+                  <dt>PgUp / PgDn</dt>
+                  <dd>Previous / next slide</dd>
+                  <dt>Alt+Up / Down</dt>
+                  <dd>Move slide</dd>
+                  <dt>Alt+1 2 3</dt>
+                  <dd>Title, body, image layout</dd>
+                  <dt>L</dt>
+                  <dd>Layer panel</dd>
+                  <dt>P</dt>
+                  <dd>Present (arrows, Esc)</dd>
+                  <dt>E</dt>
+                  <dd>Export PNGs and JSON</dd>
+                  <dt>Ctrl/Cmd+Z</dt>
+                  <dd>Undo (Shift: redo)</dd>
+                </dl>
+              </div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="offscreen" id="exporter" aria-hidden="true"></div>
+
+    <div class="presenter" id="presenter" hidden>
+      <div class="presenter-stage" id="presenter-stage">
+        <img id="presenter-img" alt="Current slide" />
+      </div>
+      <div class="presenter-foot">
+        <span id="presenter-count"></span>
+        <span class="progress"><i id="presenter-progress"></i></span>
+        <span class="spacer"></span>
+        <span>Arrows or click to move · Esc exits</span>
+        <button class="btn btn-sm" id="presenter-exit" type="button">Exit</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v)); // JSON, not structuredClone: shared refs must not survive
+        const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+        const slug = (text) =>
+          text
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "deck";
+        const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+        // ---- Design size, layouts and options ------------------------------------------------------------
+        const W = 1920;
+        const H = 1080;
+        const M = 140; // outer margin
+        const GUTTER = 80; // gap between the two columns of the image layout
+        const COL = (W - 2 * M - GUTTER) / 2; // 780: one column of the image layout
+        const LAYOUTS = ["title", "body", "image"];
+        const LAYOUT_LABEL = { title: "Title", body: "Body", image: "Image" };
+        const ASSET = "asset:"; // scenes name images as "asset:<name>" so they survive a reload
+        const PRESENT_SCALE = 1; // presenter pictures: 1920 x 1080
+        const THUMB_SCALE = 0.2; // slide list thumbnails: 384 x 216 (sharp at 2x)
+        const MAX_SLIDES = 200;
+        // Layers the layout owns (rebuilt on a layout change or reset); anything else on a slide is the user's own.
+        const TEMPLATE_IDS = ["title", "body", "accent", "image", "image-slot"];
+        const FLOW_IDS = ["title", "body", "accent"];
+        const ACCENT_TOKENS = [
+          ["primary", "Primary"],
+          ["chart-1", "Chart 1"],
+          ["chart-2", "Chart 2"],
+          ["chart-3", "Chart 3"],
+          ["chart-4", "Chart 4"],
+          ["chart-5", "Chart 5"],
+          ["chart-6", "Chart 6"],
+          ["info", "Info"],
+          ["success", "Success"],
+          ["warning", "Warning"],
+        ];
+        const TOKEN_NAMES = ACCENT_TOKENS.map(([t]) => t);
+        const DEFAULT_SLIDES = [
+          { layout: "title", title: "Sonoma Spring", body: "Notes from one week in wine country" },
+          {
+            title: "What We Saw",
+            body: "Golden light over the vines\nLong lunches under the oaks\nA hillside at dusk",
+          },
+          { layout: "image", title: "The View", body: "One frame, one idea" },
+        ];
+        const SLIDE_KEYS = ["layout", "title", "body", "image"];
+        const isSlideSpec = (s) =>
+          isPlain(s) &&
+          Object.keys(s).every((k) => SLIDE_KEYS.includes(k)) &&
+          (s.layout === undefined || LAYOUTS.includes(s.layout)) &&
+          (s.title === undefined || typeof s.title === "string") &&
+          (s.body === undefined || typeof s.body === "string") &&
+          (s.image === undefined || typeof s.image === "string");
+        // Accent: a theme token name ('chart-2'), var(--token), or any CSS colour. Returns the CSS value or null.
+        function accentValue(v) {
+          if (typeof v !== "string" || !v.trim()) return null;
+          const text = v.trim();
+          if (TOKEN_NAMES.includes(text)) return `var(--${text})`;
+          const m = /^var\(--([a-z0-9-]+)\)$/.exec(text);
+          if (m)
+            return TOKEN_NAMES.includes(m[1]) ||
+              ["foreground", "accent", "destructive", "muted-foreground"].includes(m[1])
+              ? text
+              : null;
+          return CSS.supports("color", text) ? text : null;
+        }
+        const SPEC = {
+          title: { default: "Slide Deck", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          slides: {
+            default: DEFAULT_SLIDES,
+            ok: (v) =>
+              Array.isArray(v) && v.length > 0 && v.length <= MAX_SLIDES && v.every(isSlideSpec),
+          },
+          accent: { default: "primary", ok: (v) => accentValue(v) !== null },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("slide-deck: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(
+                `slide-deck: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          out.accent = accentValue(out.accent);
+          return out;
+        }
+        const OPTS = readOptions();
+        // Saved edits only restore when the starting point is the same one they were made from.
+        const STATE_KEY = JSON.stringify({ slides: OPTS.slides, accent: OPTS.accent });
+
+        // ---- Assets -------------------------------------------------------------------------------------
+        const urlOf = new Map(); // asset name -> URL
+        const nameOf = new Map(); // URL -> asset name
+        const dims = new Map(); // image asset name -> { w, h } natural size, in attach order
+        const firstImage = () => (dims.size ? dims.keys().next().value : "");
+
+        // ---- Text metrics: layers does not wrap, so blocks are wrapped here in the same font ---------------
+        const measureCtx = document.createElement("canvas").getContext("2d");
+        const sans = () =>
+          getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim() ||
+          "sans-serif";
+        function measure(lines, size, weight) {
+          measureCtx.font = `${weight} ${size}px ${sans()}`;
+          return Math.max(1, ...lines.map((line) => measureCtx.measureText(line).width));
+        }
+        function wrap(text, size, weight, maxW) {
+          measureCtx.font = `${weight} ${size}px ${sans()}`;
+          const out = [];
+          for (const para of String(text).split("\n")) {
+            const words = para.split(/\s+/).filter(Boolean);
+            if (words.length === 0) {
+              out.push("");
+              continue;
+            }
+            let line = words[0];
+            for (const word of words.slice(1)) {
+              const next = `${line} ${word}`;
+              if (measureCtx.measureText(next).width <= maxW) line = next;
+              else {
+                out.push(line);
+                line = word;
+              }
+            }
+            out.push(line);
+          }
+          return out;
+        }
+
+        // ---- Layouts: the type scale and the column each text block wraps inside ----------------------------
+        function styleOf(layout, id) {
+          const body = id === "body";
+          if (layout === "title") {
+            return body
+              ? {
+                  size: 56,
+                  weight: 400,
+                  lh: 1.35,
+                  align: "center",
+                  width: W - 2 * M,
+                  color: "var(--muted-foreground)",
+                }
+              : {
+                  size: 150,
+                  weight: 800,
+                  lh: 1.1,
+                  align: "center",
+                  width: W - 2 * M,
+                  color: "var(--foreground)",
+                };
+          }
+          if (layout === "image") {
+            return body
+              ? {
+                  size: 44,
+                  weight: 400,
+                  lh: 1.4,
+                  align: "left",
+                  width: COL,
+                  color: "var(--muted-foreground)",
+                }
+              : {
+                  size: 88,
+                  weight: 800,
+                  lh: 1.1,
+                  align: "left",
+                  width: COL,
+                  color: "var(--foreground)",
+                };
+          }
+          return body
+            ? {
+                size: 52,
+                weight: 400,
+                lh: 1.4,
+                align: "left",
+                width: W - 2 * M,
+                color: "var(--muted-foreground)",
+              }
+            : {
+                size: 96,
+                weight: 800,
+                lh: 1.1,
+                align: "left",
+                width: W - 2 * M,
+                color: "var(--foreground)",
+              };
+        }
+
+        // ---- Layers scenes ---------------------------------------------------------------------------------
+        const common = (id, name, type) => ({
+          id,
+          type,
+          name,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blend: "normal",
+          x: 0,
+          y: 0,
+          rotation: 0,
+          scaleX: 1,
+          scaleY: 1,
+        });
+        // A text block wrapped for its layout. anchorX is the centre for centred text, the left edge for left-aligned text.
+        function textBlock(layout, id, name, raw, anchorX) {
+          const st = styleOf(layout, id);
+          const lines = wrap(raw, st.size, st.weight, st.width);
+          const w = measure(lines, st.size, st.weight);
+          const h = lines.length * st.size * st.lh;
+          const layer = {
+            ...common(id, name, "text"),
+            text: lines.join("\n"),
+            family: null,
+            size: st.size,
+            weight: st.weight,
+            color: st.color,
+            align: st.align,
+            lineHeight: st.lh,
+          };
+          layer.x = st.align === "center" ? anchorX : anchorX + w / 2;
+          return { layer, h };
+        }
+        const placeAt = (block, top) => {
+          block.layer.y = top + block.h / 2;
+          return block.layer;
+        };
+        function rectLayer(id, name, o) {
+          return {
+            ...common(id, name, "shape"),
+            kind: "rect",
+            x: o.x,
+            y: o.y,
+            w: o.w,
+            h: o.h,
+            radius: o.radius ?? 0,
+            fill: o.fill ?? null,
+            stroke: o.stroke ?? null,
+            strokeWidth: o.strokeWidth ?? 0,
+          };
+        }
+        function titleLayers(c, accent) {
+          const GAP = 56;
+          const BAR = 14;
+          const title = textBlock("title", "title", "Title", c.title, W / 2);
+          const body = c.body ? textBlock("title", "body", "Body", c.body, W / 2) : null;
+          const total = title.h + GAP + BAR + (body ? GAP + body.h : 0);
+          let y = (H - total) / 2;
+          const layers = [placeAt(title, y)];
+          y += title.h + GAP;
+          layers.push(
+            rectLayer("accent", "Accent Bar", {
+              x: W / 2,
+              y: y + BAR / 2,
+              w: 160,
+              h: BAR,
+              radius: BAR / 2,
+              fill: accent,
+            }),
+          );
+          y += BAR + GAP;
+          if (body) layers.push(placeAt(body, y));
+          return layers;
+        }
+        function bodyLayers(c, accent) {
+          const GAP = 40;
+          const BAR = 12;
+          const title = textBlock("body", "title", "Title", c.title, M);
+          const body = c.body ? textBlock("body", "body", "Body", c.body, M) : null;
+          let y = M;
+          const layers = [placeAt(title, y)];
+          y += title.h + GAP;
+          layers.push(
+            rectLayer("accent", "Accent Bar", {
+              x: M + 60,
+              y: y + BAR / 2,
+              w: 120,
+              h: BAR,
+              radius: BAR / 2,
+              fill: accent,
+            }),
+          );
+          y += BAR + GAP * 1.5;
+          if (body) layers.push(placeAt(body, y));
+          return layers;
+        }
+        function imageLayers(c, accent) {
+          const GAP = 40;
+          const BAR = 12;
+          const BOX = H - 2 * M;
+          const layers = [];
+          const img = c.image && dims.has(c.image) ? dims.get(c.image) : null;
+          const cx = M + COL / 2;
+          if (img) {
+            const k = Math.min(COL / img.w, BOX / img.h); // contain the photo in its column
+            layers.push({
+              ...common("image", "Image", "image"),
+              src: ASSET + c.image,
+              x: cx,
+              y: H / 2,
+              w: img.w * k,
+              h: img.h * k,
+            });
+          } else {
+            layers.push(
+              rectLayer("image-slot", "Image Slot", {
+                x: cx,
+                y: H / 2,
+                w: COL,
+                h: BOX,
+                radius: 24,
+                fill: "var(--muted)",
+                stroke: "var(--muted-foreground)",
+                strokeWidth: 3,
+              }),
+            );
+          }
+          const X0 = M + COL + GUTTER;
+          const title = textBlock("image", "title", "Title", c.title, X0);
+          const body = c.body ? textBlock("image", "body", "Body", c.body, X0) : null;
+          const total = title.h + GAP + BAR + (body ? GAP * 1.5 + body.h : 0);
+          let y = (H - total) / 2;
+          layers.push(placeAt(title, y));
+          y += title.h + GAP;
+          layers.push(
+            rectLayer("accent", "Accent Bar", {
+              x: X0 + 60,
+              y: y + BAR / 2,
+              w: 120,
+              h: BAR,
+              radius: BAR / 2,
+              fill: accent,
+            }),
+          );
+          y += BAR + GAP * 1.5;
+          if (body) layers.push(placeAt(body, y));
+          return layers;
+        }
+        function sceneFor(layout, content) {
+          const build =
+            layout === "image" ? imageLayers : layout === "body" ? bodyLayers : titleLayers;
+          return {
+            v: 1,
+            width: W,
+            height: H,
+            background: "var(--card)",
+            layers: build(content, deck.accent),
+          };
+        }
+
+        // ---- Deck model ------------------------------------------------------------------------------------
+        // A slide is { id, layout, content: { title, body, image }, scene }. scene is the layers document (positions,
+        // restyles and the user's own layers included) with images named "asset:<name>"; content is what the layout is
+        // built from. deck.accent is the CSS value every accent bar uses.
+        const deck = { slides: [], current: 0, accent: OPTS.accent };
+        let loaded = false;
+        let booted = false;
+        let idSeq = 0;
+        const newId = () => `s${Date.now().toString(36)}${(idSeq++).toString(36)}`;
+        // Options are lenient (a missing image warns and leaves an image slot); setValues is strict (see setValues).
+        function makeSlide(spec) {
+          let image = spec.image ?? "";
+          if (image && !dims.has(image)) {
+            console.warn(
+              `slide-deck: image "${image}" is not an attached image (attached: ${[...dims.keys()].join(", ") || "none"}); that slide shows an empty image slot.`,
+            );
+            image = "";
+          }
+          const layout = spec.layout ?? (spec.image ? "image" : spec.body ? "body" : "title");
+          if (layout === "image" && !image && !spec.image) image = firstImage();
+          const content = { title: spec.title ?? "", body: spec.body ?? "", image };
+          return { id: newId(), layout, content, scene: sceneFor(layout, content) };
+        }
+        // Rebuilds the layers the layout owns and keeps the user's own layers on top, in their order.
+        function relayout(slide) {
+          const fresh = sceneFor(slide.layout, slide.content);
+          const own = slide.scene.layers.filter((l) => !TEMPLATE_IDS.includes(l.id));
+          slide.scene = { ...slide.scene, layers: [...fresh.layers, ...own] };
+        }
+        function packScene(scene) {
+          const out = clone(scene);
+          for (const layer of out.layers) {
+            if (layer.type !== "image") continue;
+            const name = nameOf.get(layer.src);
+            if (name === undefined)
+              throw new Error(`slide-deck: image layer "${layer.id}" points at an unknown asset`);
+            layer.src = ASSET + name;
+          }
+          return out;
+        }
+        function unpackScene(scene) {
+          const out = clone(scene);
+          out.layers = out.layers.filter((layer) => {
+            if (layer.type !== "image") return true;
+            const name = layer.src.slice(ASSET.length);
+            if (!urlOf.has(name)) {
+              rt.reportError(
+                new Error(
+                  `slide-deck: image "${name}" is not in this workspace; its layer was dropped`,
+                ),
+              );
+              return false;
+            }
+            layer.src = urlOf.get(name);
+            return true;
+          });
+          return out;
+        }
+        // Keeps content in step with the layers, so a layout change rebuilds from what is on the canvas. Text the layers
+        // hold unchanged keeps its raw form; text edited on the canvas (layer inspector) is taken as written.
+        function syncContent(slide, packed) {
+          for (const key of ["title", "body"]) {
+            const layer = packed.layers.find((l) => l.id === key && l.type === "text");
+            if (!layer) {
+              if (key === "body") slide.content.body = "";
+              continue;
+            }
+            const st = styleOf(slide.layout, key);
+            if (layer.text !== wrap(slide.content[key], st.size, st.weight, st.width).join("\n"))
+              slide.content[key] = layer.text;
+          }
+          const image = packed.layers.find((l) => l.id === "image" && l.type === "image");
+          slide.content.image = image ? image.src.slice(ASSET.length) : "";
+        }
+        function saveCurrent() {
+          if (!loaded) return;
+          const slide = deck.slides[deck.current];
+          const packed = packScene(canvas.get());
+          slide.scene = packed;
+          syncContent(slide, packed);
+        }
+        function loadCurrent() {
+          const slide = deck.slides[deck.current];
+          loaded = true;
+          canvas.set(unpackScene(slide.scene));
+          refreshUi();
+        }
+        function deckState() {
+          saveCurrent();
+          return { v: 1, accent: deck.accent, slides: clone(deck.slides) };
+        }
+        function applyState(state) {
+          if (!isPlain(state) || !Array.isArray(state.slides) || state.slides.length === 0)
+            throw new Error("slide-deck: history state has no slides");
+          deck.slides = clone(state.slides);
+          deck.accent = typeof state.accent === "string" ? state.accent : OPTS.accent;
+          deck.current = clamp(deck.current, 0, deck.slides.length - 1);
+          loadCurrent();
+        }
+
+        // ---- Rendering: every slide goes through the offscreen exporter, one at a time -----------------------------
+        let queue = Promise.resolve();
+        function queued(task) {
+          const run = queue.then(task);
+          queue = run.catch(() => undefined); // a failed render must not block the next one; the caller still gets the error
+          return run;
+        }
+        function renderSlide(slide, index, scale, phase) {
+          return queued(async () => {
+            exporter.set(unpackScene(slide.scene));
+            const png = await exporter.exportBlob({ type: "image/png", scale });
+            const bitmap = await createImageBitmap(png);
+            const out = document.createElement("canvas");
+            out.width = bitmap.width;
+            out.height = bitmap.height;
+            out.getContext("2d").drawImage(bitmap, 0, 0);
+            bitmap.close();
+            if (rt.hasImageStages()) {
+              rt.runImageStages(out, {
+                scale: out.width / W,
+                phase,
+                info: { index, count: deck.slides.length, slide: slide.id, layout: slide.layout },
+              });
+            }
+            return new Promise((resolve, reject) =>
+              out.toBlob(
+                (b) => (b ? resolve(b) : reject(new Error("slide-deck: PNG encoding failed"))),
+                "image/png",
+              ),
+            );
+          });
+        }
+        // Rendered pictures for the list and presenter, cached by scene, controls and theme.
+        let themeEpoch = 0;
+        const urls = new Map();
+        function renderUrl(slide, index, scale) {
+          const key = `${themeEpoch}|${scale}|${index}|${deck.slides.length}|${JSON.stringify(slide.scene)}|${JSON.stringify(rt.state())}`;
+          const hit = urls.get(key);
+          if (hit) return Promise.resolve(hit);
+          return renderSlide(slide, index, scale, "preview").then((blob) => {
+            if (urls.size >= 120) {
+              for (const url of urls.values()) URL.revokeObjectURL(url);
+              urls.clear();
+            }
+            const url = URL.createObjectURL(blob);
+            urls.set(key, url);
+            return url;
+          });
+        }
+
+        // ---- Panels -----------------------------------------------------------------------------------------
+        let listToken = 0;
+        function renderList() {
+          const token = ++listToken;
+          const list = $("slide-list");
+          const hadFocus = list.contains(document.activeElement);
+          const items = deck.slides.map((slide, i) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "slide-item";
+            btn.tabIndex = -1;
+            btn.setAttribute("aria-current", String(i === deck.current));
+            btn.setAttribute(
+              "aria-label",
+              `Slide ${i + 1}: ${slide.content.title || "Untitled"}, ${LAYOUT_LABEL[slide.layout]} layout`,
+            );
+            btn.addEventListener("click", () => selectSlide(i));
+            const num = document.createElement("span");
+            num.className = "slide-num";
+            num.textContent = String(i + 1);
+            const img = document.createElement("img");
+            img.className = "slide-thumb";
+            img.alt = "";
+            const label = document.createElement("span");
+            label.className = "slide-label";
+            const name = document.createElement("b");
+            name.textContent = slide.content.title || "Untitled";
+            label.append(name, LAYOUT_LABEL[slide.layout]);
+            btn.append(num, img, label);
+            return { btn, img, slide, index: i };
+          });
+          list.replaceChildren(...items.map((item) => item.btn));
+          const active = items[deck.current]?.btn;
+          if (active) {
+            active.scrollIntoView({ block: "nearest" });
+            if (hadFocus) list.focus();
+          }
+          for (const { img, slide, index } of items) {
+            renderUrl(slide, index, THUMB_SCALE)
+              .then((url) => {
+                if (token === listToken) img.src = url;
+              })
+              .catch(showError);
+          }
+        }
+        function renderPanel() {
+          const slide = deck.slides[deck.current];
+          for (const b of document.querySelectorAll("#layout-seg button"))
+            b.setAttribute("aria-pressed", String(b.dataset.layout === slide.layout));
+          const title = $("f-title");
+          const body = $("f-body");
+          if (document.activeElement !== title) title.value = slide.content.title;
+          if (document.activeElement !== body) body.value = slide.content.body;
+          const select = $("f-image");
+          const names = [...dims.keys()];
+          select.replaceChildren(
+            new Option(names.length ? "No image" : "No images attached", ""),
+            ...names.map((name) => new Option(name, name)),
+          );
+          select.value = slide.content.image;
+          for (const chip of document.querySelectorAll("#accent-chips .chip"))
+            chip.setAttribute("aria-pressed", String(chip.dataset.value === deck.accent));
+          $("accent-swatch").style.background = deck.accent;
+          if (document.activeElement !== $("f-accent")) $("f-accent").value = deck.accent;
+          const base = slug(OPTS.title);
+          const n = deck.slides.length;
+          const row = (k, v) => {
+            const a = document.createElement("span");
+            a.className = "k";
+            a.textContent = k;
+            const b = document.createElement("span");
+            b.className = "v";
+            b.textContent = v;
+            b.title = v;
+            return [a, b];
+          };
+          $("deck-info").replaceChildren(
+            ...row("Slides", String(n)),
+            ...row("Size", "1920 × 1080 · 16:9"),
+            ...row("Layers", `${slide.scene.layers.length} on this slide`),
+            ...row("Export", `${base}-01…${String(n).padStart(2, "0")}.png + ${base}.json`),
+          );
+          $("up").disabled = deck.current === 0;
+          $("down").disabled = deck.current === n - 1;
+          $("del").disabled = n === 1;
+        }
+        function renderMeta() {
+          const slide = deck.slides[deck.current];
+          $("count").textContent = `${deck.slides.length}`;
+          $("meta").textContent =
+            `Slide ${deck.current + 1} of ${deck.slides.length} · ${LAYOUT_LABEL[slide.layout]} · 1920 × 1080`;
+          $("status").textContent =
+            `${LAYOUT_LABEL[slide.layout]} layout · ${plural(slide.scene.layers.length, "layer")} · drag to move, handles scale and rotate · Text, Rectangle and Ellipse add layers`;
+        }
+        function updateUndo() {
+          if (!history) return;
+          $("undo").disabled = !history.canUndo();
+          $("redo").disabled = !history.canRedo();
+        }
+        function refreshUi() {
+          renderMeta();
+          renderPanel();
+          renderList();
+          updateUndo();
+        }
+        let layersPanel = true;
+        function persist() {
+          if (!booted) return;
+          ws.setState({
+            v: 1,
+            key: STATE_KEY,
+            history: history.get(),
+            selected: deck.current,
+            layersPanel,
+            controls: rt.state(),
+          });
+        }
+        function refresh() {
+          refreshUi();
+          persist();
+        }
+
+        // ---- Edits ------------------------------------------------------------------------------------------
+        function selectSlide(index) {
+          if (index === deck.current || index < 0 || index >= deck.slides.length) return;
+          flushText();
+          saveCurrent();
+          deck.current = index;
+          loadCurrent();
+          persist();
+        }
+        function insertSlide(slide, label) {
+          flushText();
+          saveCurrent();
+          deck.slides.splice(deck.current + 1, 0, slide);
+          deck.current += 1;
+          loadCurrent();
+          historyLink.commit(label);
+        }
+        function newSlide() {
+          insertSlide(
+            makeSlide({ layout: "body", title: "New Slide", body: "First point\nSecond point" }),
+            "Add Slide",
+          );
+        }
+        function duplicateSlide() {
+          saveCurrent();
+          insertSlide({ ...clone(deck.slides[deck.current]), id: newId() }, "Duplicate Slide");
+        }
+        function deleteSlide() {
+          if (deck.slides.length === 1) {
+            rt.showBanner("A deck needs at least one slide.");
+            return;
+          }
+          flushText();
+          saveCurrent();
+          deck.slides.splice(deck.current, 1);
+          deck.current = Math.min(deck.current, deck.slides.length - 1);
+          loadCurrent();
+          historyLink.commit("Delete Slide");
+        }
+        function moveSlide(step) {
+          const to = deck.current + step;
+          if (to < 0 || to >= deck.slides.length) return;
+          flushText();
+          saveCurrent();
+          [deck.slides[deck.current], deck.slides[to]] = [
+            deck.slides[to],
+            deck.slides[deck.current],
+          ];
+          deck.current = to;
+          loadCurrent();
+          historyLink.commit("Move Slide");
+        }
+        function setLayout(layout) {
+          const slide = deck.slides[deck.current];
+          if (slide.layout === layout) return;
+          flushText();
+          saveCurrent();
+          slide.layout = layout;
+          if (layout === "image" && !slide.content.image) slide.content.image = firstImage();
+          relayout(slide);
+          loadCurrent();
+          historyLink.commit(`Layout ${LAYOUT_LABEL[layout]}`);
+        }
+        function setImage(name) {
+          const slide = deck.slides[deck.current];
+          flushText();
+          saveCurrent();
+          slide.content.image = name;
+          if (name) slide.layout = "image";
+          relayout(slide);
+          loadCurrent();
+          historyLink.commit(name ? `Image ${name}` : "Remove Image");
+        }
+        function resetLayout() {
+          const slide = deck.slides[deck.current];
+          flushText();
+          saveCurrent();
+          relayout(slide);
+          loadCurrent();
+          historyLink.commit("Reset Layout");
+        }
+        function setAccent(raw) {
+          const value = accentValue(raw);
+          if (value === null) {
+            rt.showBanner(
+              `"${raw}" is not a CSS colour or theme token. Try chart-2, var(--info) or #e11d48.`,
+            );
+            renderPanel();
+            return;
+          }
+          if (value === deck.accent) return;
+          flushText();
+          saveCurrent();
+          deck.accent = value;
+          for (const slide of deck.slides) {
+            for (const layer of slide.scene.layers)
+              if (layer.id === "accent" && layer.type === "shape") layer.fill = value;
+          }
+          loadCurrent();
+          historyLink.commit(`Accent ${value}`);
+        }
+        // Text edits re-flow the title, body and accent bar from the layout, so a longer title pushes the rest down. A
+        // flow layer the user moved or restyled keeps its offset and style; other layers (photos, shapes) stay put.
+        function reflowText(slide, before) {
+          const current = canvas.get();
+          const old = new Map(sceneFor(slide.layout, before).layers.map((l) => [l.id, l]));
+          const fresh = new Map(sceneFor(slide.layout, slide.content).layers.map((l) => [l.id, l]));
+          const keep = (layer) => {
+            const was = old.get(layer.id);
+            const next = fresh.get(layer.id);
+            if (!was) return next;
+            const moved = {
+              ...layer,
+              x: next.x + (layer.x - was.x),
+              y: next.y + (layer.y - was.y),
+            };
+            if (layer.type === "text") moved.text = next.text;
+            return moved;
+          };
+          const layers = current.layers.flatMap((layer) => {
+            if (!FLOW_IDS.includes(layer.id)) return [layer];
+            return fresh.has(layer.id) ? [keep(layer)] : [];
+          });
+          for (const id of FLOW_IDS) {
+            if (fresh.has(id) && !current.layers.some((l) => l.id === id))
+              layers.push(fresh.get(id));
+          }
+          canvas.set({ ...current, layers });
+        }
+        let textTimer = 0;
+        let textLabel = "";
+        function editText(key, raw) {
+          const slide = deck.slides[deck.current];
+          const before = { ...slide.content };
+          slide.content[key] = raw;
+          reflowText(slide, before);
+          clearTimeout(textTimer);
+          textLabel = key === "title" ? "Edit Title" : "Edit Body";
+          textTimer = setTimeout(flushText, 500);
+        }
+        // A typing burst is one undo step; anything that changes slides first commits the pending burst.
+        function flushText() {
+          if (!textTimer) return;
+          clearTimeout(textTimer);
+          textTimer = 0;
+          saveCurrent();
+          historyLink.commit(textLabel);
+        }
+        function setLayersPanel(on) {
+          layersPanel = on;
+          $("app").dataset.layers = on ? "on" : "off";
+          $("layers-toggle").setAttribute("aria-pressed", String(on));
+          persist();
+        }
+
+        // ---- Presenter and export -----------------------------------------------------------------------------
+        let presenting = false;
+        let presentAt = 0;
+        let presentToken = 0;
+        async function openPresenter() {
+          if (presenting) return;
+          flushText();
+          saveCurrent();
+          canvas.select(null);
+          presenting = true;
+          presentAt = deck.current;
+          $("presenter").hidden = false;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+          await showPresent();
+        }
+        async function showPresent() {
+          const token = ++presentToken;
+          const n = deck.slides.length;
+          $("presenter-count").textContent = `${presentAt + 1} / ${n}`;
+          $("presenter-progress").style.width = `${((presentAt + 1) / n) * 100}%`;
+          const url = await renderUrl(deck.slides[presentAt], presentAt, PRESENT_SCALE);
+          if (presenting && token === presentToken) $("presenter-img").src = url;
+          if (presentAt + 1 < n)
+            await renderUrl(deck.slides[presentAt + 1], presentAt + 1, PRESENT_SCALE); // warm the next one
+        }
+        function stepPresent(step) {
+          const next = clamp(presentAt + step, 0, deck.slides.length - 1);
+          if (next === presentAt) return;
+          presentAt = next;
+          showPresent().catch(showError);
+        }
+        function closePresenter() {
+          if (!presenting) return;
+          presenting = false;
+          $("presenter").hidden = true;
+          $("presenter-img").removeAttribute("src");
+          if (presentAt !== deck.current) selectSlide(presentAt);
+        }
+        let exporting = false;
+        function deckFile() {
+          return {
+            format: "slide-deck",
+            version: 1,
+            title: OPTS.title,
+            accent: deck.accent,
+            width: W,
+            height: H,
+            // Same shape as options.slides, so the deck can be opened again from these options.
+            slides: deck.slides.map((s) => ({
+              layout: s.layout,
+              title: s.content.title,
+              body: s.content.body,
+              ...(s.content.image ? { image: s.content.image } : {}),
+            })),
+            // The full layers document per slide (moves, restyles and added layers), images named "asset:<file>".
+            scenes: deck.slides.map((s) => s.scene),
+          };
+        }
+        async function exportDeck() {
+          if (exporting) throw new Error("slide-deck: an export is already running");
+          flushText();
+          saveCurrent();
+          exporting = true;
+          $("export").disabled = true;
+          try {
+            const base = slug(OPTS.title);
+            const files = [];
+            for (let i = 0; i < deck.slides.length; i++) {
+              $("status").textContent = `Exporting slide ${i + 1} of ${deck.slides.length}`;
+              const blob = await renderSlide(deck.slides[i], i, 1, "export");
+              files.push(
+                new File([blob], `${base}-${String(i + 1).padStart(2, "0")}.png`, {
+                  type: "image/png",
+                }),
+              );
+            }
+            files.push(
+              new File([JSON.stringify(deckFile(), null, 2)], `${base}.json`, {
+                type: "application/json",
+              }),
+            );
+            for (const file of files) {
+              await ws.attach(file);
+              await ws.download(file, file.name);
+            }
+            renderMeta();
+            $("status").textContent =
+              `Exported ${plural(deck.slides.length, "slide")} as PNG plus ${base}.json`;
+            return files;
+          } catch (err) {
+            $("status").textContent = "Export failed";
+            throw err;
+          } finally {
+            exporting = false;
+            $("export").disabled = false;
+          }
+        }
+
+        // ---- Values (the bolt-on and agent view of the deck) ----------------------------------------------------
+        function getValues() {
+          saveCurrent();
+          return {
+            title: OPTS.title,
+            accent: deck.accent,
+            current: deck.current,
+            slides: deck.slides.map((s) => ({ layout: s.layout, ...s.content })),
+          };
+        }
+        async function setValues(partial, label = "Set Slides") {
+          if (!isPlain(partial)) throw new TypeError("slide-deck: setValues needs an object");
+          const { slides, current, accent, ...rest } = partial;
+          const extra = Object.keys(rest);
+          if (extra.length)
+            throw new TypeError(
+              `slide-deck: setValues has unknown key "${extra[0]}" (use slides, current, accent)`,
+            );
+          if (slides !== undefined) {
+            if (
+              !Array.isArray(slides) ||
+              slides.length === 0 ||
+              slides.length > MAX_SLIDES ||
+              !slides.every(isSlideSpec)
+            ) {
+              throw new TypeError(
+                "slide-deck: slides must be a non-empty array of { layout?, title?, body?, image? }",
+              );
+            }
+            for (const s of slides) {
+              if (s.image && !dims.has(s.image))
+                throw new Error(
+                  `slide-deck: image "${s.image}" is not an attached image (attached: ${[...dims.keys()].join(", ") || "none"})`,
+                );
+            }
+          }
+          if (accent !== undefined && accentValue(accent) === null)
+            throw new TypeError(
+              `slide-deck: accent ${JSON.stringify(accent)} is not a CSS colour or theme token`,
+            );
+          const count = slides !== undefined ? slides.length : deck.slides.length;
+          if (
+            current !== undefined &&
+            (!Number.isInteger(current) || current < 0 || current >= count)
+          ) {
+            throw new RangeError(
+              `slide-deck: current must be a slide index from 0 to ${count - 1}`,
+            );
+          }
+          flushText();
+          saveCurrent();
+          if (accent !== undefined) deck.accent = accentValue(accent);
+          if (slides !== undefined) {
+            deck.slides = slides.map((spec) => makeSlide(spec));
+            deck.current = 0;
+          } else if (accent !== undefined) {
+            for (const slide of deck.slides) {
+              for (const layer of slide.scene.layers)
+                if (layer.id === "accent" && layer.type === "shape") layer.fill = deck.accent;
+            }
+          }
+          if (current !== undefined) deck.current = current;
+          deck.current = clamp(deck.current, 0, deck.slides.length - 1);
+          loadCurrent();
+          historyLink.commit(label);
+          return getValues();
+        }
+
+        // ---- Bolt-on runtime (window.t3template): panels, controls, image stages on every rendered slide --------
+        const panels = $("panels");
+        const rt = t3kit.templateRuntime.create({
+          id: "slide-deck",
+          pipeline: "image",
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            // 'top': first in the inspector, above Slide, in creation order (in view on load); 'bottom': after Shortcuts.
+            if (position === "top")
+              panels.insertBefore(section, panels.querySelector('[data-panel="slide"]'));
+            else panels.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getValues(),
+          export: () => exportDeck(),
+          setValues: (partial, label) => setValues(partial, label),
+          reservedKeys: [
+            "n",
+            "p",
+            "l",
+            "e",
+            "shift+d",
+            "alt+1",
+            "alt+2",
+            "alt+3",
+            "mod+e",
+            "mod+z",
+            "mod+shift+z",
+            "mod+y",
+            "mod+d",
+            "escape",
+            "delete",
+            "backspace",
+            "space",
+            "enter",
+          ],
+          onBoltOnChange() {
+            refresh();
+            if (presenting) showPresent().catch(showError);
+          },
+        });
+        const showError = (err) => rt.reportError(err);
+
+        // ---- Editor canvas (one layers document, swapped per slide) and the offscreen exporter ------------------
+        const canvas = t3kit.layers.create($("editor"), { width: W, height: H });
+        const exporter = t3kit.layers.create($("exporter"), { width: W, height: H });
+        let history = null;
+        let historyLink = null;
+        canvas.on("change", () => {
+          saveCurrent();
+          refresh();
+        });
+
+        // Rendered pictures hold resolved theme colours: re-render them when T3 switches theme.
+        function onTheme() {
+          themeEpoch += 1;
+          if (!booted) return;
+          renderList();
+          if (presenting) showPresent().catch(showError);
+        }
+        const themeObserver = new MutationObserver(onTheme);
+        themeObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["style", "class", "data-theme"],
+        });
+        const themeTag = document.getElementById("t3-theme");
+        if (themeTag)
+          themeObserver.observe(themeTag, { childList: true, characterData: true, subtree: true });
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onTheme);
+
+        // ---- Keys: undo and redo are the deck history; the layers canvas never sees them --------------------------
+        const isTyping = (el) =>
+          el instanceof HTMLElement &&
+          (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+        const PRESENT_NEXT = ["arrowright", "arrowdown", "pagedown", " ", "enter"];
+        const PRESENT_PREV = ["arrowleft", "arrowup", "pageup", "backspace"];
+        function onKey(e) {
+          const key = e.key.toLowerCase();
+          const mod = e.metaKey || e.ctrlKey;
+          if (presenting) {
+            e.stopPropagation();
+            if (key === "escape") {
+              e.preventDefault();
+              closePresenter();
+            } else if (PRESENT_NEXT.includes(key)) {
+              e.preventDefault();
+              stepPresent(1);
+            } else if (PRESENT_PREV.includes(key)) {
+              e.preventDefault();
+              stepPresent(-1);
+            } else if (key === "home" || key === "end") {
+              e.preventDefault();
+              stepPresent(key === "home" ? -deck.slides.length : deck.slides.length);
+            }
+            return;
+          }
+          if (!booted) return;
+          if (mod && !e.altKey && (key === "z" || key === "y") && !isTyping(e.target)) {
+            e.preventDefault();
+            e.stopPropagation(); // the layers canvas would otherwise also undo one of its own layer edits
+            flushText();
+            if (e.shiftKey || key === "y") history.redo();
+            else history.undo();
+            return;
+          }
+          if (isTyping(e.target)) return;
+          if (mod) {
+            if (key === "e" && !e.altKey) {
+              e.preventDefault();
+              exportDeck().catch(showError);
+            }
+            return;
+          }
+          if (e.altKey) {
+            const digit = /^Digit([1-3])$/.exec(e.code || "");
+            if (digit) {
+              e.preventDefault();
+              e.stopPropagation();
+              setLayout(LAYOUTS[Number(digit[1]) - 1]);
+            } else if (key === "arrowup" || key === "arrowdown") {
+              e.preventDefault();
+              e.stopPropagation(); // not a layer nudge
+              moveSlide(key === "arrowup" ? -1 : 1);
+            }
+            return;
+          }
+          const inList = e.target instanceof Element && e.target.closest("#slide-list") !== null;
+          if (
+            inList &&
+            (key === "arrowup" ||
+              key === "arrowdown" ||
+              key === "arrowleft" ||
+              key === "arrowright")
+          ) {
+            e.preventDefault();
+            selectSlide(deck.current + (key === "arrowup" || key === "arrowleft" ? -1 : 1));
+            return;
+          }
+          if (inList && (key === "home" || key === "end")) {
+            e.preventDefault();
+            selectSlide(key === "home" ? 0 : deck.slides.length - 1);
+            return;
+          }
+          if (inList && (key === "delete" || key === "backspace")) {
+            e.preventDefault();
+            deleteSlide();
+            return;
+          }
+          if (e.shiftKey && e.code === "KeyD") {
+            e.preventDefault();
+            duplicateSlide();
+          } else if (e.shiftKey) {
+            return;
+          } else if (e.code === "KeyN") {
+            e.preventDefault();
+            newSlide();
+          } else if (e.code === "KeyP") {
+            e.preventDefault();
+            openPresenter().catch(showError);
+          } else if (e.code === "KeyE") {
+            e.preventDefault();
+            exportDeck().catch(showError);
+          } else if (e.code === "KeyL") {
+            e.preventDefault();
+            setLayersPanel(!layersPanel);
+          } else if (key === "pagedown" || key === "pageup") {
+            e.preventDefault();
+            selectSlide(deck.current + (key === "pagedown" ? 1 : -1));
+          }
+        }
+        window.addEventListener("keydown", onKey, true);
+
+        // ---- Controls ------------------------------------------------------------------------------------------
+        for (const [token, label] of ACCENT_TOKENS) {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "chip";
+          chip.dataset.value = `var(--${token})`;
+          chip.style.background = `var(--${token})`;
+          chip.title = `${label} (var(--${token}))`;
+          chip.setAttribute("aria-label", `${label} accent`);
+          chip.addEventListener("click", () => setAccent(token));
+          $("accent-chips").append(chip);
+        }
+        $("f-accent").addEventListener("change", (e) => setAccent(e.target.value));
+        $("new").addEventListener("click", newSlide);
+        $("dup").addEventListener("click", duplicateSlide);
+        $("up").addEventListener("click", () => moveSlide(-1));
+        $("down").addEventListener("click", () => moveSlide(1));
+        $("del").addEventListener("click", deleteSlide);
+        $("reset").addEventListener("click", resetLayout);
+        for (const b of document.querySelectorAll("#layout-seg button"))
+          b.addEventListener("click", () => setLayout(b.dataset.layout));
+        $("f-title").addEventListener("input", (e) => editText("title", e.target.value));
+        $("f-body").addEventListener("input", (e) => editText("body", e.target.value));
+        $("f-image").addEventListener("change", (e) => setImage(e.target.value));
+        $("undo").addEventListener("click", () => {
+          flushText();
+          history.undo();
+        });
+        $("redo").addEventListener("click", () => history.redo());
+        $("layers-toggle").addEventListener("click", () => setLayersPanel(!layersPanel));
+        $("present").addEventListener("click", () => openPresenter().catch(showError));
+        $("export").addEventListener("click", () => exportDeck().catch(showError));
+        $("presenter-exit").addEventListener("click", closePresenter);
+        $("presenter-stage").addEventListener("click", (e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          stepPresent(e.clientX >= r.left + r.width / 2 ? 1 : -1);
+        });
+
+        // ---- Boot ----------------------------------------------------------------------------------------------
+        async function boot() {
+          const ready = await ws.ready();
+          const assets = ready.assets ?? [];
+          for (const a of assets) {
+            urlOf.set(a.name, a.url);
+            nameOf.set(a.url, a.name);
+          }
+          for (const a of assets) {
+            if (
+              !(a.mimeType || "").startsWith("image/") &&
+              !/\.(jpe?g|png|webp|avif|gif)$/i.test(a.name || "")
+            )
+              continue;
+            const img = new Image();
+            img.src = a.url;
+            await img.decode();
+            dims.set(a.name, { w: img.naturalWidth, h: img.naturalHeight });
+          }
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) && saved.v === 1 && saved.key === STATE_KEY && isPlain(saved.history)
+              ? saved
+              : null;
+          if (!restored) {
+            deck.slides = OPTS.slides.map((spec) => makeSlide(spec));
+            deck.current = 0;
+            loadCurrent();
+          }
+          history = t3kit.history.create($("history"), {
+            title: "History",
+            label: "Opened",
+            limit: 100,
+            keys: false,
+          });
+          if (restored) history.set(restored.history);
+          // Undo, redo and jumps restore the deck and the bolt-on controls; each drag on the canvas is one step.
+          historyLink = rt.linkHistory(history, deckState, applyState, {
+            sources: { "Edit Slide": canvas },
+            idleMs: 300,
+          });
+          history.on("change", () => refresh());
+          if (restored) {
+            deck.current = clamp(restored.selected ?? 0, 0, deck.slides.length - 1);
+            loadCurrent();
+          }
+          // The layer list and inspector sit beside the canvas when there is room; L toggles them, and the choice is saved.
+          setLayersPanel(
+            restored && typeof restored.layersPanel === "boolean"
+              ? restored.layersPanel
+              : window.innerWidth >= 1600,
+          );
+          rt.publish({ instances: { layers: canvas, history }, saved: restored?.controls });
+          booted = true;
+          refresh();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

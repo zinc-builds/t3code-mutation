@@ -17,6 +17,7 @@ import {
   type ThemeAppearance,
 } from "@t3tools/shared/themePalettes";
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -93,6 +94,35 @@ export interface HtmlPreview {
   readonly missingImages?: ReadonlyArray<string>;
 }
 
+/** What a page reported while it booted in the preview browser. */
+export interface PageObservation {
+  readonly problems: ReadonlyArray<HeadlessChrome.PageProblem>;
+  /** Problems past the first ones, which were dropped. */
+  readonly omitted: number;
+  /** Whether the page settled within its budget, rather than being cut off. */
+  readonly settled: boolean;
+  /** Present when the input asked for a probe and the page settled. */
+  readonly probe?: HeadlessChrome.PageProbeResult;
+}
+
+export interface ObservePageInput {
+  /** A finished page; it is loaded as given. */
+  readonly html: string;
+  readonly width: number;
+  /** Files the page may fetch from its own origin, by path. */
+  readonly resources: ReadonlyMap<string, HeadlessChrome.ServedResource>;
+  /** Console messages at any level that start with one of these count as problems. */
+  readonly problemPrefixes: ReadonlyArray<string>;
+  /** A `sandbox` CSP to serve the page under, so it runs with the opaque origin its real host gives it. */
+  readonly sandbox?: string | undefined;
+  /** Evaluates, after load, to a promise that resolves once the page has booted. */
+  readonly settledExpression: string;
+  /** How long the page gets from navigation. */
+  readonly budget: Duration.Input;
+  /** A follow-up step, with its own budget, once the page has settled. */
+  readonly probe?: HeadlessChrome.PageProbe | undefined;
+}
+
 export class HtmlRender extends Context.Service<
   HtmlRender,
   {
@@ -122,6 +152,17 @@ export class HtmlRender extends Context.Service<
       | PreviewBrowser.PreviewBrowserUnsupportedError
       | PreviewBrowserHost.PreviewBrowserHostError
       | HeadlessChrome.HtmlRenderBrowserError
+    >;
+    /**
+     * Loads a finished page in the preview browser and reports its uncaught
+     * exceptions and console errors. None when the browser is not installed:
+     * this never installs it.
+     */
+    readonly observe: (
+      input: ObservePageInput,
+    ) => Effect.Effect<
+      Option.Option<PageObservation>,
+      PreviewBrowserHost.PreviewBrowserHostError | HeadlessChrome.HtmlRenderBrowserError
     >;
   }
 >()("t3/htmlRender/HtmlRender") {}
@@ -480,7 +521,21 @@ const make = Effect.gen(function* () {
     } satisfies HtmlPreview;
   });
 
-  return HtmlRender.of({ prepare, publish, preview });
+  const observe = Effect.fn("HtmlRender.observe")(function* (input: ObservePageInput) {
+    const executable = yield* previewBrowser.installed;
+    if (Option.isNone(executable)) return Option.none();
+    const observation = yield* launching(executable.value, (noSandbox) =>
+      HeadlessChrome.observeHtmlPage({
+        executable: executable.value,
+        noSandbox,
+        urlFragment: MEASURE_FRAGMENT,
+        ...input,
+      }).pipe(Effect.provideContext(services)),
+    );
+    return Option.some(observation);
+  });
+
+  return HtmlRender.of({ prepare, publish, preview, observe });
 });
 
 export const layer = Layer.effect(HtmlRender, make);

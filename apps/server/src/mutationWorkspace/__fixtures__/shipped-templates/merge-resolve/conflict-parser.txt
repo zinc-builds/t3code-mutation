@@ -1,0 +1,156 @@
+// Tiny expression tokenizer used by the query parser.
+// Splits source text into tokens; the parser consumes them in order.
+
+export type TokenKind =
+  | "number"
+  | "identifier"
+  | "string"
+  | "operator"
+  | "punctuation"
+  | "eof";
+
+export interface Token {
+  kind: TokenKind;
+  text: string;
+  start: number;
+  end: number;
+}
+
+export class TokenizeError extends Error {
+  constructor(
+    message: string,
+    readonly position: number,
+  ) {
+    super(message);
+    this.name = "TokenizeError";
+  }
+}
+
+const OPERATORS = ["==", "!=", "<=", ">=", "&&", "||", "+", "-", "*", "/", "=", "<", ">", "!", "%"];
+const PUNCTUATION = ["(", ")", "{", "}", "[", "]", ",", ";", ".", ":"];
+
+const IDENT_START = /[A-Za-z_]/;
+const IDENT_PART = /[A-Za-z0-9_$]/;
+const DIGIT = /[0-9]/;
+
+// Raise a TokenizeError that points at the offending line.
+export function fail(src: string, pos: number, detail: string): never {
+  const line = src.slice(0, pos).split("\n").length;
+  throw new TokenizeError("Unexpected input at line " + line + ": " + detail, pos);
+}
+
+// Skip whitespace; returns the first non-space index.
+export function skipSpace(src: string, pos: number): number {
+  let index = pos;
+  while (index < src.length && /\s/.test(src[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+// Read a run of characters that match the given pattern.
+export function readRun(src: string, pos: number, test: RegExp): number {
+  let index = pos;
+  while (index < src.length && test.test(src[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+// Identifiers may contain digits after the first character.
+export function readIdentifier(src: string, pos: number): Token {
+  const end = readRun(src, pos + 1, IDENT_PART);
+  return { kind: "identifier", text: src.slice(pos, end), start: pos, end };
+}
+
+// Digits only; signs are handled by the parser.
+export function readNumber(src: string, pos: number): Token {
+  const end = readRun(src, pos, DIGIT);
+  return { kind: "number", text: src.slice(pos, end), start: pos, end };
+}
+
+export function readString(src: string, pos: number): Token {
+  let index = pos + 1;
+  while (index < src.length && src[index] !== '"') {
+    if (src[index] === "\\" && index + 1 < src.length) {
+      index += 1;
+    }
+    index += 1;
+  }
+  if (index >= src.length) {
+    fail(src, pos, "unterminated string");
+  }
+  const end = index + 1;
+  return { kind: "string", text: src.slice(pos, end), start: pos, end };
+}
+
+function matchOperator(src: string, pos: number): string | undefined {
+  return OPERATORS.find((op) => src.startsWith(op, pos));
+}
+
+<<<<<<< HEAD
+export function nextToken(src: string, pos: number): Token {
+||||||| 68056e0
+export function readToken(src: string, pos: number): Token {
+=======
+// Look ahead one token without consuming it.
+export function peek(src: string, pos: number): Token {
+  return readToken(src, skipSpace(src, pos));
+}
+
+export function readToken(src: string, pos: number): Token {
+>>>>>>> theirs
+  const index = pos;
+<<<<<<< HEAD
+  if (!(index < src.length)) {
+||||||| 68056e0
+  if (index >= src.length) {
+=======
+  if (index >= src.length || src.length === 0) {
+>>>>>>> theirs
+    // Past the end: report where the input stopped.
+<<<<<<< HEAD
+    fail(src, index, "nextToken: unexpected end of input");
+||||||| 68056e0
+    fail(src, index, "readToken: unexpected end of input");
+=======
+    fail(src, index, "readToken: input ended before a token was read");
+>>>>>>> theirs
+  }
+  const ch = src[index];
+  if (IDENT_START.test(ch)) {
+    return readIdentifier(src, index);
+  }
+  if (DIGIT.test(ch)) {
+    return readNumber(src, index);
+  }
+  if (ch === '"') {
+    return readString(src, index);
+  }
+  const op = matchOperator(src, index);
+  if (op !== undefined) {
+    return { kind: "operator", text: op, start: index, end: index + op.length };
+  }
+  if (PUNCTUATION.includes(ch)) {
+    return { kind: "punctuation", text: ch, start: index, end: index + 1 };
+  }
+  fail(src, index, 'unexpected character "' + ch + '"');
+}
+
+// Tokenize the whole source, always ending with an eof token.
+export function tokenize(src: string): Token[] {
+  const tokens: Token[] = new Array<Token>();
+  let index = skipSpace(src, 0);
+  while (index < src.length) {
+    const tok = nextToken(src, index);
+    tokens.push(tok);
+    index = skipSpace(src, tok.end);
+  }
+  tokens.push({ kind: "eof", text: "", start: src.length, end: src.length });
+  return tokens;
+}
+
+// Human-readable label for a token, used in parser error messages.
+export function describe(tok: Token): string {
+  return tok.kind + " " + JSON.stringify(tok.text);
+}

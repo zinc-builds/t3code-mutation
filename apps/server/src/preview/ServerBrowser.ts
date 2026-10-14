@@ -250,6 +250,12 @@ export class ServerBrowser extends Context.Service<
      * clients report again on connect and whenever the list changes.
      */
     readonly reportProfiles: (input: PreviewReportProfilesInput) => Effect.Effect<void>;
+    /**
+     * A page of its own in the shared browser, with throwaway storage, closed
+     * with the scope. No preview tab or viewer sees it; mutation workspaces
+     * review live pages in these.
+     */
+    readonly scratchPage: Effect.Effect<Page, ServerBrowserLaunchError, Scope.Scope>;
   }
 >()("t3/preview/ServerBrowser") {}
 
@@ -2470,8 +2476,18 @@ const make = Effect.gen(function* () {
       catch: (cause) => new PreviewClearProfileError({ profileId, cause }),
     });
 
+  const scratchPage = Effect.acquireRelease(
+    Effect.tryPromise({
+      try: () => contexts.scratchPage(),
+      catch: (cause) => new ServerBrowserLaunchError({ cause }),
+    }),
+    // Closing the page closes its context too.
+    (page) => Effect.promise(() => page.close().catch(constVoid)),
+  );
+
   return ServerBrowser.of({
     attachViewer,
+    scratchPage,
     clearProfile,
     reportProfiles,
     openDownload,

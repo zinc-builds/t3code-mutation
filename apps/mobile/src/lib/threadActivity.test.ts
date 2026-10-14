@@ -2621,6 +2621,65 @@ describe("html renders", () => {
   });
 });
 
+describe("mutation workspaces", () => {
+  const workspace = { attachmentId: "attachment-workspace", title: "Photo editor", assets: [] };
+  const mutateCall = (
+    overrides: Partial<Extract<OrchestrationV2TurnItem, { type: "dynamic_tool" }>> = {},
+  ): OrchestrationV2TurnItem => ({
+    ...base("item-workspace", "2026-06-20T00:00:02.500Z", 2),
+    type: "dynamic_tool",
+    toolName: "mcp__t3-code__workspace_mutate",
+    input: { title: workspace.title },
+    output: { structuredContent: { mutationWorkspace: workspace } },
+    ...overrides,
+  });
+
+  it("shows a completed workspace as a row that reopens it, kept when its run folds", () => {
+    const feed = buildThreadFeed([
+      projected(userMessage(), 0),
+      projected(command(), 1),
+      projected(mutateCall(), 2),
+      projected(assistantMessage("2026-06-20T00:00:04.000Z"), 3),
+    ]);
+    expect(feed.find((entry) => entry.type === "workspace")).toMatchObject({
+      type: "workspace",
+      itemId: "item-workspace",
+      workspace,
+      runId,
+    });
+    const collapsed = deriveThreadFeedPresentation(
+      feed,
+      {
+        runId,
+        status: "completed",
+        startedAt: "2026-06-20T00:00:01.000Z",
+        completedAt: "2026-06-20T00:00:04.000Z",
+      },
+      new Set(),
+    );
+    expect(collapsed.map((entry) => entry.type)).toEqual([
+      "message",
+      "run-fold",
+      "workspace",
+      "message",
+    ]);
+  });
+
+  it("leaves running and failed calls in the work log", () => {
+    for (const call of [
+      mutateCall({ status: "running", output: null }),
+      mutateCall({ status: "failed" }),
+      mutateCall({
+        output: { isError: true, structuredContent: { mutationWorkspace: workspace } },
+      }),
+    ]) {
+      expect(buildThreadFeed([projected(call, 0)]).map((entry) => entry.type)).toEqual([
+        "activity-group",
+      ]);
+    }
+  });
+});
+
 describe("MCP apps", () => {
   const app = {
     attachmentId: "attachment-app",

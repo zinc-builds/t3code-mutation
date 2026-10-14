@@ -15,6 +15,19 @@ import {
   McpAppUpdateModelContextInput,
 } from "./mcpApps.ts";
 import {
+  WorkspacePreviewActInput,
+  WorkspacePreviewActResult,
+  WorkspacePreviewError,
+  WorkspacePreviewEvent,
+  WorkspacePreviewOpenInput,
+  WorkspacePreviewSession,
+  WorkspacePreviewSubscribeInput,
+  WorkspaceReadStateInput,
+  WorkspaceReadStateResult,
+  WorkspaceStateError,
+  WorkspaceUpdateStateInput,
+} from "./mutationWorkspace.ts";
+import {
   ChatGptReconnectProfileInput,
   ChatGptReconnectProfile,
   ChatGptImportProfileInput,
@@ -401,6 +414,13 @@ export const WS_METHODS = {
   mcpAppsToolInfo: "mcpApps.toolInfo",
   mcpAppsReadResource: "mcpApps.readResource",
   mcpAppsUpdateModelContext: "mcpApps.updateModelContext",
+
+  // Mutation workspace methods
+  workspaceReadState: "workspace.readState",
+  workspaceUpdateState: "workspace.updateState",
+  workspacePreviewOpen: "workspace.previewOpen",
+  workspacePreviewAct: "workspace.previewAct",
+  workspaceSubscribePreview: "workspace.subscribePreview",
 
   // Provider methods
   providerUploadFeedback: "provider.uploadFeedback",
@@ -1339,6 +1359,36 @@ const WsMcpAppsReadResourceRpc = Rpc.make(WS_METHODS.mcpAppsReadResource, {
   error: Schema.Union([McpAppRequestError, EnvironmentAuthorizationError]),
 });
 
+const WsWorkspaceReadStateRpc = Rpc.make(WS_METHODS.workspaceReadState, {
+  payload: WorkspaceReadStateInput,
+  success: WorkspaceReadStateResult,
+  error: Schema.Union([WorkspaceStateError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspaceUpdateStateRpc = Rpc.make(WS_METHODS.workspaceUpdateState, {
+  payload: WorkspaceUpdateStateInput,
+  error: Schema.Union([WorkspaceStateError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspacePreviewOpenRpc = Rpc.make(WS_METHODS.workspacePreviewOpen, {
+  payload: WorkspacePreviewOpenInput,
+  success: WorkspacePreviewSession,
+  error: Schema.Union([WorkspacePreviewError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspacePreviewActRpc = Rpc.make(WS_METHODS.workspacePreviewAct, {
+  payload: WorkspacePreviewActInput,
+  success: WorkspacePreviewActResult,
+  error: Schema.Union([WorkspacePreviewError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspaceSubscribePreviewRpc = Rpc.make(WS_METHODS.workspaceSubscribePreview, {
+  payload: WorkspacePreviewSubscribeInput,
+  success: WorkspacePreviewEvent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
 const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
   payload: ProviderUploadFeedbackInput,
   success: ProviderUploadFeedbackResult,
@@ -2001,6 +2051,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsMcpAppsToolInfoRpc,
   WsMcpAppsReadResourceRpc,
   WsMcpAppsUpdateModelContextRpc,
+  WsWorkspaceReadStateRpc,
+  WsWorkspaceUpdateStateRpc,
+  WsWorkspacePreviewOpenRpc,
+  WsWorkspacePreviewActRpc,
+  WsWorkspaceSubscribePreviewRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsSubscribeWorktreeSetupRpc,

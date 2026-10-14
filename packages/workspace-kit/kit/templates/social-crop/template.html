@@ -1,0 +1,1803 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Social Crop</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: -2px;
+      }
+      .app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 40px;
+        padding: 0 10px;
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+        flex: 0 0 auto;
+      }
+      .top h1 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .meta {
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+      .tbx {
+        display: flex;
+        gap: 6px;
+      }
+      .tbx:empty {
+        display: none;
+      }
+      .status {
+        color: var(--muted-foreground);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 280px;
+      }
+      .sel {
+        height: 24px;
+        border: 1px solid var(--input);
+        background: var(--muted);
+        border-radius: calc(var(--radius) - 4px);
+        padding: 0 6px;
+        max-width: 200px;
+      }
+      .btn {
+        height: 24px;
+        padding: 0 10px;
+        border: 1px solid var(--input);
+        background: var(--muted);
+        border-radius: calc(var(--radius) - 4px);
+        white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) {
+        border-color: var(--ring);
+      }
+      .btn.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+        font-weight: 600;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn.wide {
+        width: 100%;
+        height: 28px;
+      }
+      .body {
+        flex: 1 1 0;
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      .left {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        background: var(--card);
+        border-right: 1px solid var(--border);
+      }
+      .hist {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .center {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        min-width: 0;
+        min-height: 0;
+      }
+      .viewer {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: var(--background);
+        overflow: hidden;
+      }
+      .empty {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        color: var(--muted-foreground);
+        z-index: 2;
+        pointer-events: none;
+      }
+      .strip {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        background: var(--card);
+        border-top: 1px solid var(--border);
+      }
+      .strip-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 30px;
+        padding: 0 12px;
+        flex: 0 0 auto;
+        border-bottom: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .strip-head b {
+        color: var(--foreground);
+        font-weight: 600;
+      }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        color: var(--foreground);
+      }
+      .toggle input {
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .cards {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        padding: 10px 12px 12px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .card {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 5px;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        background: none;
+        color: inherit;
+        text-align: left;
+        min-width: 0;
+      }
+      .card:hover {
+        border-color: var(--border);
+      }
+      .card[aria-pressed="true"] {
+        border-color: var(--ring);
+        background: var(--muted);
+      }
+      .cv {
+        display: block;
+        border-radius: calc(var(--radius) - 6px);
+      }
+      .cap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 1px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .cap b {
+        color: var(--foreground);
+        font-weight: 600;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cap span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-variant-numeric: tabular-nums;
+      }
+      .right {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        background: var(--card);
+        border-left: 1px solid var(--border);
+      }
+      .scroll {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-height: 56px;
+        padding: 8px 12px;
+        border-top: 1px solid var(--border);
+      }
+      .sec {
+        border-bottom: 1px solid var(--border);
+      }
+      .sec > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 12px;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        user-select: none;
+      }
+      .sec > summary::-webkit-details-marker {
+        display: none;
+      }
+      .sec > summary::before {
+        content: "\25B8";
+        font-size: 10px;
+        width: 10px;
+      }
+      .sec[open] > summary::before {
+        content: "\25BE";
+      }
+      .sec-body {
+        padding: 2px 12px 12px;
+      }
+      .dev-body {
+        padding: 0;
+      }
+      .plat {
+        display: grid;
+        grid-template-columns: 16px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 6px;
+        border-radius: var(--radius);
+      }
+      .plat input {
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .plat[aria-current="true"] {
+        background: var(--muted);
+        box-shadow: inset 2px 0 0 var(--primary);
+      }
+      .plat-main {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 0;
+        padding: 4px 0;
+        background: none;
+        border: 0;
+        text-align: left;
+      }
+      .plat .name {
+        font-weight: 600;
+      }
+      .plat[data-off="true"] .name {
+        color: var(--muted-foreground);
+        font-weight: 500;
+      }
+      .plat .sub {
+        color: var(--muted-foreground);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .plat .aspect {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .kv {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 3px 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .kv span:first-child {
+        color: var(--muted-foreground);
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+        margin: 10px 0 0;
+      }
+      .keys {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 10px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      kbd {
+        font: 10px/1.6 var(--font-mono);
+        padding: 0 4px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 6px);
+        color: var(--foreground);
+        justify-self: start;
+      }
+      .out {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .out li {
+        padding: 2px 0;
+      }
+      #engine {
+        position: fixed;
+        left: -10000px;
+        top: 0;
+        width: 800px;
+        height: 600px;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      #engine > div {
+        width: 800px;
+        height: 600px;
+      }
+      @media (max-width: 900px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          min-height: 100%;
+        }
+        .body {
+          flex: none;
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          height: 320px;
+          order: 3;
+        }
+        .center {
+          grid-template-rows: 60vh auto;
+        }
+        .right {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .scroll {
+          flex: none;
+          overflow: visible;
+        }
+        .cards {
+          overflow-x: auto;
+        }
+        .status {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <h1 id="title">Social Crop</h1>
+        <span class="meta" id="meta"></span>
+        <select class="sel" id="fileSelect" aria-label="Source image" hidden></select>
+        <span class="spacer"></span>
+        <span class="tbx" id="toolbarExtra"></span>
+        <span class="status" id="status" role="status"></span>
+        <button
+          class="btn primary"
+          id="exportBtn"
+          type="button"
+          title="Export every included crop (⌘E)"
+          disabled
+        >
+          Export
+        </button>
+      </header>
+      <div class="body">
+        <aside class="left" aria-label="History and presets">
+          <div class="hist" id="history"></div>
+        </aside>
+        <section class="center">
+          <div class="viewer" id="viewer"><p class="empty" id="viewerEmpty">Loading photo…</p></div>
+          <div class="strip" id="strip">
+            <div class="strip-head">
+              <b>Platform Previews</b><span id="stripInfo"></span>
+              <span class="spacer"></span>
+              <label class="toggle" title="Shade platform UI zones (S)"
+                ><input type="checkbox" id="safeToggle" />Safe Areas</label
+              >
+            </div>
+            <div class="cards" id="cards"></div>
+          </div>
+        </section>
+        <aside class="right">
+          <div class="scroll" id="inspector">
+            <details class="sec" open>
+              <summary>Platforms</summary>
+              <div class="sec-body" id="platforms"></div>
+            </details>
+            <details class="sec" open>
+              <summary id="cropTitle">Crop</summary>
+              <div class="sec-body">
+                <div class="kv"><span>Crop size</span><span id="cropDims"></span></div>
+                <div class="kv"><span>Exports at</span><span id="cropOut"></span></div>
+                <div class="kv"><span>Angle</span><span id="cropAngle"></span></div>
+                <div class="btn-row">
+                  <button class="btn" id="resetCrop" type="button">Reset Crop</button>
+                  <button class="btn" id="resetAll" type="button">Reset All Crops</button>
+                </div>
+                <ul class="keys">
+                  <li><kbd>[ ]</kbd></li>
+                  <li>Previous or next platform</li>
+                  <li><kbd>\</kbd></li>
+                  <li>Before and after split</li>
+                  <li><kbd>S</kbd></li>
+                  <li>Safe areas on or off</li>
+                  <li><kbd>⌘E</kbd></li>
+                  <li>Export all crops</li>
+                </ul>
+              </div>
+            </details>
+            <details class="sec" open>
+              <summary>Develop</summary>
+              <div class="dev-body" id="dev"></div>
+            </details>
+            <div id="extra"></div>
+            <details class="sec" open>
+              <summary>Export</summary>
+              <div class="sec-body">
+                <button class="btn primary wide" id="exportSection" type="button" disabled>
+                  Export
+                </button>
+                <ul class="out" id="exportList"></ul>
+              </div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+    </div>
+    <div id="engine" aria-hidden="true">
+      <div id="engineDevelop"></div>
+      <div id="engineViewer"></div>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        const t3kit = window.t3kit;
+        const workspace = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const el = (tag, cls, text) => {
+          const node = document.createElement(tag);
+          if (cls) node.className = cls;
+          if (text !== undefined) node.textContent = text;
+          return node;
+        };
+        const token = (name) =>
+          getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+        // ---- Catalogue -------------------------------------------------------------------------------
+        // width: the platform's recommended upload width; larger crops are downscaled to it on export.
+        // safe: share of the frame kept clear of platform UI, shaded on the previews.
+        const PLATFORMS = {
+          "ig-feed": {
+            name: "Instagram Feed",
+            short: "IG Feed",
+            aspect: "4:5",
+            ratio: 4 / 5,
+            width: 1080,
+            safe: { top: 0.05, bottom: 0.05, side: 0.05 },
+          },
+          "ig-square": {
+            name: "Instagram Square",
+            short: "IG Square",
+            aspect: "1:1",
+            ratio: 1,
+            width: 1080,
+            safe: { top: 0.05, bottom: 0.05, side: 0.05 },
+          },
+          story: {
+            name: "Stories and Reels",
+            short: "Story",
+            aspect: "9:16",
+            ratio: 9 / 16,
+            width: 1080,
+            safe: { top: 0.14, bottom: 0.2, side: 0.06 },
+            labels: ["Profile", "Reply bar"],
+          },
+          x: {
+            name: "X Post",
+            short: "X Post",
+            aspect: "16:9",
+            ratio: 16 / 9,
+            width: 1600,
+            safe: { top: 0.05, bottom: 0.05, side: 0.05 },
+          },
+          linkedin: {
+            name: "LinkedIn Post",
+            short: "LinkedIn",
+            aspect: "1.91:1",
+            ratio: 1.91,
+            width: 1200,
+            safe: { top: 0.05, bottom: 0.05, side: 0.05 },
+          },
+        };
+        const ORDER = Object.keys(PLATFORMS); // grows with t3template.addPlatform
+        const LOOKS = {
+          neutral: {},
+          moody: {
+            exposure: -0.25,
+            contrast: 18,
+            highlights: -22,
+            shadows: -8,
+            whites: -6,
+            blacks: -14,
+            temperature: -8,
+            vibrance: -12,
+            saturation: -10,
+            clarity: 12,
+            vignette: -20,
+          },
+          film: {
+            exposure: 0.1,
+            contrast: -8,
+            highlights: -16,
+            shadows: 16,
+            blacks: 14,
+            temperature: 10,
+            tint: -4,
+            saturation: -10,
+            grain: 18,
+            vignette: -10,
+          },
+          vivid: {
+            exposure: 0.15,
+            contrast: 12,
+            vibrance: 35,
+            saturation: 12,
+            clarity: 18,
+            dehaze: 10,
+          },
+        };
+        const LOOK_IDS = Object.keys(LOOKS);
+        const DEFAULTS = {
+          title: "Social Crop",
+          look: "neutral",
+          platforms: ORDER.slice(),
+          safeArea: true,
+        };
+        const PROXY_EDGE = 2048; // the viewer and develop work on this; export re-develops the original
+        const CARD_MAX_H = 200;
+        const CARD_MIN_H = 72;
+        const CAP_MIN_W = 84;
+        const VIEW_IDLE_MS = 200;
+        const CROP_IDLE_MS = 400;
+        const SAVE_IDLE_MS = 250;
+        const EPS = 1e-4;
+
+        // ---- Options: lenient, unknown keys ignored, bad values fall back with a warning ---------------
+        function readOptions() {
+          const raw = JSON.parse(
+            document.getElementById("t3-template-options")?.textContent || "{}",
+          );
+          const out = { ...DEFAULTS, platforms: DEFAULTS.platforms.slice(), customScript: "" };
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            console.warn("social-crop: options must be an object; using defaults");
+            return out;
+          }
+          const bad = (key) =>
+            console.warn(
+              `social-crop: option "${key}" is invalid (${JSON.stringify(raw[key])}); using ${JSON.stringify(DEFAULTS[key])}`,
+            );
+          if ("title" in raw) {
+            if (typeof raw.title === "string" && raw.title.trim())
+              out.title = raw.title.trim().slice(0, 120);
+            else bad("title");
+          }
+          if ("look" in raw) {
+            if (LOOK_IDS.includes(raw.look)) out.look = raw.look;
+            else bad("look");
+          }
+          // Ids that are not built in may be registered by customScript (t3template.addPlatform); any still unknown
+          // after the script are reported as an error.
+          if ("platforms" in raw) {
+            const list =
+              Array.isArray(raw.platforms) && raw.platforms.every((id) => typeof id === "string")
+                ? [...new Set(raw.platforms)]
+                : [];
+            const known = list.filter((id) => PLATFORMS[id]);
+            if (list.length) out.requested = list;
+            if (known.length) out.platforms = known;
+            else if (!list.length) bad("platforms");
+          }
+          if ("safeArea" in raw) {
+            if (typeof raw.safeArea === "boolean") out.safeArea = raw.safeArea;
+            else bad("safeArea");
+          }
+          if (typeof raw.customScript === "string") out.customScript = raw.customScript;
+          if ("controls" in raw) {
+            if (raw.controls && typeof raw.controls === "object" && !Array.isArray(raw.controls))
+              out.controls = raw.controls;
+            else bad("controls");
+          }
+          return out;
+        }
+        const opts = readOptions();
+
+        // ---- State -------------------------------------------------------------------------------------
+        // crops: platform id -> { x, y, w, h, angle } as fractions of the viewer frame (size-independent,
+        // so the 2048 px proxy and the full-resolution export share them). The frame swaps w/h after an odd
+        // quarter turn, exactly as the viewer does.
+        let enabled = sortPlatforms(opts.platforms);
+        let active = opts.platforms[0];
+        let savedCrops = null; // crops as restored, kept for platforms that customScript registers later
+        let savedPlatforms = null;
+        let safeArea = opts.safeArea;
+        let crops = {};
+        let fullSize = null; // original photo { width, height }
+        let proxySize = null; // proxy the viewer and develop edit { width, height }
+        let assets = [];
+        let asset = null;
+        let stem = "photo";
+        let loaded = false;
+        let exporting = false;
+        let hLink = null;
+        const rowRefs = new Map();
+        const cards = new Map();
+
+        function sortPlatforms(list) {
+          return ORDER.filter((id) => list.includes(id));
+        }
+
+        // ---- Primitives --------------------------------------------------------------------------------
+        // develop: the grade and its sliders (its own canvas collapses in the auto-height inspector panel).
+        // viewer: crop, straighten, before/after on the graded proxy. history: steps, presets (the looks).
+        const dev = t3kit.develop.create($("dev"), { controls: true });
+        const NEUTRAL = dev.get();
+        const viewer = t3kit.viewer.create($("viewer"), {
+          toolbar: true,
+          crop: true,
+          value: { mode: "single", cropping: true, grid: true },
+        });
+        const lookState = (values) => ({ develop: { ...NEUTRAL, ...values } });
+        const history = t3kit.history.create($("history"), {
+          title: "History",
+          label: "Original",
+          presets: LOOK_IDS.map((id) => ({ name: capitalize(id), state: lookState(LOOKS[id]) })),
+        });
+
+        // Graded previews: `live` is develop's <= 512 px look (every render, instant), `sharp` the graded
+        // proxy decoded once the edits go idle. Cards draw from sharp when it is current.
+        const live = document.createElement("canvas");
+        const liveCtx = live.getContext("2d");
+        let sharp = null;
+        let sharpFresh = false;
+
+        // ---- Geometry ----------------------------------------------------------------------------------
+        function frameOf(size, angle) {
+          return Math.round(angle / 90) % 2
+            ? { W: size.height, H: size.width }
+            : { W: size.width, H: size.height };
+        }
+        function ratioOfAspect(aspect) {
+          if (!aspect || aspect === "free") return null;
+          const [a, b] = String(aspect).split(":").map(Number);
+          return a > 0 && b > 0 ? a / b : null;
+        }
+        function toFrac(c, size) {
+          const F = frameOf(size, c.angle);
+          return { x: c.x / F.W, y: c.y / F.H, w: c.w / F.W, h: c.h / F.H, angle: c.angle };
+        }
+        function toPx(f, size, id) {
+          const F = frameOf(size, f.angle);
+          return {
+            x: f.x * F.W,
+            y: f.y * F.H,
+            w: f.w * F.W,
+            angle: f.angle,
+            aspect: PLATFORMS[id].aspect,
+          };
+        }
+        function defaultCrop(id) {
+          const W = fullSize.width;
+          const H = fullSize.height;
+          const r = PLATFORMS[id].ratio;
+          if (W / H > r) {
+            const w = (H * r) / W;
+            return { x: (1 - w) / 2, y: 0, w, h: 1, angle: 0 };
+          }
+          const h = W / r / H;
+          return { x: 0, y: (1 - h) / 2, w: 1, h, angle: 0 };
+        }
+        function validFrac(c) {
+          return (
+            !!c &&
+            ["x", "y", "w", "h", "angle"].every(
+              (k) => Number.isFinite(c[k]) && Math.abs(c[k]) <= 360,
+            ) &&
+            c.w > 0 &&
+            c.h > 0
+          );
+        }
+        function normalizeCrops(src) {
+          return Object.fromEntries(
+            ORDER.map((id) => [
+              id,
+              validFrac(src && src[id]) ? pickFrac(src[id]) : defaultCrop(id),
+            ]),
+          );
+        }
+        function pickFrac(c) {
+          return { x: c.x, y: c.y, w: c.w, h: c.h, angle: c.angle };
+        }
+        function sameFrac(a, b) {
+          return (
+            !!a &&
+            !!b &&
+            ["x", "y", "w", "h"].every((k) => Math.abs(a[k] - b[k]) < EPS) &&
+            Math.abs(a.angle - b.angle) < 0.01
+          );
+        }
+        function cloneCrops() {
+          return Object.fromEntries(ORDER.map((id) => [id, { ...crops[id] }]));
+        }
+        // Pixel size of a crop on the original, and the size it exports at.
+        function cropPx(id) {
+          const f = crops[id];
+          const F = frameOf(fullSize, f.angle);
+          const w = f.w * F.W;
+          return { w, h: w / PLATFORMS[id].ratio };
+        }
+        function outputSize(id) {
+          const { w } = cropPx(id);
+          const ow = Math.max(1, Math.round(Math.min(w, PLATFORMS[id].width)));
+          return [ow, Math.max(1, Math.round(ow / PLATFORMS[id].ratio))];
+        }
+
+        // Stage context. 'image' stages get every included crop in the canvas's pixels; 'output' stages get the one output.
+        function stageCrops(canvas) {
+          const size = { width: canvas.width, height: canvas.height };
+          return Object.fromEntries(
+            enabled.map((id) => {
+              const f = crops[id];
+              const F = frameOf(size, f.angle);
+              return [
+                id,
+                { x: f.x * F.W, y: f.y * F.H, w: f.w * F.W, h: f.h * F.H, angle: f.angle },
+              ];
+            }),
+          );
+        }
+        function outputInfo(id) {
+          const [width, height] = outputSize(id);
+          const p = PLATFORMS[id];
+          return { id, name: p.name, aspect: p.aspect, width, height, safe: { ...p.safe } };
+        }
+
+        // ---- Values and the bolt-on API ----------------------------------------------------------------
+        function histState() {
+          return { develop: dev.get(), crops: cloneCrops() };
+        }
+        function currentLook() {
+          const g = JSON.stringify(dev.get());
+          return (
+            LOOK_IDS.find((id) => JSON.stringify(lookState(LOOKS[id]).develop) === g) ?? "custom"
+          );
+        }
+        function getValues() {
+          return {
+            title: $("title").textContent,
+            look: currentLook(),
+            platforms: enabled.slice(),
+            active,
+            safeArea,
+            ...histState(),
+          };
+        }
+        function emitChange() {
+          if (loaded) rt.emitChange();
+        }
+        const SET_KEYS = ["title", "look", "platforms", "active", "safeArea", "develop", "crops"];
+        function setValues(partial) {
+          if (!partial || typeof partial !== "object" || Array.isArray(partial))
+            throw new TypeError("t3template.setValues: pass an object");
+          for (const key of Object.keys(partial)) {
+            if (!SET_KEYS.includes(key))
+              throw new TypeError(
+                `t3template.setValues: unknown key "${key}" (use ${SET_KEYS.join(", ")})`,
+              );
+          }
+          if (!loaded) throw new Error("t3template.setValues: the photo is still loading");
+          if (
+            partial.look !== undefined &&
+            !LOOK_IDS.includes(partial.look) &&
+            !history.get().presets.some((p) => p.name === partial.look)
+          ) {
+            throw new RangeError(`t3template.setValues: unknown look "${partial.look}"`);
+          }
+          if (partial.platforms !== undefined) {
+            if (
+              !Array.isArray(partial.platforms) ||
+              !partial.platforms.every((id) => PLATFORMS[id]) ||
+              !partial.platforms.length
+            ) {
+              throw new RangeError(
+                `t3template.setValues: platforms must be a non-empty array of ${ORDER.join(", ")}`,
+              );
+            }
+          }
+          if (partial.active !== undefined && !PLATFORMS[partial.active])
+            throw new RangeError(`t3template.setValues: unknown platform "${partial.active}"`);
+          if (partial.crops !== undefined) {
+            for (const [id, c] of Object.entries(partial.crops || {})) {
+              if (!PLATFORMS[id] || !validFrac({ angle: 0, ...c }))
+                throw new RangeError(
+                  `t3template.setValues: bad crop for "${id}" (fractions x, y, w, h and angle)`,
+                );
+            }
+          }
+          captureViewerCrop();
+          if (typeof partial.title === "string" && partial.title.trim())
+            setTitle(partial.title.trim());
+          if (typeof partial.safeArea === "boolean") setSafeArea(partial.safeArea);
+          if (partial.platforms) setEnabledList(partial.platforms);
+          if (partial.active) {
+            if (!enabled.includes(partial.active)) setEnabledList([...enabled, partial.active]);
+            active = partial.active;
+          }
+          let edited = false;
+          if (partial.develop) {
+            dev.set(partial.develop);
+            edited = true;
+          }
+          if (partial.crops) {
+            for (const [id, c] of Object.entries(partial.crops))
+              crops[id] = pickFrac({ angle: 0, ...c });
+            edited = true;
+          }
+          refreshAll();
+          if (edited) hLink.commit("Script Edit");
+          if (partial.look !== undefined)
+            history.applyPreset(
+              LOOK_IDS.includes(partial.look) ? capitalize(partial.look) : partial.look,
+            );
+          scheduleSave();
+          emitChange();
+          return getValues();
+        }
+
+        // ---- Bolt-on runtime (window.t3template): panels, controls and image stages on previews and export ----------
+        // Stages run on the graded proxy (scale 1), on develop's small live look and on the full-resolution master.
+        const rt = t3kit.templateRuntime.create({
+          id: "social-crop",
+          pipeline: "image",
+          // 'top': first in the inspector, above Platforms (in creation order); 'bottom': above Export.
+          addPanel(title, { open, position }) {
+            const section = el("details", "sec");
+            section.open = open;
+            const body = el("div", "sec-body");
+            section.append(el("summary", null, title), body);
+            if (position === "top")
+              $("inspector").insertBefore(section, $("platforms").closest("details"));
+            else $("extra").append(section);
+            return body;
+          },
+          stageTargets: ["image", "output"],
+          export: () => exportAll(),
+          toolbar: $("toolbarExtra"),
+          buttonClass: "btn",
+          getValues: () => getValues(),
+          setValues: (partial) => setValues(partial),
+          addPreset(name, values) {
+            for (const key of Object.keys(values)) {
+              if (!(key in NEUTRAL))
+                throw new RangeError(
+                  `t3template.addPreset: unknown develop param "${key}" (presets take develop params, e.g. { exposure: 0.3 })`,
+                );
+            }
+            history.savePreset(name, lookState(values));
+          },
+          applyPreset(name) {
+            if (!history.get().presets.some((p) => p.name === name))
+              throw new Error(`t3template.applyPreset: no preset "${name}"`);
+            history.applyPreset(name);
+          },
+          // Template keys plus the viewer's own keys (+ - 0 1 C G R) while the photo is focused.
+          reservedKeys: [
+            "mod+e",
+            "[",
+            "]",
+            "\\",
+            "s",
+            "mod+z",
+            "mod+shift+z",
+            "-",
+            "=",
+            "0",
+            "1",
+            "c",
+            "g",
+            "r",
+          ],
+          onBoltOnChange() {
+            if (!loaded) return;
+            refreshLive();
+            sharpFresh = false;
+            schedulePreviews();
+            scheduleView();
+            scheduleSave();
+          },
+        });
+
+        // ---- Viewer source: the graded proxy, refreshed once edits go idle ------------------------------
+        let viewTimer = 0;
+        let viewRun = null;
+        let viewAgain = false;
+        function scheduleView() {
+          clearTimeout(viewTimer);
+          viewTimer = setTimeout(() => {
+            viewTimer = 0;
+            runView().catch(showError);
+          }, VIEW_IDLE_MS);
+        }
+        function runView() {
+          if (viewRun) {
+            viewAgain = true;
+            return viewRun;
+          }
+          viewRun = (async () => {
+            do {
+              viewAgain = false;
+              const blob = await dev.exportBlob({
+                type: rt.hasImageStages() ? "image/png" : "image/jpeg",
+                quality: 0.92,
+              });
+              let graded = await createImageBitmap(blob);
+              if (rt.hasImageStages()) {
+                const canvas = bitmapCanvas(graded);
+                graded.close();
+                graded = rt.runImageStages(canvas, {
+                  scale: 1,
+                  phase: "preview",
+                  info: { crops: stageCrops(canvas) },
+                });
+              }
+              await viewer.setSource(graded);
+              if (sharp && sharp.close) sharp.close();
+              sharp = graded;
+              sharpFresh = !viewAgain;
+              schedulePreviews();
+            } while (viewAgain);
+          })().finally(() => {
+            viewRun = null;
+          });
+          return viewRun;
+        }
+        function refreshLive() {
+          const img = dev.getImageData();
+          if (live.width !== img.width || live.height !== img.height) {
+            live.width = img.width;
+            live.height = img.height;
+          }
+          liveCtx.putImageData(img, 0, 0);
+          rt.runImageStages(live, {
+            scale: live.width / proxySize.width,
+            phase: "preview",
+            info: { crops: stageCrops(live) },
+          });
+        }
+        function bitmapCanvas(bitmap) {
+          const canvas = el("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          canvas.getContext("2d", { willReadFrequently: true }).drawImage(bitmap, 0, 0);
+          return canvas;
+        }
+
+        // ---- Platform preview cards (one paint per frame, nothing while idle) ---------------------------
+        let drawQueued = false;
+        function schedulePreviews() {
+          if (drawQueued) return;
+          drawQueued = true;
+          requestAnimationFrame(() => {
+            drawQueued = false;
+            if (loaded) paintCards();
+          });
+        }
+        // Fit every card in one row: solve the shared height, giving narrow cards a readable caption width.
+        function layoutCards() {
+          const host = $("cards");
+          const ids = [...cards.keys()];
+          if (!ids.length) return;
+          const avail = host.clientWidth - 24 - (ids.length - 1) * 10 - ids.length * 12;
+          let h = CARD_MAX_H;
+          for (let pass = 0; pass < 3; pass++) {
+            const small = ids.filter((id) => PLATFORMS[id].ratio * h < CAP_MIN_W);
+            const big = ids.filter((id) => !small.includes(id));
+            const sum = big.reduce((s, id) => s + PLATFORMS[id].ratio, 0);
+            h = sum > 0 ? (avail - small.length * CAP_MIN_W) / sum : CARD_MAX_H;
+            h = Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, h));
+          }
+          const dpr = window.devicePixelRatio || 1;
+          for (const [id, e] of cards) {
+            const w = h * PLATFORMS[id].ratio;
+            e.w = w;
+            e.h = h;
+            const bw = Math.round(w * dpr);
+            const bh = Math.round(h * dpr);
+            if (e.cv.width !== bw || e.cv.height !== bh) {
+              e.cv.width = bw;
+              e.cv.height = bh;
+            }
+            e.cv.style.width = `${w}px`;
+            e.cv.style.height = `${h}px`;
+            e.cap.style.width = `${Math.max(w, CAP_MIN_W)}px`;
+          }
+        }
+        function paintSafeArea(ctx, p, w, h) {
+          const s = p.safe;
+          const x0 = s.side * w;
+          const x1 = w - s.side * w;
+          const y0 = s.top * h;
+          const y1 = h - s.bottom * h;
+          ctx.save();
+          ctx.globalAlpha = 0.55;
+          ctx.fillStyle = token("--background");
+          ctx.fillRect(0, 0, w, y0);
+          ctx.fillRect(0, y1, w, h - y1);
+          ctx.fillRect(0, y0, x0, y1 - y0);
+          ctx.fillRect(x1, y0, w - x1, y1 - y0);
+          ctx.globalAlpha = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = token("--primary");
+          ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+          if (p.labels && h > 110) {
+            ctx.setLineDash([]);
+            ctx.fillStyle = token("--muted-foreground");
+            ctx.font = `600 9px ${token("--font-mono")}`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(p.labels[0].toUpperCase(), w / 2, y0 / 2);
+            ctx.fillText(p.labels[1].toUpperCase(), w / 2, y1 + (h - y1) / 2);
+          }
+          ctx.restore();
+        }
+        // Same transform as viewer.exportCanvas(): the photo centred in the frame, turned by the angle.
+        // 'output' bolt-on stages run on the card's pixels (scale = card px / export px) before the safe-area shading.
+        function paintCard(id, e) {
+          const dpr = window.devicePixelRatio || 1;
+          const f = crops[id];
+          const F = frameOf(fullSize, f.angle);
+          const c = { x: f.x * F.W, y: f.y * F.H, w: f.w * F.W };
+          const src = sharpFresh && sharp ? sharp : live;
+          const staged = rt.hasImageStages("output");
+          if (
+            staged &&
+            (!e.scratch || e.scratch.width !== e.cv.width || e.scratch.height !== e.cv.height)
+          ) {
+            e.scratch = el("canvas");
+            e.scratch.width = e.cv.width;
+            e.scratch.height = e.cv.height;
+          }
+          const target = staged ? e.scratch : e.cv;
+          const ctx = target.getContext("2d");
+          const s = target.width / c.w;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.fillStyle = token("--muted");
+          ctx.fillRect(0, 0, target.width, target.height);
+          ctx.save();
+          ctx.scale(s, s);
+          ctx.translate(F.W / 2 - c.x, F.H / 2 - c.y);
+          ctx.rotate((f.angle * Math.PI) / 180);
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(
+            src,
+            -fullSize.width / 2,
+            -fullSize.height / 2,
+            fullSize.width,
+            fullSize.height,
+          );
+          ctx.restore();
+          if (staged) {
+            const info = outputInfo(id);
+            rt.runImageStages(target, {
+              scale: target.width / info.width,
+              phase: "preview",
+              at: "output",
+              info: { output: info },
+            });
+            e.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            e.ctx.drawImage(target, 0, 0);
+          }
+          e.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          if (safeArea) paintSafeArea(e.ctx, PLATFORMS[id], e.w, e.h);
+        }
+        function paintCards() {
+          layoutCards();
+          for (const [id, e] of cards) {
+            const [ow, oh] = outputSize(id);
+            e.dims.textContent = `${ow} × ${oh} px`;
+            e.card.setAttribute("aria-pressed", String(id === active));
+            paintCard(id, e);
+          }
+        }
+        new ResizeObserver(() => schedulePreviews()).observe($("cards"));
+        const themeObserver = new MutationObserver(() => schedulePreviews());
+        themeObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["style", "class", "data-theme"],
+        });
+        const themeStyle = document.getElementById("t3-theme");
+        if (themeStyle)
+          themeObserver.observe(themeStyle, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+          });
+
+        function ensureCards() {
+          const host = $("cards");
+          for (const [id, e] of [...cards]) {
+            if (!enabled.includes(id)) {
+              e.card.remove();
+              cards.delete(id);
+            }
+          }
+          for (const id of enabled) {
+            if (cards.has(id)) continue;
+            const card = el("button", "card");
+            card.type = "button";
+            card.title = `Edit the ${PLATFORMS[id].name} crop`;
+            const cv = el("canvas", "cv");
+            const cap = el("span", "cap");
+            const dims = el("span");
+            cap.append(el("b", null, `${PLATFORMS[id].short} · ${PLATFORMS[id].aspect}`), dims);
+            card.append(cv, cap);
+            card.addEventListener("click", () => setActive(id));
+            cards.set(id, { card, cv, cap, ctx: cv.getContext("2d"), dims, w: 0, h: 0 });
+          }
+          for (const id of enabled) host.append(cards.get(id).card);
+          $("stripInfo").textContent = `${enabled.length} of ${ORDER.length}`;
+        }
+
+        // ---- Inspector -----------------------------------------------------------------------------------
+        function buildPlatformRows() {
+          for (const id of ORDER) buildPlatformRow(id);
+        }
+        function buildPlatformRow(id) {
+          const host = $("platforms");
+          const row = el("div", "plat");
+          const box = el("input");
+          box.type = "checkbox";
+          box.setAttribute("aria-label", `Include ${PLATFORMS[id].name} in previews and export`);
+          box.addEventListener("change", () => toggleEnabled(id, box.checked));
+          const main = el("button", "plat-main");
+          main.type = "button";
+          main.title = `Edit the ${PLATFORMS[id].name} crop`;
+          const sub = el("span", "sub");
+          main.append(el("span", "name", PLATFORMS[id].name), sub);
+          main.addEventListener("click", () => setActive(id));
+          row.append(box, main, el("span", "aspect", PLATFORMS[id].aspect));
+          host.append(row);
+          rowRefs.set(id, { row, box, sub });
+        }
+        function refreshPlatformRows() {
+          for (const [id, r] of rowRefs) {
+            const on = enabled.includes(id);
+            r.box.checked = on;
+            r.row.dataset.off = String(!on);
+            r.row.setAttribute("aria-current", String(id === active));
+            if (fullSize) {
+              const [ow, oh] = outputSize(id);
+              r.sub.textContent = `Exports ${ow} × ${oh} px`;
+            }
+          }
+        }
+        function renderReadouts() {
+          const { w, h } = cropPx(active);
+          const [ow, oh] = outputSize(active);
+          $("cropTitle").textContent = `Crop · ${PLATFORMS[active].name}`;
+          $("cropDims").textContent = `${Math.round(w)} × ${Math.round(h)} px`;
+          $("cropOut").textContent = `${ow} × ${oh} px${ow < Math.round(w) ? " (downscaled)" : ""}`;
+          $("cropAngle").textContent = `${Number(crops[active].angle).toFixed(1)}°`;
+        }
+        function updateExportLabels() {
+          const n = enabled.length;
+          const label = `Export ${n} ${n === 1 ? "Crop" : "Crops"}`;
+          for (const id of ["exportBtn", "exportSection"]) {
+            $(id).textContent = label;
+            $(id).disabled = !loaded || exporting;
+          }
+        }
+        function applyCropToViewer() {
+          if (loaded) viewer.set({ crop: toPx(crops[active], proxySize, active) });
+        }
+        function refreshAll() {
+          if (!loaded) return;
+          applyCropToViewer();
+          ensureCards();
+          refreshPlatformRows();
+          renderReadouts();
+          updateExportLabels();
+          schedulePreviews();
+        }
+        function setTitle(text) {
+          $("title").textContent = text;
+          document.title = text;
+        }
+        function setSafeArea(on) {
+          safeArea = on;
+          $("safeToggle").checked = on;
+          schedulePreviews();
+        }
+        $("safeToggle").addEventListener("change", (e) => {
+          setSafeArea(e.target.checked);
+          scheduleSave();
+          emitChange();
+        });
+
+        // ---- Platform selection ------------------------------------------------------------------------
+        // Keeps the stored crop of the active platform in step with the viewer before switching away.
+        function captureViewerCrop() {
+          if (!loaded) return;
+          const c = viewer.get().crop;
+          if (!(c.w > 0) || !aspectLocked(c)) return;
+          const f = toFrac(c, proxySize);
+          if (!sameFrac(crops[active], f)) crops[active] = f;
+        }
+        function setActive(id) {
+          if (!loaded || exporting) return;
+          captureViewerCrop();
+          if (!enabled.includes(id)) setEnabledList([...enabled, id]);
+          active = id;
+          refreshAll();
+          scheduleSave();
+          emitChange();
+        }
+        function setEnabledList(list) {
+          const next = sortPlatforms(list);
+          if (next.length === 0)
+            throw new RangeError("social-crop: keep at least one platform enabled");
+          enabled = next;
+          if (!enabled.includes(active)) active = enabled[0];
+        }
+        function toggleEnabled(id, on) {
+          if (exporting) {
+            refreshPlatformRows();
+            return;
+          }
+          const list = on ? [...enabled, id] : enabled.filter((p) => p !== id);
+          if (list.length === 0) {
+            setStatus("Keep at least one platform in the batch");
+            refreshPlatformRows();
+            return;
+          }
+          captureViewerCrop();
+          setEnabledList(list);
+          if (on) active = id;
+          refreshAll();
+          scheduleSave();
+          emitChange();
+        }
+        function stepActive(dir) {
+          const i = enabled.indexOf(active);
+          setActive(enabled[(i + dir + enabled.length) % enabled.length]);
+        }
+
+        // ---- Crop edits: viewer -> stored fractions -> previews; one history step once idle -------------
+        function aspectLocked(c) {
+          const r = ratioOfAspect(c.aspect);
+          return r !== null && Math.abs(r - PLATFORMS[active].ratio) < 0.005;
+        }
+        let cropTimer = 0;
+        let cropLabel = "";
+        function scheduleCropCommit(label) {
+          cropLabel = label;
+          clearTimeout(cropTimer);
+          cropTimer = setTimeout(() => {
+            cropTimer = 0;
+            hLink.commit(cropLabel);
+          }, CROP_IDLE_MS);
+        }
+        function afterCropChange(label) {
+          renderReadouts();
+          refreshPlatformRows();
+          schedulePreviews();
+          scheduleSave();
+          emitChange();
+          scheduleCropCommit(label);
+        }
+        viewer.on("change", (v) => {
+          if (!loaded || exporting) return;
+          let c = v.crop;
+          if (!(c.w > 0)) return;
+          if (!aspectLocked(c)) {
+            // Each platform has one aspect: an aspect button, swap or quarter turn snaps back to it.
+            viewer.set({ crop: { aspect: PLATFORMS[active].aspect } });
+            c = viewer.get().crop;
+            setStatus(
+              `${PLATFORMS[active].name} stays ${PLATFORMS[active].aspect}; pick another platform for another shape`,
+            );
+          }
+          const f = toFrac(c, proxySize);
+          if (sameFrac(crops[active], f)) return;
+          crops[active] = f;
+          afterCropChange(`Crop ${PLATFORMS[active].name}`);
+        });
+        function resetCrops(ids, label) {
+          if (!loaded || exporting) return;
+          for (const id of ids) crops[id] = defaultCrop(id);
+          refreshAll();
+          scheduleSave();
+          emitChange();
+          scheduleCropCommit(label);
+        }
+        $("resetCrop").addEventListener("click", () =>
+          resetCrops([active], `Reset ${PLATFORMS[active].name} Crop`),
+        );
+        $("resetAll").addEventListener("click", () => resetCrops(ORDER, "Reset All Crops"));
+
+        // ---- Develop and history ------------------------------------------------------------------------
+        dev.on("render", () => {
+          if (!loaded) return;
+          refreshLive();
+          sharpFresh = false;
+          schedulePreviews();
+          scheduleView();
+        });
+        dev.on("change", () => {
+          scheduleSave();
+          emitChange();
+        });
+        // Presets are looks: they carry a grade, never crops. Registered before the link so the active step
+        // already holds the current crops when the link applies it.
+        history.on("change", (model, { action }) => {
+          if (action === "applyPreset" && loaded) {
+            const preset = model.state || {};
+            history.set({
+              state: { develop: { ...NEUTRAL, ...(preset.develop || {}) }, crops: cloneCrops() },
+            });
+          }
+        });
+
+        // Applying a state (undo, redo, jump, presets, restore) sets develop and crops silently.
+        function applyState(s) {
+          if (s.develop) dev.set(s.develop);
+          if (s.crops) crops = normalizeCrops(s.crops);
+          refreshAll();
+        }
+
+        // ---- Feedback ----------------------------------------------------------------------------------
+        function setStatus(text) {
+          $("status").textContent = text;
+        }
+        const showError = (err) => rt.reportError(err);
+        window.addEventListener("unhandledrejection", (e) => showError(e.reason));
+
+        // ---- Persistence ---------------------------------------------------------------------------------
+        let saveTimer = 0;
+        function scheduleSave() {
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(() => {
+            saveTimer = 0;
+            if (!loaded) return;
+            Promise.resolve(
+              workspace.setState({
+                v: 1,
+                asset: asset.name,
+                platforms: enabled.slice(),
+                active,
+                safeArea,
+                crops: cloneCrops(),
+                develop: dev.get(),
+                history: history.get(),
+                controls: rt.state(),
+              }),
+            ).catch(showError);
+          }, SAVE_IDLE_MS);
+        }
+
+        // ---- Images ----------------------------------------------------------------------------------------
+        // The viewer and develop edit a <= 2048 px proxy so 24 MP photos stay responsive; export re-develops
+        // the original at full resolution.
+        async function makeProxy(file) {
+          const probe = await createImageBitmap(file);
+          const size = { width: probe.width, height: probe.height };
+          probe.close();
+          const k = Math.min(1, PROXY_EDGE / Math.max(size.width, size.height));
+          if (k === 1) return { size, proxy: file };
+          const w = Math.max(1, Math.round(size.width * k));
+          const h = Math.max(1, Math.round(size.height * k));
+          const small = await createImageBitmap(file, {
+            resizeWidth: w,
+            resizeHeight: h,
+            resizeQuality: "high",
+          });
+          const canvas = el("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d").drawImage(small, 0, 0);
+          small.close();
+          const proxy = await toBlob(canvas, "image/jpeg", 0.95);
+          return { size, proxy };
+        }
+        async function loadImage(index, saved) {
+          loaded = false;
+          updateExportLabels();
+          asset = assets[index];
+          $("viewerEmpty").hidden = false;
+          $("viewerEmpty").textContent = `Loading ${asset.name}…`;
+          const { size, proxy } = await makeProxy(asset.file);
+          const dims = await dev.setImage(proxy);
+          if (!dims) return false;
+          fullSize = size;
+          proxySize = dims;
+          stem = asset.name.replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "-") || "photo";
+          crops = normalizeCrops(saved || {});
+          savedCrops = saved || null;
+          refreshLive();
+          await viewer.setBefore(proxy);
+          loaded = true;
+          await runView();
+          $("viewerEmpty").hidden = true;
+          $("meta").textContent = `${size.width} × ${size.height} px · ${asset.name}`;
+          return true;
+        }
+        async function switchAsset(index) {
+          if (exporting) return;
+          captureViewerCrop();
+          if (!(await loadImage(index))) return;
+          const presets = history.get().presets;
+          history.set({ entries: [{ label: "Original", state: histState() }], index: 0, presets });
+          hLink.sync();
+          setStatus(`Opened ${asset.name}`);
+          scheduleSave();
+          emitChange();
+        }
+        $("fileSelect").addEventListener("change", (e) => {
+          switchAsset(Number(e.target.value)).catch(showError);
+        });
+
+        // ---- Batch export ----------------------------------------------------------------------------------
+        function toBlob(canvas, type, quality) {
+          return new Promise((resolve, reject) =>
+            canvas.toBlob(
+              (out) =>
+                out ? resolve(out) : reject(new Error(`social-crop: could not encode ${type}`)),
+              type,
+              quality,
+            ),
+          );
+        }
+        function resample(canvas, w, h) {
+          if (canvas.width === w && canvas.height === h) return canvas;
+          const out = el("canvas");
+          out.width = w;
+          out.height = h;
+          const ctx = out.getContext("2d");
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(canvas, 0, 0, w, h);
+          return out;
+        }
+        function renderExportList(names) {
+          $("exportList").replaceChildren(...names.map((name) => el("li", null, name)));
+        }
+        // Full-resolution develop of the original, then one crop per platform through an offscreen viewer
+        // (same straighten and turn math as the screen), resized to the platform width and encoded once.
+        async function exportAll() {
+          if (exporting || !loaded) return;
+          captureViewerCrop();
+          exporting = true;
+          updateExportLabels();
+          const ids = enabled.slice();
+          const names = [];
+          const files = [];
+          let full = null;
+          let cutter = null;
+          try {
+            setStatus("Rendering full resolution…");
+            full = t3kit.develop.create($("engineDevelop"), { controls: false });
+            await full.setImage(asset.file);
+            full.set(dev.get());
+            let master = await full.exportBlob({ type: "image/png" });
+            full.destroy();
+            full = null;
+            if (rt.hasImageStages()) {
+              const bitmap = await createImageBitmap(master);
+              const canvas = bitmapCanvas(bitmap);
+              bitmap.close();
+              master = rt.runImageStages(canvas, {
+                scale: canvas.width / proxySize.width,
+                phase: "export",
+                info: { crops: stageCrops(canvas) },
+              });
+            }
+            cutter = t3kit.viewer.create($("engineViewer"), { toolbar: false, crop: true });
+            await cutter.setSource(master);
+            const size = cutter.getSize();
+            for (const id of ids) {
+              setStatus(`Exporting ${names.length + 1} of ${ids.length}: ${PLATFORMS[id].name}`);
+              cutter.set({ crop: toPx(crops[id], size, id) });
+              const crop = cutter.exportCanvas();
+              const ow = Math.min(crop.width, PLATFORMS[id].width);
+              const oh = Math.max(1, Math.round(ow / PLATFORMS[id].ratio));
+              const out = rt.runImageStages(resample(crop, ow, oh), {
+                scale: 1,
+                phase: "export",
+                at: "output",
+                info: { output: outputInfo(id) },
+              });
+              const blob = await toBlob(out, "image/jpeg", 0.92);
+              const name = `${stem}-${id}-${ow}x${oh}.jpg`;
+              const file = new File([blob], name, { type: "image/jpeg" });
+              await workspace.attach(file);
+              await workspace.download(file, name);
+              files.push(file);
+              names.push(name);
+              renderExportList(names);
+            }
+            setStatus(`Exported ${names.length} ${names.length === 1 ? "crop" : "crops"}`);
+            return files;
+          } finally {
+            if (full) full.destroy();
+            if (cutter) cutter.destroy();
+            exporting = false;
+            updateExportLabels();
+          }
+        }
+        const runExport = () => {
+          exportAll().catch((err) => {
+            setStatus("Export failed");
+            showError(err);
+          });
+        };
+        $("exportBtn").addEventListener("click", runExport);
+        $("exportSection").addEventListener("click", runExport);
+
+        // ---- Keys: ⌘/Ctrl+E export, [ ] platform, \ before/after, S safe areas ---------------------------
+        document.addEventListener("keydown", (e) => {
+          const t = e.target;
+          if (
+            t instanceof HTMLElement &&
+            (t.isContentEditable ||
+              t.closest("input:not([type=checkbox]):not([type=range]), textarea, select"))
+          )
+            return;
+          if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "e") {
+            e.preventDefault();
+            runExport();
+            return;
+          }
+          if (e.metaKey || e.ctrlKey || e.altKey || !loaded) return;
+          if (e.key === "]") stepActive(1);
+          else if (e.key === "[") stepActive(-1);
+          else if (e.key === "\\")
+            viewer.set({ mode: viewer.get().mode === "split" ? "single" : "split" });
+          else if (e.key.toLowerCase() === "s") {
+            setSafeArea(!safeArea);
+            setStatus(`Safe areas ${safeArea ? "on" : "off"}`);
+            scheduleSave();
+            emitChange();
+          } else return;
+          e.preventDefault();
+        });
+
+        // ---- Boot ------------------------------------------------------------------------------------------
+        async function init() {
+          setTitle(opts.title);
+          setSafeArea(opts.safeArea);
+          buildPlatformRows();
+          const media = await workspace.ready();
+          assets = (media.assets || []).filter((a) => /^image\//.test(a.mimeType || ""));
+          if (assets.length === 0) {
+            $("viewerEmpty").textContent = "Attach a photo to make it post-ready.";
+            setStatus("No image");
+            return;
+          }
+          const saved = media.state ?? (await workspace.initialState());
+          const restore = saved && saved.v === 1 ? saved : null;
+          const start = restore
+            ? Math.max(
+                0,
+                assets.findIndex((a) => a.name === restore.asset),
+              )
+            : 0;
+          const sameAsset = !!restore && assets[start].name === restore.asset;
+          if (assets.length > 1) {
+            const select = $("fileSelect");
+            select.hidden = false;
+            select.replaceChildren(
+              ...assets.map((a, i) => {
+                const option = el("option", null, a.name);
+                option.value = String(i);
+                return option;
+              }),
+            );
+            select.value = String(start);
+          }
+          if (!(await loadImage(start, sameAsset ? restore.crops : null))) return;
+          if (restore) {
+            savedPlatforms = Array.isArray(restore.platforms) ? restore.platforms : null;
+            const list = sortPlatforms(Array.isArray(restore.platforms) ? restore.platforms : []);
+            if (list.length) setEnabledList(list);
+            if (enabled.includes(restore.active)) active = restore.active;
+            if (typeof restore.safeArea === "boolean") setSafeArea(restore.safeArea);
+            if (sameAsset && restore.history) history.set(restore.history);
+            else if (sameAsset && restore.develop) dev.set(restore.develop);
+          }
+          ensureCards();
+          // Bolt-on control edits are steps too: the runtime adds their values to every step and restores them on undo.
+          hLink = rt.linkHistory(history, histState, applyState, {
+            sources: { Develop: dev },
+            idleMs: 300,
+            thumb: () => live,
+          });
+          if (!restore && opts.look !== "neutral") history.applyPreset(capitalize(opts.look));
+          history.on("change", () => {
+            scheduleSave();
+            emitChange();
+          });
+          rt.publish({
+            instances: { develop: dev, viewer, history, link: hLink },
+            extras: { addPlatform },
+            saved: restore?.controls,
+          });
+          refreshAll();
+          setStatus(restore ? "Restored" : "Ready");
+          scheduleSave();
+          rt.runCustomScript(opts.customScript, opts);
+          const missing = (opts.requested || []).filter((id) => !PLATFORMS[id]);
+          if (missing.length) {
+            rt.reportError(
+              new Error(
+                `options.platforms: unknown platform ${missing.map((id) => `"${id}"`).join(", ")} (built in: ${BUILT_IN.join(", ")}; register others in customScript with t3template.addPlatform)`,
+              ),
+              "options",
+            );
+          }
+        }
+
+        // ---- Custom platforms (t3template.addPlatform) -------------------------------------------------------
+        const BUILT_IN = ORDER.slice();
+        function addPlatform(spec) {
+          if (!spec || typeof spec !== "object" || Array.isArray(spec))
+            throw new TypeError(
+              "t3template.addPlatform({ id, name, aspect: '2:3', width }) needs an object",
+            );
+          const { id, name, short, aspect, width, safe = {}, enabled: on } = spec;
+          if (typeof id !== "string" || !/^[a-z][a-z0-9-]*$/.test(id))
+            throw new TypeError(
+              `t3template.addPlatform: id must be lower-case like "pinterest" (got ${JSON.stringify(id)})`,
+            );
+          if (PLATFORMS[id])
+            throw new Error(`t3template.addPlatform: platform "${id}" already exists`);
+          if (typeof name !== "string" || !name.trim())
+            throw new TypeError(`t3template.addPlatform("${id}"): name must be a non-empty string`);
+          const m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(String(aspect));
+          if (!m || !(Number(m[1]) > 0) || !(Number(m[2]) > 0))
+            throw new TypeError(
+              `t3template.addPlatform("${id}"): aspect must be 'w:h' like '2:3' (got ${JSON.stringify(aspect)})`,
+            );
+          if (!Number.isInteger(width) || width < 64 || width > 8192)
+            throw new RangeError(
+              `t3template.addPlatform("${id}"): width must be the upload width in px, 64..8192 (got ${JSON.stringify(width)})`,
+            );
+          const zone = (k) => {
+            const v = safe[k] === undefined ? 0.05 : safe[k];
+            if (!(typeof v === "number" && v >= 0 && v <= 0.45))
+              throw new RangeError(
+                `t3template.addPlatform("${id}"): safe.${k} must be a fraction 0..0.45 (got ${JSON.stringify(v)})`,
+              );
+            return v;
+          };
+          if (on !== undefined && typeof on !== "boolean")
+            throw new TypeError(`t3template.addPlatform("${id}"): enabled must be true or false`);
+          PLATFORMS[id] = {
+            name: name.trim(),
+            short: typeof short === "string" && short.trim() ? short.trim() : name.trim(),
+            aspect: `${m[1]}:${m[2]}`,
+            ratio: Number(m[1]) / Number(m[2]),
+            width,
+            safe: { top: zone("top"), bottom: zone("bottom"), side: zone("side") },
+          };
+          ORDER.push(id);
+          crops[id] =
+            savedCrops && validFrac(savedCrops[id]) ? pickFrac(savedCrops[id]) : defaultCrop(id);
+          buildPlatformRow(id);
+          // Included unless told otherwise: a restored edit and an explicit options.platforms list decide first.
+          const include =
+            on !== undefined
+              ? on
+              : savedPlatforms
+                ? savedPlatforms.includes(id)
+                : opts.requested
+                  ? opts.requested.includes(id)
+                  : true;
+          if (include) setEnabledList([...enabled, id]);
+          if (!savedPlatforms && opts.requested && opts.requested.every((x) => PLATFORMS[x]))
+            setEnabledList(opts.requested);
+          refreshAll();
+          scheduleSave();
+          emitChange();
+          return id;
+        }
+
+        init().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

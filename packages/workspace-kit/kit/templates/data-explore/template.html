@@ -1,0 +1,1997 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Explore</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 38px minmax(0, 1fr) 24px;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0 4px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover {
+        background: var(--muted);
+        border-color: var(--input);
+      }
+      .btn-primary,
+      .btn-primary:hover {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .sel {
+        height: 26px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 6px;
+        max-width: 200px;
+      }
+      .sel-sm {
+        height: 22px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 6px);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 4px;
+        font-size: 11px;
+        min-width: 0;
+        max-width: 150px;
+      }
+      .btn:focus-visible,
+      .sel:focus-visible,
+      .sel-sm:focus-visible,
+      .chip:focus-visible,
+      .pivot tbody tr:focus-visible,
+      .cmd li:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      .work.no-inspector {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .main {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+      }
+      .charts {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        height: 240px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .chart-card {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+        border-right: 1px solid var(--border);
+      }
+      .chart-card:last-child {
+        border-right: 0;
+      }
+      .chart-tools {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 10px;
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .fld {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        min-width: 0;
+      }
+      .fld .sel-sm {
+        color: var(--foreground);
+      }
+      .brush-info {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--primary);
+        white-space: nowrap;
+      }
+      .chart-host {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+      .chart-root {
+        position: absolute;
+        inset: 0;
+      }
+      .grid-host {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+      #grid-root {
+        position: absolute;
+        inset: 0;
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-left: 1px solid var(--border);
+      }
+      .panels {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 28px;
+        padding: 0 10px;
+        cursor: pointer;
+        font-weight: 600;
+        user-select: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "+";
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+      }
+      .panel[open] > summary::after {
+        content: "\2212";
+      }
+      .panel-body {
+        padding: 4px 10px 10px;
+        min-width: 0;
+      }
+      .pv-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        margin-bottom: 6px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 2px 12px;
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .kv dt {
+        color: var(--muted-foreground);
+      }
+      .kv dd {
+        margin: 0;
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        height: 22px;
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--muted);
+        color: var(--foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .chip span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chip b {
+        color: var(--muted-foreground);
+        font-weight: 400;
+      }
+      .muted {
+        color: var(--muted-foreground);
+      }
+      table.pivot {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .pivot th {
+        text-align: left;
+        font-weight: 500;
+        color: var(--muted-foreground);
+        border-bottom: 1px solid var(--border);
+        padding: 3px 4px;
+      }
+      .pivot th.num,
+      .pivot td.num {
+        text-align: right;
+        font-family: var(--font-mono);
+      }
+      .pivot td {
+        padding: 3px 4px;
+        border-bottom: 1px solid var(--border);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pivot tbody tr {
+        cursor: pointer;
+      }
+      .pivot tbody tr:hover {
+        background: var(--muted);
+      }
+      .pivot tbody tr[data-empty] {
+        cursor: default;
+      }
+      .pivot tbody tr[data-empty]:hover {
+        background: transparent;
+      }
+      .history-body {
+        position: relative;
+        height: 220px;
+        padding: 0;
+      }
+      #history {
+        position: absolute;
+        inset: 0;
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-width: 320px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .composer:empty {
+        padding: 0;
+        border-top: 0;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .status .hints {
+        margin-left: auto;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .cmd-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+      }
+      .cmd-scrim {
+        position: absolute;
+        inset: 0;
+        background: var(--background);
+        opacity: 0.7;
+      }
+      .cmd {
+        position: absolute;
+        top: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(560px, calc(100% - 24px));
+        background: var(--popover);
+        color: var(--foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .cmd input {
+        width: 100%;
+        box-sizing: border-box;
+        height: 40px;
+        padding: 0 12px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        outline: none;
+      }
+      .cmd ul {
+        list-style: none;
+        margin: 0;
+        padding: 4px;
+        max-height: 360px;
+        overflow-y: auto;
+      }
+      .cmd li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 5px 8px;
+        border-radius: calc(var(--radius) - 4px);
+        cursor: pointer;
+      }
+      .cmd li[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .cmd li .hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .cmd li[aria-selected="true"] .hint {
+        color: var(--accent-foreground);
+      }
+      .cmd .empty {
+        padding: 10px 8px;
+        color: var(--muted-foreground);
+        cursor: default;
+      }
+
+      /* No dataset attached: only the grid's empty state, the history and the composer stay. */
+      .app.no-data .charts,
+      .app.no-data [data-panel="filters"],
+      .app.no-data [data-panel="stats"],
+      .app.no-data [data-panel="pivot"] {
+        display: none;
+      }
+      .app.no-data .main {
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          grid-template-rows: auto auto auto;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 10px;
+        }
+        .meta {
+          flex-basis: 100%;
+          order: 9;
+        }
+        .work,
+        .work.no-inspector {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .main {
+          height: auto;
+        }
+        .charts {
+          height: auto;
+          grid-auto-flow: row;
+          grid-auto-columns: auto;
+        }
+        .chart-card {
+          height: 280px;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .grid-host {
+          height: 60vh;
+        }
+        .inspector {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .panels {
+          overflow: visible;
+        }
+        .composer {
+          min-width: 0;
+        }
+        .status {
+          white-space: normal;
+          flex-wrap: wrap;
+          padding: 6px 10px;
+        }
+        .status .hints {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">Explore</h1>
+        <select class="sel" id="dataset" aria-label="Dataset" hidden></select>
+        <span class="meta" id="meta">Opening dataset</span>
+        <div class="tools" id="extra-tools"></div>
+        <button
+          class="btn"
+          id="clear"
+          type="button"
+          title="Clear filters, brushes and selection (X)"
+        >
+          Clear <kbd>X</kbd>
+        </button>
+        <button class="btn" id="open-cmd" type="button">Commands <kbd id="mod-key">K</kbd></button>
+        <button
+          class="btn"
+          id="send"
+          type="button"
+          title="Send these findings to the agent: a short summary with findings.json, the filtered CSV and the chart PNGs (S)"
+        >
+          Send to Agent <kbd>S</kbd>
+        </button>
+        <button class="btn btn-primary" id="export" type="button">Export <kbd>E</kbd></button>
+      </header>
+      <div class="work" id="work">
+        <section class="main" aria-label="Charts and data grid">
+          <div class="charts" id="charts"></div>
+          <div class="grid-host" id="grid"><div id="grid-root"></div></div>
+        </section>
+        <aside class="inspector" id="inspector" aria-label="Inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="filters" open>
+              <summary>Active Filters</summary>
+              <div class="panel-body"><div class="chips" id="chips"></div></div>
+            </details>
+            <details class="panel" data-panel="stats" open>
+              <summary>Column Stats</summary>
+              <div class="panel-body">
+                <label class="fld" style="margin-bottom: 6px"
+                  ><span>Column</span
+                  ><select class="sel-sm" id="stat-col" aria-label="Stats column"></select
+                ></label>
+                <dl class="kv" id="stats"></dl>
+              </div>
+            </details>
+            <details class="panel" data-panel="pivot" open>
+              <summary>Group By</summary>
+              <div class="panel-body">
+                <div class="pv-tools">
+                  <label class="fld"
+                    ><span>By</span
+                    ><select class="sel-sm" id="pv-by" aria-label="Group by column"></select
+                  ></label>
+                  <label class="fld"
+                    ><span>Value</span
+                    ><select class="sel-sm" id="pv-val" aria-label="Value column"></select
+                  ></label>
+                  <label class="fld"
+                    ><span>Agg</span
+                    ><select class="sel-sm" id="pv-agg" aria-label="Aggregate"></select
+                  ></label>
+                </div>
+                <table class="pivot">
+                  <thead>
+                    <tr>
+                      <th scope="col">Group</th>
+                      <th scope="col" class="num">Rows</th>
+                      <th scope="col" class="num" id="pv-head">Rows</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pivot-body"></tbody>
+                </table>
+              </div>
+            </details>
+            <details class="panel" data-panel="history" open>
+              <summary>History</summary>
+              <div class="panel-body history-body"><div id="history"></div></div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+      <footer class="status" id="status" role="status">
+        <span id="status-main"></span>
+        <span class="hints">
+          <span><kbd>S</kbd> send</span>
+          <span><kbd>E</kbd> export</span>
+          <span><kbd>X</kbd> clear</span>
+          <span><kbd>T</kbd> type</span>
+          <span><kbd>[</kbd><kbd>]</kbd> stats</span>
+          <span><kbd>1</kbd><kbd>2</kbd> chart</span>
+          <span><kbd>P</kbd> group</span>
+          <span><kbd>I</kbd> inspector</span>
+        </span>
+      </footer>
+    </div>
+
+    <div class="cmd-layer" id="cmd" hidden>
+      <div class="cmd-scrim" data-close></div>
+      <div class="cmd" role="dialog" aria-label="Commands">
+        <input
+          id="cmd-input"
+          type="text"
+          placeholder="Type a command or column name"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <ul id="cmd-list" role="listbox" aria-label="Commands"></ul>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+        const MOD = MAC ? "⌘" : "Ctrl+";
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const NF = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+        const CHART_TYPES = ["bar", "line", "area", "scatter", "histogram"];
+        const AGGREGATES = ["count", "sum", "mean", "min", "max"];
+        const VALUE_KEYS = ["filters", "sort", "charts", "pivot"];
+        const CHART_MAX = 2;
+        const AUTO_CATEGORY_MAX = 50; // a category x for the automatic bar chart has 2..50 values
+        const AUTO_SERIES_MAX = 6; // and its series 2..6
+
+        // ---- Options ----------------------------------------------------------------
+        const okChart = (c) =>
+          isPlain(c) &&
+          (c.type === undefined || CHART_TYPES.includes(c.type)) &&
+          typeof c.x === "string" &&
+          c.x !== "" &&
+          (c.y === undefined || c.y === null || typeof c.y === "string") &&
+          (c.series === undefined || c.series === null || typeof c.series === "string") &&
+          (c.aggregate === undefined || c.aggregate === null || AGGREGATES.includes(c.aggregate));
+        const SPEC = {
+          title: { default: "Explore", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          charts: {
+            default: [],
+            ok: (v) => Array.isArray(v) && v.length <= CHART_MAX && v.every(okChart),
+          },
+          filters: {
+            default: {},
+            ok: (v) => isPlain(v) && Object.values(v).every((x) => typeof x === "string"),
+          },
+          columns: {
+            default: [],
+            ok: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
+          },
+          sort: {
+            default: null,
+            ok: (v) =>
+              v === null ||
+              (isPlain(v) && typeof v.id === "string" && (v.dir === "asc" || v.dir === "desc")),
+          },
+          pivot: {
+            default: { by: null, value: null, agg: "count" },
+            ok: (v) => isPlain(v) && (v.agg === undefined || AGGREGATES.includes(v.agg)),
+          },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("data-explore: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(
+                `data-explore: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          return out;
+        }
+        const OPTS = readOptions();
+        // Saved state only restores when the starting options are the same ones it was made from.
+        const STATE_KEY = JSON.stringify({
+          charts: OPTS.charts,
+          filters: OPTS.filters,
+          columns: OPTS.columns,
+          sort: OPTS.sort,
+          pivot: OPTS.pivot,
+        });
+        const CHART_COUNT = OPTS.charts.length || CHART_MAX;
+        const specOf = (c) => ({
+          type: c.type ?? "bar",
+          x: c.x,
+          y: c.y ?? null,
+          series: c.series ?? null,
+          aggregate: c.aggregate ?? null,
+        });
+
+        // ---- Small helpers ----------------------------------------------------------
+        const pad = (n) => String(n).padStart(2, "0");
+        const dayText = (ms) => {
+          if (ms === null || ms === undefined || !Number.isFinite(ms)) return "—";
+          const d = new Date(ms);
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        };
+        const round = (x) => Math.round(x * 1000) / 1000;
+        const fmt = (v) => (v === null || v === undefined ? "—" : NF.format(v));
+        const safeName = (s) => String(s).replace(/[^\w.-]+/g, "_");
+        const isTyping = (el) =>
+          Boolean(el) && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+        const showError = (err) => rt.reportError(err);
+
+        // ---- Dataset model ----------------------------------------------------------
+        const grid = t3kit.datagrid.create($("grid-root"), { rowHeight: 24, selection: "multi" });
+        const charts = []; // { index, inst, spec, brush, fed, typeSel, xSel, ySel, aggSel, serSel, info }
+        const ALL_ROWS = "{}"; // card.fed when a chart draws every row
+        let assets = []; // CSV and JSON files from the workspace
+        let current = null; // { index, name, stem, total }
+        let pivot = { ...OPTS.pivot };
+        let startCharts = OPTS.charts; // the charts option, or the automatic pair picked from the open dataset
+        let history = null;
+        let historyLink = null;
+        let booted = false;
+        let lastFilters = {};
+        let lastSort = null;
+        let refreshFrame = 0;
+        let persistTimer = 0;
+        let commitTimer = 0;
+        let commitLabel = "";
+        let exporting = false;
+
+        const isDataAsset = (a) =>
+          /text\/csv|application\/json/.test(a.mimeType || "") ||
+          /\.(csv|json)$/i.test(a.name || "");
+        const isJsonAsset = (a) => /json/i.test(a.mimeType || "") || /\.json$/i.test(a.name || "");
+        const typeMap = () => new Map(grid.get().columns.map((c) => [c.id, c.type]));
+        const typeOf = (id) => grid.get().columns.find((c) => c.id === id)?.type ?? "string";
+
+        // The state shape shared by history steps, presets and setState: filters, sort, columns, charts (with brush), pivot.
+        function getState() {
+          const g = grid.get();
+          return {
+            filters: { ...g.filters },
+            sort: g.sort ? { id: g.sort.id, dir: g.sort.dir } : null,
+            columns: g.columns.map((c) => ({ id: c.id, hidden: Boolean(c.hidden) })),
+            charts: charts.map((c) => ({
+              ...(c.spec ?? {}),
+              brush: c.brush ? clone(c.brush) : null,
+            })),
+            pivot: { ...pivot },
+          };
+        }
+        // What setValues and presets read and write: the same keys without column order and brushes.
+        function getValues() {
+          const s = getState();
+          return {
+            filters: s.filters,
+            sort: s.sort,
+            charts: s.charts.map(({ brush, ...spec }) => spec),
+            pivot: s.pivot,
+          };
+        }
+        // charts: [] picks a bar of the first small category (split by a second one) and a histogram of the first number.
+        function autoCharts(cols) {
+          const types = typeMap();
+          const st = grid.stats().columns;
+          const distinct = (id) => st[id]?.distinct ?? 0;
+          const cats = cols.filter((id) => types.get(id) === "string" && distinct(id) >= 2);
+          const cat = cats.find((id) => distinct(id) <= AUTO_CATEGORY_MAX) ?? null;
+          const series = cats.find((id) => id !== cat && distinct(id) <= AUTO_SERIES_MAX) ?? null;
+          const num = cols.find((id) => types.get(id) === "number") ?? null;
+          const date = cols.find((id) => types.get(id) === "date") ?? null;
+          const first = cat
+            ? { type: "bar", x: cat, series }
+            : date
+              ? { type: "line", x: date }
+              : { type: "histogram", x: num ?? cols[0] };
+          const second =
+            num && first.x !== num
+              ? { type: "histogram", x: num }
+              : date && first.x !== date
+                ? { type: "line", x: date }
+                : { type: "bar", x: cats[1] ?? cols[0] };
+          return [first, second];
+        }
+        function pickX(cols, types) {
+          return cols.find((id) => types.get(id) === "string") ?? cols[0] ?? null;
+        }
+        // Drops what the current dataset does not have (with a console warning) and fills what is missing.
+        function sanitize(raw, cols) {
+          const src = isPlain(raw) ? raw : {};
+          const types = typeMap();
+          const known = new Set(cols);
+          const filters = {};
+          for (const [k, v] of Object.entries(isPlain(src.filters) ? src.filters : {})) {
+            if (known.has(k) && typeof v === "string" && v.trim() !== "") filters[k] = v;
+            else
+              console.warn(
+                `data-explore: filter "${k}" does not match a column with text; dropped.`,
+              );
+          }
+          const sort =
+            isPlain(src.sort) && known.has(src.sort.id)
+              ? { id: src.sort.id, dir: src.sort.dir === "desc" ? "desc" : "asc" }
+              : null;
+          const listed = Array.isArray(src.columns)
+            ? src.columns.filter((c) => isPlain(c) && known.has(c.id))
+            : [];
+          const listedIds = new Set(listed.map((c) => c.id));
+          const columns = [
+            ...listed.map((c) => ({ id: c.id, hidden: c.hidden === true })),
+            ...cols.filter((id) => !listedIds.has(id)).map((id) => ({ id, hidden: false })),
+          ];
+          const numeric = (id) => types.get(id) === "number" || types.get(id) === "date";
+          const charts = startCharts.map((opt, i) => {
+            const base =
+              Array.isArray(src.charts) && isPlain(src.charts[i]) ? src.charts[i] : specOf(opt);
+            let type = CHART_TYPES.includes(base.type) ? base.type : "bar";
+            const needsNumeric = type === "histogram" || type === "scatter";
+            let x = known.has(base.x) && (!needsNumeric || numeric(base.x)) ? base.x : null;
+            if (x === null) {
+              // A histogram or scatter needs a numeric or time x; a bar, line or area takes any column.
+              x = needsNumeric ? (cols.find(numeric) ?? null) : pickX(cols, types);
+              if (x === null) type = "bar";
+              console.warn(
+                `data-explore: chart ${i + 1} x "${base.x}" is not a column that fits a ${type} chart; using "${x}".`,
+              );
+            }
+            let y = known.has(base.y) && types.get(base.y) === "number" ? base.y : null;
+            if (type === "scatter" && y === null) {
+              type = "bar";
+              console.warn(
+                `data-explore: chart ${i + 1} scatter needs a number y; showing a bar chart.`,
+              );
+            }
+            return {
+              type,
+              x,
+              y,
+              series: known.has(base.series) ? base.series : null,
+              aggregate: AGGREGATES.includes(base.aggregate) ? base.aggregate : null,
+              brush:
+                isPlain(base.brush) && base.brush.mode === "filter" && base.brush.column === x
+                  ? clone(base.brush)
+                  : null,
+            };
+          });
+          const p = isPlain(src.pivot) ? src.pivot : {};
+          const pivotOut = {
+            by: known.has(p.by) && types.get(p.by) !== "date" ? p.by : null,
+            value: known.has(p.value) && types.get(p.value) === "number" ? p.value : null,
+            agg: AGGREGATES.includes(p.agg) ? p.agg : "count",
+          };
+          return { filters, sort, columns, charts, pivot: pivotOut };
+        }
+        // The options as a state: `columns` lists the visible ids first, every other column hidden.
+        function optionsState(cols) {
+          const wanted = OPTS.columns.filter((id) => cols.includes(id));
+          for (const id of OPTS.columns)
+            if (!cols.includes(id))
+              console.warn(`data-explore: columns option "${id}" is not a column; skipped.`);
+          const columns = wanted.length
+            ? [
+                ...wanted.map((id) => ({ id, hidden: false })),
+                ...cols.filter((id) => !wanted.includes(id)).map((id) => ({ id, hidden: true })),
+              ]
+            : cols.map((id) => ({ id, hidden: false }));
+          return {
+            filters: OPTS.filters,
+            sort: OPTS.sort,
+            columns,
+            charts: startCharts.map((c) => ({ ...specOf(c), brush: null })),
+            pivot: OPTS.pivot,
+          };
+        }
+        // Strict check for setValues: unknown columns are an error here, not a silent drop.
+        function checkColumns(state) {
+          const known = new Set(grid.get().columns.map((c) => c.id));
+          const need = (id, what) => {
+            if (id !== null && id !== undefined && !known.has(id))
+              throw new TypeError(
+                `t3template.setValues: ${what} "${id}" is not a column (columns: ${[...known].join(", ")})`,
+              );
+          };
+          for (const k of Object.keys(state.filters)) need(k, "filter column");
+          if (state.sort) need(state.sort.id, "sort column");
+          for (const c of state.charts) {
+            need(c.x, "chart x");
+            need(c.y, "chart y");
+            need(c.series, "chart series");
+          }
+          need(state.pivot.by, "pivot by");
+          need(state.pivot.value, "pivot value");
+        }
+        function mergeValues(base, p) {
+          if (!isPlain(p))
+            throw new TypeError("t3template.setValues(partial, label?) needs an object");
+          for (const k of Object.keys(p)) {
+            if (!VALUE_KEYS.includes(k))
+              throw new TypeError(
+                `t3template: unknown key "${k}" (use ${VALUE_KEYS.join(", ")}; controls go in controls)`,
+              );
+          }
+          const out = { ...base };
+          if ("filters" in p) {
+            if (!isPlain(p.filters)) throw new TypeError("filters must be { column: text }");
+            out.filters = { ...p.filters };
+          }
+          if ("sort" in p) out.sort = p.sort;
+          if ("pivot" in p) out.pivot = { ...base.pivot, ...p.pivot };
+          if ("charts" in p) {
+            if (!Array.isArray(p.charts) || p.charts.length > base.charts.length)
+              throw new TypeError(
+                `charts must be an array of up to ${base.charts.length} chart specs`,
+              );
+            out.charts = base.charts.map((c, i) => {
+              const patch = p.charts[i];
+              if (!isPlain(patch)) return c;
+              const n = { ...c, ...patch };
+              if (patch.x !== undefined && patch.x !== c.x) n.brush = null;
+              return n;
+            });
+          }
+          checkColumns(out);
+          return out;
+        }
+
+        // ---- Applying state ---------------------------------------------------------
+        function applyState(raw) {
+          if (!current) return;
+          const s = sanitize(
+            raw,
+            grid.get().columns.map((c) => c.id),
+          );
+          grid.set({ columns: s.columns, sort: s.sort, filters: s.filters });
+          charts.forEach((card, i) => {
+            const c = s.charts[i];
+            card.spec = { type: c.type, x: c.x, y: c.y, series: c.series, aggregate: c.aggregate };
+            card.brush = c.brush ? { ...c.brush, shape: c.brush.shape } : null;
+            card.inst.set({ ...card.spec, brush: card.brush ? card.brush.shape : null });
+            syncCard(card);
+          });
+          pivot = s.pivot;
+          syncPivotUI();
+          updateBaseline();
+          scheduleRefresh();
+        }
+        function updateBaseline() {
+          const g = grid.get();
+          lastFilters = { ...g.filters };
+          lastSort = g.sort ? { ...g.sort } : null;
+        }
+
+        // ---- History commits --------------------------------------------------------
+        // A typing burst or a drag becomes one step: commits wait 400 ms, then push the state as it is then.
+        function commit(label) {
+          if (!booted) return;
+          commitLabel = label;
+          clearTimeout(commitTimer);
+          commitTimer = setTimeout(flushCommit, 400);
+        }
+        function flushCommit() {
+          if (!commitTimer) return;
+          clearTimeout(commitTimer);
+          commitTimer = 0;
+          historyLink.commit(commitLabel);
+        }
+        function commitNow(label) {
+          flushCommit();
+          historyLink.commit(label);
+        }
+        function gridLabel() {
+          const g = grid.get();
+          let label = "Columns";
+          const keys = new Set([...Object.keys(lastFilters), ...Object.keys(g.filters)]);
+          for (const k of keys) {
+            if ((lastFilters[k] ?? "") !== (g.filters[k] ?? "")) {
+              label = g.filters[k] ? `Filter ${k}` : `Clear ${k} Filter`;
+              break;
+            }
+          }
+          if (label === "Columns" && JSON.stringify(lastSort) !== JSON.stringify(g.sort))
+            label = g.sort ? `Sort ${g.sort.id} ${g.sort.dir}` : "Clear Sort";
+          updateBaseline();
+          return label;
+        }
+
+        // ---- Charts -----------------------------------------------------------------
+        function buildCard(i) {
+          const n = i + 1;
+          const card = { index: i, spec: null, brush: null };
+          const root = document.createElement("section");
+          root.className = "chart-card";
+          root.setAttribute("aria-label", `Chart ${n}`);
+          const tools = document.createElement("div");
+          tools.className = "chart-tools";
+          const field = (label, sel) => {
+            const l = document.createElement("label");
+            l.className = "fld";
+            const s = document.createElement("span");
+            s.textContent = label;
+            l.append(s, sel);
+            return l;
+          };
+          const sel = (label) => {
+            const s = document.createElement("select");
+            s.className = "sel-sm";
+            s.setAttribute("aria-label", `Chart ${n} ${label}`);
+            return s;
+          };
+          card.typeSel = sel("type");
+          card.xSel = sel("x");
+          card.ySel = sel("y");
+          card.aggSel = sel("aggregate");
+          card.serSel = sel("series");
+          card.info = document.createElement("span");
+          card.info.className = "brush-info";
+          card.info.setAttribute("aria-live", "polite");
+          tools.append(
+            field("Type", card.typeSel),
+            field("X", card.xSel),
+            field("Y", card.ySel),
+            field("Agg", card.aggSel),
+            field("Series", card.serSel),
+            card.info,
+          );
+          const host = document.createElement("div");
+          host.className = "chart-host";
+          const plot = document.createElement("div");
+          plot.className = "chart-root";
+          host.append(plot);
+          root.append(tools, host);
+          $("charts").append(root);
+          card.plot = plot;
+          card.inst = null; // created once the dataset is loaded: a chart needs its x column at creation
+          card.typeSel.addEventListener("change", () =>
+            changeChart(card, { type: card.typeSel.value }),
+          );
+          card.xSel.addEventListener("change", () => changeChart(card, { x: card.xSel.value }));
+          card.ySel.addEventListener("change", () =>
+            changeChart(card, { y: card.ySel.value || null }),
+          );
+          card.aggSel.addEventListener("change", () =>
+            changeChart(card, { aggregate: card.aggSel.value || null }),
+          );
+          card.serSel.addEventListener("change", () =>
+            changeChart(card, { series: card.serSel.value || null }),
+          );
+          return card;
+        }
+        function fillChartSelects(cols) {
+          const types = typeMap();
+          const all = cols.map((id) => [id, id]);
+          const nums = cols.filter((id) => types.get(id) === "number").map((id) => [id, id]);
+          const fill = (s, pairs) => s.replaceChildren(...pairs.map(([v, l]) => new Option(l, v)));
+          for (const card of charts) {
+            fill(
+              card.typeSel,
+              CHART_TYPES.map((t) => [t, t]),
+            );
+            fill(card.xSel, all);
+            fill(card.ySel, [["", "(rows)"], ...nums]);
+            fill(card.aggSel, [["", "auto"], ...AGGREGATES.map((a) => [a, a])]);
+            fill(card.serSel, [["", "(none)"], ...all]);
+          }
+        }
+        function syncCard(card) {
+          const s = card.spec ?? {};
+          card.typeSel.value = s.type ?? "bar";
+          card.xSel.value = s.x ?? "";
+          card.ySel.value = s.y ?? "";
+          card.aggSel.value = s.aggregate ?? "";
+          card.serSel.value = s.series ?? "";
+        }
+        function typeAllowed(type, spec) {
+          const types = typeMap();
+          const xk = types.get(spec.x);
+          if (type === "histogram") return xk === "number" || xk === "date";
+          if (type === "scatter")
+            return (
+              (xk === "number" || xk === "date") &&
+              Boolean(spec.y) &&
+              types.get(spec.y) === "number"
+            );
+          return true;
+        }
+        function changeChart(card, patch) {
+          if (!card.spec) return;
+          const next = { ...card.spec, ...patch };
+          const xChanged = next.x !== card.spec.x;
+          if (xChanged) clearBrush(card);
+          try {
+            card.inst.set({ ...next, brush: card.brush ? card.brush.shape : null });
+          } catch (err) {
+            syncCard(card);
+            showError(err);
+            return;
+          }
+          card.spec = next;
+          syncCard(card);
+          const parts = Object.entries(patch).map(([k, v]) => `${k} ${v ?? "auto"}`);
+          commit(`Chart ${card.index + 1} ${parts.join(", ")}`);
+          scheduleRefresh();
+        }
+        function cycleType(card) {
+          if (!card?.spec) return;
+          const start = CHART_TYPES.indexOf(card.spec.type);
+          for (let k = 1; k <= CHART_TYPES.length; k++) {
+            const next = CHART_TYPES[(start + k) % CHART_TYPES.length];
+            if (typeAllowed(next, card.spec)) return changeChart(card, { type: next });
+          }
+        }
+
+        // ---- Brushing filters the grid ----------------------------------------------
+        function setFilter(column, text) {
+          grid.set({ filters: { ...grid.get().filters, [column]: text } });
+        }
+        function selectValues(column, values) {
+          const want = new Set(values);
+          grid.select(grid.view().filter((i) => want.has(String(grid.row(i)[column] ?? ""))));
+        }
+        function clearBrush(card) {
+          const b = card.brush;
+          if (!b) return;
+          card.brush = null;
+          if (b.mode === "filter") {
+            const f = { ...grid.get().filters };
+            if (f[b.column] === b.text) {
+              delete f[b.column];
+              grid.set({ filters: f });
+            }
+          } else grid.select([]);
+          card.inst.set({ brush: null });
+        }
+        function onBrush(card, f) {
+          clearBrush(card);
+          if (f) {
+            if (f.kind === "category") {
+              card.brush =
+                f.values.length === 1
+                  ? {
+                      column: f.column,
+                      mode: "filter",
+                      text: `=${f.values[0]}`,
+                      shape: { values: f.values },
+                      count: f.count,
+                    }
+                  : {
+                      column: f.column,
+                      mode: "select",
+                      values: f.values,
+                      shape: { values: f.values },
+                      count: f.count,
+                    };
+            } else {
+              const text =
+                f.kind === "time"
+                  ? `${dayText(f.min)}..${dayText(f.max)}`
+                  : `${round(f.min)}..${round(f.max)}`;
+              card.brush = {
+                column: f.column,
+                mode: "filter",
+                text,
+                shape: { min: f.min, max: f.max },
+                count: f.count,
+              };
+            }
+            if (card.brush.mode === "filter") setFilter(card.brush.column, card.brush.text);
+            else selectValues(card.brush.column, card.brush.values);
+          }
+          commit(f ? `Brush ${f.column}` : `Clear Brush Chart ${card.index + 1}`);
+          scheduleRefresh();
+        }
+        // A grid filter typed by hand on a brushed column takes the brush's place.
+        function reconcileBrushes() {
+          const f = grid.get().filters;
+          for (const card of charts) {
+            const b = card.brush;
+            if (b && b.mode === "filter" && f[b.column] !== b.text) {
+              card.brush = null;
+              card.inst.set({ brush: null });
+            }
+          }
+        }
+        function removeFilter(column) {
+          const f = { ...grid.get().filters };
+          delete f[column];
+          grid.set({ filters: f });
+          reconcileBrushes();
+          commitNow(`Clear ${column} Filter`);
+          scheduleRefresh();
+        }
+        function clearAll() {
+          for (const card of charts) clearBrush(card);
+          grid.select([]);
+          grid.set({ filters: {} });
+          reconcileBrushes();
+          commitNow("Clear All Filters");
+          scheduleRefresh();
+        }
+        function toggleSort(id) {
+          const g = grid.get();
+          const dir = g.sort?.id === id && g.sort.dir === "asc" ? "desc" : "asc";
+          grid.set({ sort: { id, dir } });
+          commitNow(`Sort ${id} ${dir}`);
+          updateBaseline();
+          scheduleRefresh();
+        }
+
+        // ---- Grouping and stats -----------------------------------------------------
+        function pivotRows() {
+          const { by, value } = pivot;
+          const agg = value ? pivot.agg : "count";
+          const groups = new Map();
+          for (const i of grid.view()) {
+            const r = grid.row(i);
+            const raw = r[by];
+            const key = raw === null || raw === undefined ? "" : String(raw);
+            let e = groups.get(key);
+            if (!e) {
+              e = { key, n: 0, cnt: 0, sum: 0, min: Infinity, max: -Infinity };
+              groups.set(key, e);
+            }
+            e.n++;
+            const x = value ? r[value] : null;
+            if (typeof x === "number" && Number.isFinite(x)) {
+              e.cnt++;
+              e.sum += x;
+              if (x < e.min) e.min = x;
+              if (x > e.max) e.max = x;
+            }
+          }
+          const pick = (e) => {
+            if (agg === "count") return e.n;
+            if (!e.cnt) return null;
+            if (agg === "sum") return e.sum;
+            if (agg === "mean") return e.sum / e.cnt;
+            return agg === "min" ? e.min : e.max;
+          };
+          return [...groups.values()]
+            .map((e) => ({ key: e.key, n: e.n, value: pick(e) }))
+            .sort(
+              (a, b) =>
+                (b.value ?? -Infinity) - (a.value ?? -Infinity) || a.key.localeCompare(b.key),
+            );
+        }
+        function renderPivot() {
+          const body = $("pivot-body");
+          body.replaceChildren();
+          $("pv-head").textContent = pivot.value ? `${pivot.agg} ${pivot.value}` : "Share";
+          if (!pivot.by) {
+            body.append(emptyRow("Pick a column in By to group rows."));
+            return;
+          }
+          const rows = pivotRows();
+          const total = grid.view().length;
+          if (rows.length === 0) body.append(emptyRow("No rows match the filters."));
+          for (const r of rows.slice(0, 200)) {
+            const tr = document.createElement("tr");
+            tr.tabIndex = 0;
+            tr.title = r.key === "" ? "Blank" : `Filter ${pivot.by} to ${r.key}`;
+            if (r.key === "") tr.dataset.empty = "";
+            const share = total ? `${((r.n / total) * 100).toFixed(1)}%` : "—";
+            const cells = [
+              [r.key === "" ? "(blank)" : r.key, false],
+              [r.n.toLocaleString(), true],
+              [pivot.value ? fmt(r.value) : share, true],
+            ];
+            for (const [text, num] of cells) {
+              const td = document.createElement("td");
+              td.textContent = text;
+              if (num) td.className = "num";
+              tr.append(td);
+            }
+            if (r.key !== "") {
+              const open = () => filterToGroup(r.key);
+              tr.addEventListener("click", open);
+              tr.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") open();
+              });
+            }
+            body.append(tr);
+          }
+          if (rows.length > 200)
+            body.append(emptyRow(`Showing 200 of ${rows.length.toLocaleString()} groups.`));
+        }
+        function emptyRow(text) {
+          const tr = document.createElement("tr");
+          tr.dataset.empty = "";
+          const td = document.createElement("td");
+          td.colSpan = 3;
+          td.className = "muted";
+          td.textContent = text;
+          tr.append(td);
+          return tr;
+        }
+        function filterToGroup(key) {
+          const by = pivot.by;
+          const f = { ...grid.get().filters };
+          f[by] = typeOf(by) === "number" ? key : `=${key}`;
+          grid.set({ filters: f });
+          reconcileBrushes();
+          commitNow(`Filter ${by} to ${key}`);
+          scheduleRefresh();
+        }
+        function syncPivotUI() {
+          $("pv-by").value = pivot.by ?? "";
+          $("pv-val").value = pivot.value ?? "";
+          $("pv-agg").value = pivot.agg ?? "count";
+        }
+        function setPivot(patch, label) {
+          pivot = { ...pivot, ...patch };
+          if (!pivot.value && pivot.agg !== "count") pivot.agg = "count";
+          syncPivotUI();
+          commit(label);
+          scheduleRefresh();
+        }
+        function statCol() {
+          return $("stat-col").value || null;
+        }
+        function renderStats(st) {
+          const dl = $("stats");
+          dl.replaceChildren();
+          const id = statCol();
+          const info = id ? st.columns[id] : undefined;
+          const row = (k, v) => {
+            const dt = document.createElement("dt");
+            dt.textContent = k;
+            const dd = document.createElement("dd");
+            dd.textContent = v;
+            dl.append(dt, dd);
+          };
+          row("Rows", `${st.rows.toLocaleString()} of ${st.total.toLocaleString()}`);
+          if (!info) return;
+          const type = typeOf(id);
+          row("Count", info.count.toLocaleString());
+          row("Empty", info.empty.toLocaleString());
+          if (type === "number") {
+            row("Min", fmt(info.min));
+            row("Max", fmt(info.max));
+            row("Sum", fmt(info.sum));
+            row("Mean", fmt(info.mean));
+          } else if (type === "date") {
+            row("Earliest", dayText(info.min));
+            row("Latest", dayText(info.max));
+          } else {
+            row("Distinct", info.distinct.toLocaleString());
+            row("Top", info.top ?? "—");
+          }
+        }
+        function stepStat(delta) {
+          const sel = $("stat-col");
+          if (!sel.options.length) return;
+          sel.selectedIndex = (sel.selectedIndex + delta + sel.options.length) % sel.options.length;
+          scheduleRefresh();
+        }
+        function renderChips(filters) {
+          const chips = $("chips");
+          chips.replaceChildren();
+          const entries = Object.entries(filters);
+          if (entries.length === 0) {
+            const m = document.createElement("span");
+            m.className = "muted";
+            m.textContent = "No filters. Brush a chart, type in a column filter, or group rows.";
+            chips.append(m);
+            return;
+          }
+          for (const [col, text] of entries) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "chip";
+            b.title = `Remove the ${col} filter`;
+            const label = document.createElement("span");
+            label.textContent = `${col} ${text}`;
+            const x = document.createElement("b");
+            x.textContent = "×";
+            b.append(label, x);
+            b.addEventListener("click", () => removeFilter(col));
+            chips.append(b);
+          }
+        }
+
+        // ---- Linked charts ------------------------------------------------------------
+        // Each chart draws the rows the grid's filters keep, except its own brush (so the brushed chart keeps its context
+        // and the others narrow to the brush). Bins, categories and colours stay those of the full data.
+        function linkedFilters(card) {
+          const f = { ...grid.get().filters };
+          const b = card.brush;
+          if (b && b.mode === "filter" && f[b.column] === b.text) delete f[b.column];
+          return f;
+        }
+        function feedCharts() {
+          for (const card of charts) {
+            if (!card.inst) continue;
+            const f = linkedFilters(card);
+            const key = JSON.stringify(f);
+            if (key === card.fed) continue;
+            card.inst.set({ rows: key === ALL_ROWS ? null : grid.match(f) });
+            card.fed = key;
+          }
+        }
+
+        // ---- Refresh ----------------------------------------------------------------
+        function scheduleRefresh() {
+          if (!refreshFrame) {
+            refreshFrame = requestAnimationFrame(() => {
+              refreshFrame = 0;
+              refreshAll();
+            });
+          }
+        }
+        function refreshAll() {
+          if (!current) return;
+          reconcileBrushes();
+          feedCharts();
+          const st = grid.stats();
+          const g = grid.get();
+          const nFilters = Object.keys(g.filters).length;
+          const brushes = charts.filter((c) => c.brush).length;
+          $("meta").textContent = `${current.name} · ${g.columns.length} columns`;
+          $("status-main").textContent =
+            `Rows ${st.rows.toLocaleString()} of ${st.total.toLocaleString()} · Filters ${nFilters} · Brushes ${brushes} · Selected ${grid.selection().length}`;
+          renderChips(g.filters);
+          renderStats(st);
+          renderPivot();
+          // A filter brush keeps exactly the grid's rows; a multi-category brush selects its rows instead.
+          for (const c of charts) {
+            const n = c.brush ? (c.brush.mode === "filter" ? st.rows : c.brush.count) : null;
+            c.info.textContent =
+              n === null
+                ? ""
+                : `${n.toLocaleString()} ${c.brush.mode === "filter" ? "in brush" : "selected"}`;
+          }
+        }
+
+        // ---- Export -----------------------------------------------------------------
+        function csvText() {
+          const cols = grid
+            .get()
+            .columns.filter((c) => !c.hidden)
+            .map((c) => c.id);
+          const esc = (v) => {
+            if (v === null || v === undefined) return "";
+            const s = String(v);
+            return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          };
+          const lines = [cols.map(esc).join(",")];
+          for (const i of grid.view()) {
+            const r = grid.row(i);
+            lines.push(cols.map((id) => esc(r[id])).join(","));
+          }
+          return `${lines.join("\n")}\n`;
+        }
+        // The filtered CSV and one PNG per chart (what Export delivers).
+        async function viewFiles() {
+          const files = [
+            new File([csvText()], `${current.stem}-filtered.csv`, { type: "text/csv" }),
+          ];
+          for (const card of charts) {
+            const blob = await card.inst.exportBlob({ type: "image/png", scale: 2 });
+            files.push(
+              new File(
+                [blob],
+                `${safeName(current.stem)}-${safeName(card.spec.x)}-chart-${card.index + 1}.png`,
+                { type: "image/png" },
+              ),
+            );
+          }
+          return files;
+        }
+        async function exportAll() {
+          if (!current)
+            throw new Error("data-explore: no dataset is open, so there is nothing to export");
+          if (exporting) throw new Error("data-explore: an export is already running");
+          exporting = true;
+          try {
+            const files = await viewFiles();
+            for (const f of files) {
+              await ws.attach(f);
+              await ws.download(f, f.name);
+            }
+            return files;
+          } finally {
+            exporting = false;
+          }
+        }
+        // What the user narrowed the data to: rows, filters, brushes, selection, sort and the Group By table.
+        function findingsOf() {
+          const st = grid.stats();
+          const g = grid.get();
+          const out = {
+            dataset: current.name,
+            rows: st.rows,
+            total: st.total,
+            filters: { ...g.filters },
+            sort: g.sort ? { id: g.sort.id, dir: g.sort.dir } : null,
+            brushes: charts
+              .filter((c) => c.brush)
+              .map((c) => ({
+                chart: c.index + 1,
+                column: c.brush.column,
+                mode: c.brush.mode,
+                ...(c.brush.mode === "filter"
+                  ? { text: c.brush.text }
+                  : { values: c.brush.values }),
+                count: c.brush.count,
+              })),
+            selected: grid.selection().length,
+            charts: charts.map((c) => ({ ...c.spec })),
+          };
+          if (pivot.by) {
+            const rows = pivotRows();
+            out.groupBy = {
+              by: pivot.by,
+              value: pivot.value || null,
+              agg: pivot.value ? pivot.agg : "count",
+              groups: rows.length,
+              top: rows.slice(0, 20).map((r) => ({ key: r.key, rows: r.n, value: r.value })),
+            };
+          }
+          return out;
+        }
+        // The chat message that goes with Send, in a few lines.
+        function findingsMessage(f, files) {
+          const filters = Object.entries(f.filters).map(([col, text]) => `${col} ${text}`);
+          const lines = [
+            `Data findings on ${f.dataset}: ${f.rows.toLocaleString()} of ${f.total.toLocaleString()} rows` +
+              (filters.length ? ` match ${filters.join(", ")}.` : " (no filter)."),
+          ];
+          if (f.selected) lines.push(`${f.selected.toLocaleString()} rows selected.`);
+          if (f.sort) lines.push(`Sorted by ${f.sort.id} ${f.sort.dir}.`);
+          if (f.groupBy && f.groupBy.top.length) {
+            const by = f.groupBy;
+            const head = by.value ? `${by.agg} ${by.value}` : "rows";
+            const top = by.top
+              .slice(0, 3)
+              .map(
+                (r) =>
+                  `${r.key || "(empty)"} ${r.value === null ? "-" : round(r.value).toLocaleString()}`,
+              );
+            lines.push(
+              `Grouped by ${by.by} (${head}): ${top.join(", ")}${by.groups > 3 ? `, ${by.groups - 3} more` : ""}.`,
+            );
+          }
+          lines.push(`Files: ${files.map((x) => x.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+        // Send (S): the summary with findings.json and the view's files, as one chat message. Called straight from the
+        // click or key press: T3 sends only during the user's gesture.
+        async function sendFindings() {
+          if (!current)
+            throw new Error("data-explore: no dataset is open, so there is nothing to send");
+          if (exporting) throw new Error("data-explore: an export is already running");
+          exporting = true;
+          try {
+            const f = findingsOf();
+            const files = [
+              new File([JSON.stringify(f, null, 2) + "\n"], "findings.json", {
+                type: "application/json",
+              }),
+              ...(await viewFiles()),
+            ];
+            await ws.send(findingsMessage(f, files), { files });
+            return files;
+          } finally {
+            exporting = false;
+          }
+        }
+
+        // ---- Command palette --------------------------------------------------------
+        const extraCommands = [];
+        let paletteItems = [];
+        let paletteIndex = 0;
+        let paletteReturn = null;
+        function commandList() {
+          const cmds = [
+            {
+              label: "Export CSV and Chart PNGs",
+              hint: "E",
+              run: () => exportAll().catch(showError),
+            },
+            {
+              label: "Send Findings to Agent",
+              hint: "S",
+              run: () => sendFindings().catch(showError),
+            },
+            { label: "Clear All Filters, Brushes and Selection", hint: "X", run: clearAll },
+            { label: "Undo", hint: `${MOD}Z`, run: () => history.undo() },
+            { label: "Redo", hint: `${MOD}⇧Z`, run: () => history.redo() },
+            { label: "Cycle Chart 1 Type", hint: "T", run: () => cycleType(charts[0]) },
+            { label: "Toggle Inspector", hint: "I", run: toggleInspector },
+            { label: "Focus Grid", hint: "G", run: focusGrid },
+          ];
+          for (const id of grid.get().columns.map((c) => c.id)) {
+            cmds.push({ label: `Sort by ${id}`, hint: "sort", run: () => toggleSort(id) });
+            if (typeOf(id) !== "date")
+              cmds.push({
+                label: `Group rows by ${id}`,
+                hint: "group",
+                run: () => setPivot({ by: id }, `Group By ${id}`),
+              });
+            cmds.push({
+              label: `Stats for ${id}`,
+              hint: "stats",
+              run: () => {
+                $("stat-col").value = id;
+                scheduleRefresh();
+              },
+            });
+          }
+          for (const c of extraCommands)
+            cmds.push({ label: c.label, hint: c.hint ?? "", run: c.run });
+          return cmds;
+        }
+        function renderPalette() {
+          const words = $("cmd-input").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+          paletteItems = commandList().filter((c) =>
+            words.every((w) => c.label.toLowerCase().includes(w)),
+          );
+          paletteIndex = Math.min(paletteIndex, Math.max(0, paletteItems.length - 1));
+          const ul = $("cmd-list");
+          ul.replaceChildren();
+          if (paletteItems.length === 0) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = "No matching command";
+            ul.append(li);
+            return;
+          }
+          paletteItems.forEach((c, i) => {
+            const li = document.createElement("li");
+            li.tabIndex = -1;
+            li.setAttribute("role", "option");
+            li.setAttribute("aria-selected", String(i === paletteIndex));
+            const label = document.createElement("span");
+            label.textContent = c.label;
+            const hint = document.createElement("span");
+            hint.className = "hint";
+            hint.textContent = c.hint;
+            li.append(label, hint);
+            li.addEventListener("click", () => runPalette(i));
+            ul.append(li);
+          });
+        }
+        function openPalette() {
+          paletteReturn = document.activeElement;
+          $("cmd").hidden = false;
+          $("cmd-input").value = "";
+          paletteIndex = 0;
+          renderPalette();
+          $("cmd-input").focus();
+        }
+        function closePalette() {
+          if ($("cmd").hidden) return;
+          $("cmd").hidden = true;
+          paletteReturn?.focus?.();
+        }
+        function runPalette(i) {
+          const c = paletteItems[i];
+          if (!c) return;
+          closePalette();
+          c.run();
+        }
+        $("cmd-input").addEventListener("input", () => {
+          paletteIndex = 0;
+          renderPalette();
+        });
+        $("cmd-input").addEventListener("keydown", (e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            const n = paletteItems.length;
+            if (n) paletteIndex = (paletteIndex + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+            renderPalette();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            runPalette(paletteIndex);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            closePalette();
+          }
+        });
+        $("cmd").addEventListener("click", (e) => {
+          if (e.target.hasAttribute("data-close")) closePalette();
+        });
+
+        // ---- Keys -------------------------------------------------------------------
+        function toggleInspector() {
+          const panel = $("inspector");
+          panel.hidden = !panel.hidden;
+          $("work").classList.toggle("no-inspector", panel.hidden);
+        }
+        function focusGrid() {
+          $("grid-root").querySelector('[role="grid"]')?.focus();
+        }
+        const KEYS = {
+          e: () => exportAll().catch(showError),
+          s: () => sendFindings().catch(showError),
+          x: clearAll,
+          t: () => cycleType(charts[0]),
+          i: toggleInspector,
+          g: focusGrid,
+          "/": () => $("grid-root").querySelector(".t3k-datagrid-filters input")?.focus(),
+          p: () => $("pv-by").focus(),
+          "[": () => stepStat(-1),
+          "]": () => stepStat(1),
+          1: () => charts[0]?.xSel.focus(),
+          2: () => charts[1]?.xSel.focus(),
+        };
+        // Keys flush a pending commit before undo or redo, so an undo never folds in an unsaved edit.
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") flushCommit();
+          },
+          true,
+        );
+        document.addEventListener("keydown", (e) => {
+          const mod = e.metaKey || e.ctrlKey;
+          if (mod && !e.altKey && e.key.toLowerCase() === "k") {
+            e.preventDefault();
+            if ($("cmd").hidden) openPalette();
+            else closePalette();
+            return;
+          }
+          if (e.defaultPrevented || mod || e.altKey || isTyping(e.target)) return;
+          const run = KEYS[e.key];
+          if (!run) return;
+          e.preventDefault();
+          run();
+        });
+        $("open-cmd").addEventListener("click", openPalette);
+        $("clear").addEventListener("click", clearAll);
+        $("export").addEventListener("click", () => exportAll().catch(showError));
+        $("send").addEventListener("click", () => sendFindings().catch(showError));
+
+        // ---- Dataset ----------------------------------------------------------------
+        function fillSelects(cols) {
+          const types = typeMap();
+          const nums = cols.filter((id) => types.get(id) === "number");
+          const fill = (s, pairs) => s.replaceChildren(...pairs.map(([v, l]) => new Option(l, v)));
+          fillChartSelects(cols);
+          const prevStat = $("stat-col").value;
+          fill(
+            $("stat-col"),
+            cols.map((id) => [id, id]),
+          );
+          $("stat-col").value = cols.includes(prevStat) ? prevStat : (nums[0] ?? cols[0] ?? "");
+          fill($("pv-by"), [
+            ["", "(none)"],
+            ...cols.filter((id) => types.get(id) !== "date").map((id) => [id, id]),
+          ]);
+          fill($("pv-val"), [["", "(rows)"], ...nums.map((id) => [id, id])]);
+          fill(
+            $("pv-agg"),
+            AGGREGATES.map((a) => [a, a]),
+          );
+        }
+        async function openDataset(index, state) {
+          const asset = assets[index];
+          $("meta").textContent = `Opening ${asset.name}`;
+          const blob = asset.file ?? (await (await fetch(asset.url)).blob());
+          const source = isJsonAsset(asset) ? JSON.parse(await blob.text()) : blob;
+          const loaded = await grid.load(source);
+          if (!loaded) return;
+          const cols = grid.get().columns.map((c) => c.id);
+          if (!OPTS.charts.length) {
+            grid.set({ filters: {} }); // stats over every row: a previous dataset's filters may still resolve
+            startCharts = autoCharts(cols);
+          }
+          current = {
+            index,
+            name: asset.name,
+            stem: asset.name.replace(/\.[^.]+$/, ""),
+            total: loaded.rows,
+          };
+          // Each dataset gets fresh chart instances: an old chart config (its x or y) must never meet the new data.
+          const start = sanitize(state ?? optionsState(cols), cols);
+          charts.forEach((card, i) => {
+            card.inst?.destroy();
+            card.brush = null;
+            // Created as a bar (valid with only x); applyState then sets the real type, which may need a y.
+            card.inst = t3kit.chart.create(card.plot, { type: "bar", x: start.charts[i].x });
+            card.fed = ALL_ROWS;
+            card.inst.on("filter", (f) => onBrush(card, f));
+          });
+          for (const card of charts) await card.inst.setData(source);
+          fillSelects(cols);
+          applyState(state ?? optionsState(cols));
+          if (history)
+            history.set({
+              entries: [{ label: `Open ${asset.name}`, state: getState() }],
+              index: 0,
+            });
+          scheduleRefresh();
+        }
+        const activeStep = (h) => {
+          const e = isPlain(h) && Array.isArray(h.entries) ? h.entries[h.index] : undefined;
+          return e ? e.state : null;
+        };
+
+        // ---- Runtime (window.t3template) --------------------------------------------
+        const panelsEl = $("panels");
+        const rt = t3kit.templateRuntime.create({
+          id: "data-explore",
+          pipeline: "data",
+          // 'top': after the readouts (Filters, Column Stats), before Group By. 'bottom': after History.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            if (position === "top")
+              panelsEl.insertBefore(section, panelsEl.querySelector('[data-panel="pivot"]'));
+            else panelsEl.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getValues(),
+          setValues(partial, label) {
+            const next = mergeValues(getState(), partial);
+            applyState(next);
+            commitNow(label);
+            return getValues();
+          },
+          addPreset: (name, values) => history.savePreset(name, mergeValues(getState(), values)),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => exportAll(),
+          reservedKeys: [
+            "e",
+            "s",
+            "x",
+            "t",
+            "i",
+            "g",
+            "/",
+            "p",
+            "[",
+            "]",
+            "1",
+            "2",
+            "mod+k",
+            "mod+z",
+            "mod+shift+z",
+          ],
+          onCommand: (label, run, hint) => extraCommands.push({ label, run, hint }),
+          onBoltOnChange() {
+            scheduleRefresh();
+            persist();
+          },
+        });
+        const persistState = () => ({
+          v: 1,
+          key: STATE_KEY,
+          dataset: current?.name ?? null,
+          history: history.get(),
+          controls: rt.state(),
+        });
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => ws.setState(persistState()), 300);
+        }
+
+        // ---- Boot -------------------------------------------------------------------
+        // The charts exist before data arrives, so their brush and spec live here from the start.
+        for (let i = 0; i < CHART_COUNT; i++) charts.push(buildCard(i));
+
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) && saved.v === 1 && saved.key === STATE_KEY && isPlain(saved.history)
+              ? saved
+              : null;
+          assets = (ready.assets ?? []).filter(isDataAsset);
+          const restoreIndex = restored ? assets.findIndex((a) => a.name === restored.dataset) : -1;
+          const restoring = restoreIndex >= 0;
+          if (assets.length > 1) {
+            const select = $("dataset");
+            assets.forEach((a, i) => select.append(new Option(a.name, String(i))));
+            select.value = String(restoring ? restoreIndex : 0);
+            select.hidden = false;
+            select.addEventListener("change", () =>
+              openDataset(Number(select.value), null).catch(showError),
+            );
+          }
+          if (assets.length === 0) {
+            $("meta").textContent = "Attach a CSV or JSON file to start exploring";
+            $("app").classList.add("no-data");
+            $("export").disabled = true;
+            $("clear").disabled = true;
+          } else
+            await openDataset(
+              restoring ? restoreIndex : 0,
+              restoring ? activeStep(restored.history) : null,
+            );
+
+          history = t3kit.history.create($("history"), {
+            title: "Steps",
+            label: "Open",
+            state: getState(),
+            presetPlaceholder: "Name this view",
+          });
+          if (restoring) history.set(restored.history);
+          historyLink = rt.linkHistory(history, getState, applyState, {
+            idleMs: 300,
+            commit: (label) => commitNow(label),
+          });
+          history.on("change", () => {
+            persist();
+            rt.emitChange();
+            scheduleRefresh();
+          });
+          rt.publish({
+            // A getter: a dataset switch replaces the chart instances, so the list must follow them.
+            instances: {
+              grid,
+              get charts() {
+                return charts.map((c) => c.inst).filter(Boolean);
+              },
+              history,
+            },
+            saved: restoring ? restored.controls : undefined,
+          });
+          grid.on("change", () => {
+            reconcileBrushes();
+            commit(gridLabel());
+            scheduleRefresh();
+          });
+          grid.on("select", () => scheduleRefresh());
+          booted = true;
+          persist();
+          refreshAll();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        $("mod-key").textContent = MAC ? "K" : "Ctrl+K";
+        syncPivotUI();
+        $("pv-by").addEventListener("change", () =>
+          setPivot({ by: $("pv-by").value || null }, `Group By ${$("pv-by").value || "none"}`),
+        );
+        $("pv-val").addEventListener("change", () =>
+          setPivot({ value: $("pv-val").value || null }, `Value ${$("pv-val").value || "rows"}`),
+        );
+        $("pv-agg").addEventListener("change", () =>
+          setPivot({ agg: $("pv-agg").value }, `Aggregate ${$("pv-agg").value}`),
+        );
+        $("stat-col").addEventListener("change", () => scheduleRefresh());
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

@@ -99,15 +99,24 @@ export const openMediaFile = Effect.fn("openMediaFile")(function* (
 });
 
 /** Reads the leading bytes of an already-validated media file, never past the end. */
-export const readMediaFileHeader = (filePath: string, file: OpenMediaFile, byteCount: number) =>
+/** Up to `byteCount` bytes from `position`; fewer at the end of the file. */
+export const readMediaFileRange = (
+  filePath: string,
+  file: OpenMediaFile,
+  position: number,
+  byteCount: number,
+) =>
   Effect.tryPromise({
     try: async () => {
       const buffer = new Uint8Array(byteCount);
-      const { bytesRead } = await file.handle.read(buffer, 0, byteCount, 0);
+      const { bytesRead } = await file.handle.read(buffer, 0, byteCount, position);
       return buffer.subarray(0, bytesRead);
     },
     catch: (cause) => new MediaFileReadError({ path: filePath, cause }),
   });
+
+export const readMediaFileHeader = (filePath: string, file: OpenMediaFile, byteCount: number) =>
+  readMediaFileRange(filePath, file, 0, byteCount);
 
 export const statMediaFile = Effect.fn("statMediaFile")(function* (
   filePath: string,

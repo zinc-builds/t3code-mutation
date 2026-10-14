@@ -44,6 +44,7 @@ import * as ProviderSessionManager from "../ProviderSessionManager.ts";
 import * as ProviderSwitchService from "../ProviderSwitchService.ts";
 import * as ProviderTurnControlService from "../ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "../ProviderTurnStartService.ts";
+import * as WorkspaceTurnContext from "../../mutationWorkspace/WorkspaceTurnContext.ts";
 import * as ProviderTurnStartServiceTestkit from "../ProviderTurnStartService.testkit.ts";
 import * as McpAppModelContext from "../../mcpApps/McpAppModelContext.ts";
 import * as RunExecutionService from "../RunExecutionService.ts";
@@ -396,6 +397,10 @@ export function layerWithRegistry<Error>(
         }),
         layerRunExecutionServiceProvided,
         layerRuntime,
+        // Replays carry no workspace state.
+        Layer.mock(WorkspaceTurnContext.WorkspaceTurnContext)({
+          forUserMessage: () => Effect.succeed(""),
+        }),
       ),
     ),
   );

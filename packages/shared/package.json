@@ -475,6 +475,14 @@
       "types": "./src/mcpApp.ts",
       "import": "./src/mcpApp.ts"
     },
+    "./mutationWorkspace": {
+      "types": "./src/mutationWorkspace.ts",
+      "import": "./src/mutationWorkspace.ts"
+    },
+    "./mutationWorkspaceChrome": {
+      "types": "./src/mutationWorkspaceChrome.ts",
+      "import": "./src/mutationWorkspaceChrome.ts"
+    },
     "./atomicWrite": {
       "types": "./src/atomicWrite.ts",
       "import": "./src/atomicWrite.ts"

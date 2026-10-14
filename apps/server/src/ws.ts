@@ -118,6 +118,9 @@ import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ThreadManagementService from "./orchestration-v2/ThreadManagementService.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
+import * as WorkspaceAssets from "./mutationWorkspace/WorkspaceAssets.ts";
+import * as WorkspacePreview from "./mutationWorkspace/WorkspacePreview.ts";
+import * as WorkspaceState from "./mutationWorkspace/WorkspaceState.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts";
@@ -140,7 +143,7 @@ import {
   toShellApplicationEvent,
   type ShellApplicationEvent,
 } from "./orchestration-v2/ShellStream.ts";
-import { ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION } from "./orchestration-v2/ProjectionStore.ts";
+import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import { bufferLiveStream } from "./orchestration-v2/LiveStreamBudget.ts";
 import { coalesceThreadLiveStream } from "./orchestration-v2/ThreadLiveEventCoalescer.ts";
 import {
@@ -968,7 +971,7 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
         const enriched = yield* enrichProjectShells(yield* projects.listShells());
         return {
           snapshot: {
-            schemaVersion: ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
+            schemaVersion: ProjectionStore.ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
             snapshotSequence,
             projects: enriched.projects,
             threads: [],
@@ -1080,7 +1083,7 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
           );
           return shellStreamItemFromEnrichmentRefresh({
             snapshot: {
-              schemaVersion: ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
+              schemaVersion: ProjectionStore.ORCHESTRATION_V2_PROJECTION_SCHEMA_VERSION,
               snapshotSequence,
               projects: changedProjects,
               threads: [],
@@ -1203,6 +1206,7 @@ const layerWsRpc = (
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
+  workspacePreview: WorkspacePreview.WorkspacePreview["Service"],
 ) =>
   ServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -1224,6 +1228,8 @@ const layerWsRpc = (
 
       const providerSessionsV2 = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
+      const workspaceState = yield* WorkspaceState.WorkspaceState;
+      const workspaceAssets = yield* WorkspaceAssets.WorkspaceAssets;
       const analytics = yield* AnalyticsService.AnalyticsService;
       // Client-origin attribution (#7774): every thread/turn the connecting
       // client starts is credited to its surface + app version. Best-effort:
@@ -2273,6 +2279,15 @@ const layerWsRpc = (
         [WS_METHODS.mcpAppsToolInfo]: (input) => mcpAppRequests.toolInfo(input),
         [WS_METHODS.mcpAppsUpdateModelContext]: (input) => mcpAppRequests.updateModelContext(input),
         [WS_METHODS.mcpAppsReadResource]: (input) => mcpAppRequests.readResource(input),
+        [WS_METHODS.workspaceReadState]: (input) =>
+          workspaceState
+            .read(input.threadId)
+            .pipe(Effect.map((state) => ({ state: state ?? null }))),
+        [WS_METHODS.workspaceUpdateState]: (input) =>
+          workspaceState.write(input.threadId, input.state),
+        [WS_METHODS.workspacePreviewOpen]: (input) => workspacePreview.open(input),
+        [WS_METHODS.workspacePreviewAct]: (input) => workspacePreview.act(input),
+        [WS_METHODS.workspaceSubscribePreview]: (input) => workspacePreview.subscribe(input),
         [WS_METHODS.providerUploadFeedback]: (input) =>
           Effect.gen(function* () {
             const projection = yield* threadManagement.getThreadRecords(input.threadId, [
@@ -2745,6 +2760,10 @@ const layerWsRpc = (
             ) {
               return yield* issueAssetUrl({ resource: input.resource });
             }
+            if (input.resource._tag === "workspace-asset") {
+              yield* workspaceAssets.authorize(input.resource);
+              return yield* issueAssetUrl({ resource: input.resource });
+            }
             if (input.resource._tag === "draft-workspace-file") {
               // A project draft names its workspace directly; there is no
               // thread to resolve one from.
@@ -3165,6 +3184,8 @@ export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
+    // Review pages outlive a connection briefly, so a reconnecting client finds its own.
+    const workspacePreview = yield* WorkspacePreview.WorkspacePreview;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
@@ -3222,6 +3243,7 @@ export const layer = Layer.unwrap(
               clientAnalyticsProps,
               previewAutomationBroker,
               serverBrowser,
+              workspacePreview,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               // Request fibers run in the handlers' context, so this reporter sees
@@ -3229,6 +3251,9 @@ export const layer = Layer.unwrap(
               Layer.provide(DefectReporter.layer),
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
               Layer.provide(AgentSessionScanner.layer),
+              // Stateless over files in the state directory, like the MCP tool that reads it.
+              Layer.provide(WorkspaceState.layer),
+              Layer.provide(WorkspaceAssets.layer.pipe(Layer.provide(ProjectionStore.layer))),
               Layer.provide(ProviderMaintenanceRunner.layer),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               // One server-lifetime service means clients share the same PR caches, and a WS

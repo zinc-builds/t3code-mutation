@@ -399,6 +399,26 @@
       "types": "./src/state/mcpApps.ts",
       "default": "./src/state/mcpApps.ts"
     },
+    "./state/mutation-workspace": {
+      "types": "./src/state/mutationWorkspace.ts",
+      "default": "./src/state/mutationWorkspace.ts"
+    },
+    "./state/mutation-workspace-active": {
+      "types": "./src/state/mutationWorkspaceActive.ts",
+      "default": "./src/state/mutationWorkspaceActive.ts"
+    },
+    "./state/mutation-workspace-assets": {
+      "types": "./src/state/mutationWorkspaceAssets.ts",
+      "default": "./src/state/mutationWorkspaceAssets.ts"
+    },
+    "./state/mutation-workspace-host": {
+      "types": "./src/state/mutationWorkspaceHost.ts",
+      "default": "./src/state/mutationWorkspaceHost.ts"
+    },
+    "./state/mutation-workspace-preview-host": {
+      "types": "./src/state/mutationWorkspacePreviewHost.ts",
+      "default": "./src/state/mutationWorkspacePreviewHost.ts"
+    },
     "./source-control-clients": {
       "types": "./src/sourceControlClients.ts",
       "default": "./src/sourceControlClients.ts"

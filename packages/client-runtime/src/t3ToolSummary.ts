@@ -437,6 +437,21 @@ export function summarizeT3ToolCalls(
     case "html-render":
       label = phrase("Rendered", "render", quantity(selected.length, "HTML page"));
       break;
+    case "workspace-mutate":
+      label = phrase("Built", "build", quantity(selected.length, "workspace"));
+      break;
+    case "workspace-restore":
+      label = phrase("Returned", "return", "to chat");
+      break;
+    case "workspace-state":
+      label = phrase("Read", "read", `workspace controls ${times}`);
+      break;
+    case "workspace-kit-docs":
+      label = phrase("Read", "read", `workspace kit docs ${times}`);
+      break;
+    case "media-prepare":
+      label = phrase("Prepared", "prepare", `media ${times}`);
+      break;
     case "capabilities":
       label = phrase("Checked", "check", `orchestration capabilities ${times}`);
       break;

@@ -74,6 +74,17 @@ describe("RPC authorization scopes", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.cloudInstallRelayClient)).toBe(AuthRelayWriteScope);
   });
 
+  it("drives a workspace's live preview only with preview operate access", () => {
+    // The review page runs in the environment's browser, like a server preview tab.
+    for (const method of [
+      WS_METHODS.workspacePreviewOpen,
+      WS_METHODS.workspacePreviewAct,
+      WS_METHODS.workspaceSubscribePreview,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthPreviewOperateScope);
+    }
+  });
+
   it("requires permission to operate on a thread before uploading feedback", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.providerUploadFeedback)).toBe(
       AuthOrchestrationOperateScope,
@@ -398,6 +409,7 @@ it.effect("separates host file URLs from readable attachment URLs", () =>
     for (const resource of [
       { _tag: "workspace-file", threadId: ThreadId.make("thread"), path: "file.txt" },
       { _tag: "media-file", threadId: ThreadId.make("thread"), path: "/repo/image.png" },
+      { _tag: "workspace-asset", threadId: ThreadId.make("thread"), path: "/repo/sales.csv" },
       { _tag: "draft-workspace-file", cwd: "/repo", path: "file.txt" },
     ] as const) {
       expect(

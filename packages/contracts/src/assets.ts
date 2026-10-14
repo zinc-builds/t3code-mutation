@@ -23,6 +23,13 @@ export const AssetResource = Schema.Union([
     threadId: ThreadId,
     path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
   }),
+  // A file a mutation workspace was handed: the exact host path a
+  // `workspace_mutate` call in the thread (or a thread it forked from)
+  // declared as an asset. Served whatever its type, never as a document.
+  Schema.TaggedStruct("workspace-asset", {
+    threadId: ThreadId,
+    path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
+  }),
   // A workspace file named by a draft that has no thread yet. The draft names
   // its workspace root explicitly instead of resolving one from a thread.
   Schema.TaggedStruct("draft-workspace-file", {
@@ -88,6 +95,16 @@ export const AssetCreateUrlResult = Schema.Struct({
   ),
   /** Pixel size read from the image header, so a client can reserve the exact box before the bytes arrive. */
   imageDimensions: Schema.optional(AssetImageDimensions),
+  /**
+   * For a `workspace-asset`: the file's size in bytes and the Content-Type the URL serves it with, read
+   * when the URL was minted, so a client knows both without fetching the file.
+   */
+  file: Schema.optional(
+    Schema.Struct({
+      size: NonNegativeInt,
+      contentType: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+    }),
+  ),
 });
 export type AssetCreateUrlResult = typeof AssetCreateUrlResult.Type;
 
@@ -245,6 +262,17 @@ export class AssetWorkspaceResolutionError extends Schema.TaggedError<AssetWorks
   }
 }
 
+export class AssetWorkspaceAssetUndeclaredError extends Schema.TaggedError<AssetWorkspaceAssetUndeclaredError>()(
+  "AssetWorkspaceAssetUndeclaredError",
+  {
+    resource: AssetResource,
+  },
+) {
+  override get message(): string {
+    return "No workspace in this thread was handed this file.";
+  }
+}
+
 export class AssetAttachmentNotFoundError extends Schema.TaggedError<AssetAttachmentNotFoundError>()(
   "AssetAttachmentNotFoundError",
   {
@@ -321,6 +349,7 @@ export const AssetAccessError = Schema.Union([
   AssetWorkspaceAssetInspectionError,
   AssetWorkspaceAssetNotFoundError,
   AssetWorkspaceResolutionError,
+  AssetWorkspaceAssetUndeclaredError,
   AssetAttachmentNotFoundError,
   AssetProjectFaviconResolutionError,
   AssetProjectFaviconInspectionError,

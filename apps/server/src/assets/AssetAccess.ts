@@ -64,6 +64,7 @@ import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { extractIcnsPng } from "./icns.ts";
 import { openMediaFile, readMediaFileHeader, type OpenMediaFile } from "./MediaFile.ts";
+import { openWorkspaceAsset } from "./WorkspaceAssetFile.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 export const ASSET_ROUTE_PREFIX = "/api/assets";
@@ -114,6 +115,14 @@ const AssetClaimsSchema = Schema.Union([
   Schema.Struct({
     version: Schema.Literal(1),
     kind: Schema.Literal("media-file-exact"),
+    filePath: Schema.String,
+    device: Schema.String,
+    inode: Schema.String,
+    expiresAt: Schema.Number,
+  }),
+  Schema.Struct({
+    version: Schema.Literal(1),
+    kind: Schema.Literal("workspace-asset-exact"),
     filePath: Schema.String,
     device: Schema.String,
     inode: Schema.String,
@@ -184,6 +193,8 @@ export type ResolvedAsset =
       readonly mimeType?: string;
       readonly file?: OpenMediaFile;
       readonly renderIntent?: "mcp-app";
+      /** Readable cross-origin (`Access-Control-Allow-Origin: *`); see `WORKSPACE_ASSET_CORS_HEADERS`. */
+      readonly crossOrigin?: true;
     }
   | {
       readonly kind: "bytes";
@@ -515,6 +526,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   let fileName: string;
   let sourcePath: string | undefined;
   let imageDimensions: ImageDimensions | null = null;
+  let servedFile: { readonly size: number; readonly contentType: string } | null = null;
 
   switch (input.resource._tag) {
     case "media-file": {
@@ -541,6 +553,40 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       claims = finalized.claims;
       fileName = finalized.fileName;
       imageDimensions = finalized.imageDimensions;
+      break;
+    }
+    case "workspace-asset": {
+      // The caller has checked that a workspace in the thread declared this path.
+      const opened = yield* openWorkspaceAsset(input.resource.path).pipe(
+        Effect.map((asset) =>
+          asset === null
+            ? null
+            : {
+                path: asset.path,
+                device: asset.file.info.dev.toString(),
+                inode: asset.file.info.ino.toString(),
+                size: Number(asset.file.info.size),
+                contentType: asset.mimeType,
+              },
+        ),
+        Effect.scoped,
+        Effect.mapError(
+          (cause) => new AssetWorkspaceAssetInspectionError({ resource: input.resource, cause }),
+        ),
+      );
+      if (opened === null) {
+        return yield* new AssetWorkspaceAssetNotFoundError({ resource: input.resource });
+      }
+      claims = {
+        version: 1,
+        kind: "workspace-asset-exact",
+        filePath: opened.path,
+        device: opened.device,
+        inode: opened.inode,
+        expiresAt,
+      };
+      fileName = path.basename(opened.path);
+      servedFile = { size: opened.size, contentType: opened.contentType };
       break;
     }
     case "workspace-file": {
@@ -832,6 +878,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
     expiresAt,
     ...(sourcePath !== undefined ? { sourcePath } : {}),
     ...(imageDimensions !== null ? { imageDimensions } : {}),
+    ...(servedFile !== null ? { file: servedFile } : {}),
   };
 });
 
@@ -937,6 +984,25 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   const decodedPath = decodeRelativePath(relativePath);
   if (decodedPath === null) return null;
   const path = yield* Path.Path;
+  if (claims.kind === "workspace-asset-exact") {
+    if (decodedPath !== path.basename(claims.filePath)) return null;
+    const asset = yield* openWorkspaceAsset(claims.filePath, claims).pipe(
+      Effect.tapError((cause) =>
+        Effect.logError("Failed to open workspace asset.", { filePath: claims.filePath, cause }),
+      ),
+      Effect.orElseSucceed(() => null),
+    );
+    return asset
+      ? ({
+          kind: "file",
+          path: asset.path,
+          file: asset.file,
+          mimeType: asset.mimeType,
+          crossOrigin: true,
+          ...(asset.download ? { download: true, fileName: path.basename(asset.path) } : {}),
+        } satisfies ResolvedAsset)
+      : null;
+  }
   if (claims.kind === "media-file-exact") {
     if (decodedPath !== path.basename(claims.filePath)) return null;
     const canonicalFile = yield* resolveCanonicalFile(claims.filePath).pipe(

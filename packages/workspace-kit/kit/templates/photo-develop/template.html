@@ -1,0 +1,1739 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Develop</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 40px minmax(0, 1fr);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0 4px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover {
+        background: var(--muted);
+        border-color: var(--input);
+      }
+      .btn[aria-pressed="true"] {
+        border-color: var(--primary);
+        color: var(--foreground);
+      }
+      .btn-primary,
+      .btn-primary:hover {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn-sm {
+        height: 22px;
+        padding: 0 6px;
+        font-size: 11px;
+      }
+      .sel {
+        height: 26px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 6px;
+        max-width: 180px;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: 236px minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      .work.no-rail {
+        grid-template-columns: minmax(0, 1fr) 340px;
+      }
+      .rail {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        border-right: 1px solid var(--border);
+      }
+      #history {
+        position: absolute;
+        inset: 0;
+      }
+      .stage {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) 24px;
+        min-width: 0;
+        min-height: 0;
+      }
+      .view {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+      #viewer {
+        position: absolute;
+        inset: 0;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-left: 1px solid var(--border);
+      }
+      .panels {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 10px;
+        cursor: pointer;
+        font-weight: 600;
+        user-select: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "+";
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+      }
+      .panel[open] > summary::after {
+        content: "\2212";
+      }
+      .panel > summary .btn {
+        font-weight: 400;
+      }
+      .panel-body {
+        padding: 4px 10px 10px;
+        min-width: 0;
+      }
+      .group {
+        margin: 8px 0 2px;
+        color: var(--muted-foreground);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr) 46px;
+        align-items: center;
+        gap: 8px;
+        height: 24px;
+      }
+      .row label {
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: default;
+      }
+      .row.edited label {
+        color: var(--foreground);
+      }
+      .row input {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .row output {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+      .row.edited output {
+        color: var(--foreground);
+      }
+      .seg {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 2px;
+        padding: 2px;
+        margin: 4px 0 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+      }
+      .seg button {
+        height: 22px;
+        border: 0;
+        border-radius: calc(var(--radius) - 6px);
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-width: 320px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .composer:empty {
+        padding: 0;
+        border-top: 0;
+      }
+
+      /* Native chrome (T3 renders the toolbar, history and presets): the page keeps the photo and the inspector. */
+      .app.native .page-chrome,
+      .app.native .rail {
+        display: none;
+      }
+      .app.native .work {
+        grid-template-columns: minmax(0, 1fr) 340px;
+      }
+
+      .offscreen {
+        position: fixed;
+        left: -10000px;
+        top: 0;
+        width: 1280px;
+        height: 960px;
+        pointer-events: none;
+      }
+
+      .cmd-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+      }
+      .cmd-scrim {
+        position: absolute;
+        inset: 0;
+        background: var(--background);
+        opacity: 0.7;
+      }
+      .cmd {
+        position: absolute;
+        top: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(560px, calc(100% - 24px));
+        background: var(--popover);
+        color: var(--foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .cmd input {
+        width: 100%;
+        box-sizing: border-box;
+        height: 40px;
+        padding: 0 12px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        outline: none;
+      }
+      .cmd ul {
+        list-style: none;
+        margin: 0;
+        padding: 4px;
+        max-height: 340px;
+        overflow-y: auto;
+      }
+      .cmd li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 8px;
+        border-radius: calc(var(--radius) - 4px);
+        cursor: pointer;
+      }
+      .cmd li[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .cmd li .hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .cmd li[aria-selected="true"] .hint {
+        color: var(--accent-foreground);
+      }
+      .cmd .empty {
+        padding: 10px 8px;
+        color: var(--muted-foreground);
+      }
+
+      @media (max-width: 1100px) {
+        .work {
+          grid-template-columns: 200px minmax(0, 1fr) 320px;
+        }
+        .work.no-rail,
+        .app.native .work {
+          grid-template-columns: minmax(0, 1fr) 320px;
+        }
+        .hide-md {
+          display: none;
+        }
+      }
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          grid-template-rows: auto auto;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 10px;
+        }
+        .meta {
+          flex-basis: 100%;
+          order: 9;
+        }
+        .work,
+        .work.no-rail,
+        .app.native .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .stage {
+          height: 62vh;
+          order: 1;
+        }
+        .inspector {
+          order: 2;
+          border-left: 0;
+        }
+        .panels {
+          overflow: visible;
+        }
+        .rail {
+          order: 3;
+          height: 360px;
+          border-right: 0;
+          border-top: 1px solid var(--border);
+        }
+        .composer {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">Develop</h1>
+        <select class="sel" id="asset" aria-label="Photo" hidden></select>
+        <span class="meta" id="meta">Opening photo</span>
+        <div class="tools page-chrome" id="extra-tools"></div>
+        <button
+          class="btn page-chrome"
+          id="rail-toggle"
+          type="button"
+          aria-pressed="true"
+          title="Show or hide history (H)"
+        >
+          History <kbd class="hide-md">H</kbd>
+        </button>
+        <button class="btn page-chrome" id="open-cmd" type="button">
+          Commands <kbd id="mod-key" class="hide-md">K</kbd>
+        </button>
+        <button
+          class="btn page-chrome"
+          id="reset"
+          type="button"
+          title="Reset every adjustment (Alt+0)"
+        >
+          Reset
+        </button>
+        <button class="btn btn-primary page-chrome" id="export" type="button">
+          Export <kbd id="export-key" class="hide-md">E</kbd>
+        </button>
+      </header>
+      <div class="work" id="work">
+        <aside class="rail" id="rail" aria-label="History and presets">
+          <div id="history"></div>
+        </aside>
+        <section class="stage" aria-label="Photo">
+          <div class="view"><div id="viewer"></div></div>
+          <div class="status" id="status" role="status"></div>
+        </section>
+        <aside class="inspector" aria-label="Develop inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="histogram">
+              <summary>Histogram</summary>
+              <div class="panel-body"><div id="hist"></div></div>
+            </details>
+            <details class="panel" data-panel="basic">
+              <summary>Basic</summary>
+              <div class="panel-body" id="basic"></div>
+            </details>
+            <details class="panel" data-panel="color">
+              <summary>Color Mix</summary>
+              <div class="panel-body" id="mix"></div>
+            </details>
+            <details class="panel" data-panel="curve">
+              <summary>Tone Curve</summary>
+              <div class="panel-body"><div id="curves" style="height: 236px"></div></div>
+            </details>
+            <details class="panel" data-panel="wheels">
+              <summary>Color Grading</summary>
+              <div class="panel-body"><div id="wheels"></div></div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="offscreen" id="engine" aria-hidden="true"></div>
+    <div class="offscreen" id="export-host" aria-hidden="true"></div>
+
+    <div class="cmd-layer" id="cmd" hidden>
+      <div class="cmd-scrim" data-close></div>
+      <div class="cmd" role="dialog" aria-label="Command bar">
+        <input
+          id="cmd-input"
+          type="text"
+          placeholder="Type a command, or save NAME to save a preset"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <ul id="cmd-list" role="listbox" aria-label="Commands"></ul>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+        const MOD = MAC ? "⌘" : "Ctrl+";
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v)); // JSON, not structuredClone: shared refs must not survive
+
+        // ---- Options ----------------------------------------------------------------
+        const LOOK_ORDER = ["neutral", "moody", "film", "vivid", "mono"];
+        const ASPECTS = ["free", "1:1", "4:5", "3:2", "16:9"];
+        const PANEL_IDS = ["histogram", "basic", "color", "curve", "wheels", "history"];
+        const PANEL_TITLES = {
+          histogram: "Histogram",
+          basic: "Basic",
+          color: "Color Mix",
+          curve: "Tone Curve",
+          wheels: "Color Grading",
+          history: "History",
+        };
+        const SPEC = {
+          title: { default: "Develop", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          look: { default: "neutral", ok: (v) => LOOK_ORDER.includes(v) },
+          values: { default: {}, ok: isPlain },
+          openPanels: {
+            default: ["histogram", "basic", "curve", "history"],
+            ok: (v) => Array.isArray(v) && v.every((p) => PANEL_IDS.includes(p)),
+          },
+          cropAspect: { default: "free", ok: (v) => ASPECTS.includes(v) },
+          view: { default: "single", ok: (v) => ["single", "split", "side"].includes(v) },
+          exportFormat: { default: "jpeg", ok: (v) => v === "jpeg" || v === "png" },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("photo-develop: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(
+                `photo-develop: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          return out;
+        }
+        const OPTS = readOptions();
+        // Saved edits only restore when the starting point is the same one they were made from.
+        const STATE_KEY = JSON.stringify({ look: OPTS.look, values: OPTS.values });
+
+        // ---- Develop parameters and looks ---------------------------------------------
+        const SLIDERS = [
+          {
+            group: "Light",
+            rows: [
+              ["exposure", "Exposure", -5, 5, 0.01],
+              ["contrast", "Contrast", -100, 100, 1],
+              ["highlights", "Highlights", -100, 100, 1],
+              ["shadows", "Shadows", -100, 100, 1],
+              ["whites", "Whites", -100, 100, 1],
+              ["blacks", "Blacks", -100, 100, 1],
+            ],
+          },
+          {
+            group: "Color",
+            rows: [
+              ["temperature", "Temperature", -100, 100, 1],
+              ["tint", "Tint", -100, 100, 1],
+              ["vibrance", "Vibrance", -100, 100, 1],
+              ["saturation", "Saturation", -100, 100, 1],
+            ],
+          },
+          {
+            group: "Presence",
+            rows: [
+              ["clarity", "Clarity", -100, 100, 1],
+              ["dehaze", "Dehaze", -100, 100, 1],
+            ],
+          },
+          {
+            group: "Effects",
+            rows: [
+              ["vignette", "Vignette", -100, 100, 1],
+              ["grain", "Grain", 0, 100, 1],
+            ],
+          },
+        ];
+        const NUMERIC = SLIDERS.flatMap((g) => g.rows.map((r) => r[0]));
+        const LABEL = Object.fromEntries(SLIDERS.flatMap((g) => g.rows.map((r) => [r[0], r[1]])));
+        const BANDS = ["Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta"];
+        const HSL_CHANNELS = { hue: "Hue", sat: "Saturation", lum: "Luminance" };
+        const IDENTITY = [
+          [0, 0],
+          [1, 1],
+        ];
+        const WHEEL_OFF = { h: 0, s: 0, l: 0 };
+
+        const NEUTRAL = {
+          develop: {
+            ...Object.fromEntries(NUMERIC.map((k) => [k, 0])),
+            hsl: { hue: Array(8).fill(0), sat: Array(8).fill(0), lum: Array(8).fill(0) },
+          },
+          curves: { rgb: IDENTITY, r: IDENTITY, g: IDENTITY, b: IDENTITY },
+          wheels: {
+            shadows: WHEEL_OFF,
+            midtones: WHEEL_OFF,
+            highlights: WHEEL_OFF,
+            global: WHEEL_OFF,
+            blending: 0.5,
+            balance: 0,
+          },
+        };
+        // Looks are partial states over NEUTRAL.
+        const LOOKS = {
+          neutral: { label: "Neutral", state: {} },
+          moody: {
+            label: "Moody",
+            state: {
+              develop: {
+                exposure: -0.2,
+                contrast: 18,
+                highlights: -30,
+                shadows: 14,
+                whites: -6,
+                blacks: -12,
+                temperature: -6,
+                vibrance: -10,
+                saturation: -12,
+                dehaze: 8,
+                vignette: -28,
+                hsl: { sat: [-10, -6, -20, -25, 0, 0, 0, 0] },
+              },
+              curves: {
+                rgb: [
+                  [0, 0.02],
+                  [0.25, 0.2],
+                  [0.75, 0.78],
+                  [1, 0.98],
+                ],
+              },
+              wheels: { shadows: { h: 215, s: 0.25, l: -0.05 }, highlights: { h: 40, s: 0.1 } },
+            },
+          },
+          film: {
+            label: "Film",
+            state: {
+              develop: {
+                exposure: 0.1,
+                contrast: -8,
+                highlights: -15,
+                shadows: 20,
+                whites: -6,
+                blacks: 14,
+                temperature: 8,
+                tint: 4,
+                saturation: -12,
+                grain: 22,
+                hsl: { hue: [6, 4, -6, 10, 0, -6, 0, 0] },
+              },
+              curves: {
+                rgb: [
+                  [0, 0.06],
+                  [0.5, 0.52],
+                  [1, 0.94],
+                ],
+              },
+              wheels: {
+                shadows: { h: 210, s: 0.12 },
+                midtones: { h: 40, s: 0.08 },
+                highlights: { h: 45, s: 0.2, l: 0.02 },
+                blending: 0.6,
+                balance: 0.1,
+              },
+            },
+          },
+          vivid: {
+            label: "Vivid",
+            state: {
+              develop: {
+                exposure: 0.1,
+                contrast: 20,
+                vibrance: 35,
+                saturation: 10,
+                clarity: 18,
+                dehaze: 12,
+                whites: 8,
+                shadows: 10,
+                highlights: -10,
+              },
+              curves: {
+                rgb: [
+                  [0, 0],
+                  [0.25, 0.22],
+                  [0.75, 0.8],
+                  [1, 1],
+                ],
+              },
+            },
+          },
+          mono: {
+            label: "Mono",
+            state: {
+              develop: {
+                contrast: 24,
+                highlights: -18,
+                shadows: 12,
+                whites: 6,
+                blacks: -10,
+                saturation: -100,
+                clarity: 14,
+                vignette: -14,
+                grain: 12,
+              },
+              curves: {
+                rgb: [
+                  [0, 0.03],
+                  [0.25, 0.2],
+                  [0.75, 0.8],
+                  [1, 0.98],
+                ],
+              },
+            },
+          },
+        };
+
+        // Deep merge: plain objects merge, everything else (arrays included) replaces.
+        function mergeInto(target, source) {
+          for (const [k, v] of Object.entries(source)) {
+            if (isPlain(v) && isPlain(target[k])) mergeInto(target[k], v);
+            else target[k] = clone(v);
+          }
+          return target;
+        }
+        function mergeState(base, partial) {
+          if (!isPlain(partial))
+            throw new TypeError(
+              "photo-develop: values must be an object like { develop, curves, wheels }",
+            );
+          for (const key of Object.keys(partial)) {
+            if (!["develop", "curves", "wheels"].includes(key))
+              throw new TypeError(
+                `photo-develop: unknown values key "${key}" (use develop, curves, wheels)`,
+              );
+          }
+          return mergeInto(clone(base), partial);
+        }
+        const lookState = (name) => mergeState(NEUTRAL, LOOKS[name].state);
+
+        // ---- Instances ------------------------------------------------------------
+        // develop renders off screen at a fixed preview size; the viewer shows a copy of that render.
+        const PREVIEW_EDGE = 1600;
+        const engine = $("engine");
+        const dpr = window.devicePixelRatio || 1;
+        const engineCss = `${Math.ceil((PREVIEW_EDGE + 2 * Math.round(16 * dpr)) / dpr)}px`;
+        engine.style.width = engineCss;
+        engine.style.height = engineCss;
+        const dev = t3kit.develop.create(engine, { controls: false });
+        const hist = t3kit.histogram.create($("hist"), { density: "compact" });
+        const curves = t3kit.curves.create($("curves"), { label: "Tone curve" });
+        const wheels = t3kit.colorwheels.create($("wheels"), {
+          global: false,
+          tonal: true,
+          header: false,
+          size: 112,
+          label: "Color grading",
+        });
+        const view = t3kit.viewer.create($("viewer"), { toolbar: true, crop: true });
+        const exporter = t3kit.viewer.create($("export-host"), { toolbar: false, crop: false });
+        let history = null; // created once the photo is open, so its first step has a thumbnail
+        let historyLink = null;
+
+        // ---- Bolt-on runtime (window.t3template): panels, controls and image stages that reach preview and export ----
+        const panelsEl = $("panels");
+        const extraCommands = [];
+        const rt = t3kit.templateRuntime.create({
+          id: "photo-develop",
+          pipeline: "image",
+          // 'top': below the Histogram readout, above Basic (in creation order); 'bottom': after Color Grading.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            if (position === "top")
+              panelsEl.insertBefore(section, panelsEl.querySelector('[data-panel="basic"]'));
+            else panelsEl.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getValues(),
+          export: () => exportPhoto(),
+          setValues(partial, label) {
+            applyPartial(partial);
+            return commitNow(label);
+          },
+          addPreset: (name, values) => history.savePreset(name, mergeState(NEUTRAL, values)),
+          applyPreset: (name) => history.applyPreset(name),
+          // Template keys plus the viewer's own keys (+ - 0 1 C G R) while the photo is focused.
+          reservedKeys: [
+            "/",
+            "\\",
+            "y",
+            "h",
+            "e",
+            "j",
+            "k",
+            "shift+j",
+            "shift+k",
+            "mod+k",
+            "mod+z",
+            "mod+shift+z",
+            "alt+0",
+            "alt+1",
+            "alt+2",
+            "alt+3",
+            "alt+4",
+            "alt+5",
+            "-",
+            "=",
+            "0",
+            "1",
+            "c",
+            "g",
+            "r",
+          ],
+          onCommand: (label, run, hint) => extraCommands.push({ label, hint, run }),
+          onBoltOnChange() {
+            queueCompose();
+            persist();
+          },
+          // In T3 with native chrome: the header tools, history and presets move into T3; the inspector stays here.
+          chrome: {
+            toolbar: () => [
+              {
+                type: "segmented",
+                id: "view",
+                label: "View",
+                value: view.get().mode,
+                run: (mode) => setMode(mode, true),
+                options: [
+                  { value: "single", label: "Single", icon: "image" },
+                  {
+                    value: "split",
+                    label: "Before / After",
+                    icon: "square-split-horizontal",
+                    shortcut: "\\",
+                  },
+                  { value: "side", label: "Side By Side", icon: "columns-2", shortcut: "y" },
+                ],
+              },
+              {
+                type: "toggle",
+                id: "crop",
+                label: "Crop",
+                icon: "crop",
+                shortcut: "c",
+                value: Boolean(view.get().cropping),
+                run: (on) => view.set({ cropping: Boolean(on) }),
+              },
+              { type: "separator" },
+              {
+                type: "button",
+                id: "undo",
+                label: "Undo",
+                icon: "undo-2",
+                run: () => history.undo(),
+              },
+              {
+                type: "button",
+                id: "redo",
+                label: "Redo",
+                icon: "redo-2",
+                run: () => history.redo(),
+              },
+              {
+                type: "button",
+                id: "reset",
+                label: "Reset",
+                icon: "rotate-ccw",
+                run: () => resetAll(),
+              },
+              {
+                type: "button",
+                id: "commands",
+                label: "Commands",
+                icon: "command",
+                run: () => openPalette(),
+              },
+              { type: "separator" },
+              {
+                type: "button",
+                id: "export",
+                label: `Export ${OPTS.exportFormat.toUpperCase()}`,
+                icon: "download",
+                shortcut: "e",
+                run: () => exportPhoto().catch(showError),
+              },
+            ],
+            sidebar: () => {
+              const m = history.get();
+              const shown = m.entries.slice(-100);
+              const presetNames = m.presets.slice(0, 100).map((p) => p.name); // T3 lists at most 100 items per section
+              return [
+                {
+                  id: "history",
+                  title: "History",
+                  items: shown.map((e) => ({ id: e.id, label: e.label })),
+                  value: shown.some((e) => e.id === m.entries[m.index].id)
+                    ? m.entries[m.index].id
+                    : null,
+                  run: (id) => {
+                    if (
+                      typeof id === "string" &&
+                      id !== history.get().entries[history.get().index].id
+                    )
+                      history.jump(id);
+                  },
+                },
+                {
+                  id: "presets",
+                  title: "Presets",
+                  items: presetNames.map((name, i) => ({
+                    id: `preset.${i}`,
+                    label: name,
+                    icon: "sliders-horizontal",
+                  })),
+                  value: null,
+                  run: (id) => {
+                    const name = presetNames[Number(String(id).slice(7))];
+                    if (name !== undefined) history.applyPreset(name);
+                  },
+                },
+              ];
+            },
+            native: (on) => $("app").classList.toggle("native", on),
+          },
+        });
+        const showError = (err) => rt.reportError(err);
+
+        const curvesLink = t3kit.links.curvesDevelop(curves, dev);
+        t3kit.links.developHistogram(dev, hist);
+
+        function getValues() {
+          const d = dev.get();
+          const develop = Object.fromEntries(NUMERIC.map((k) => [k, d[k]]));
+          develop.hsl = d.hsl;
+          return { develop, curves: curves.get(), wheels: wheels.get() };
+        }
+        // Silent: sets every primitive the state covers (links.historyState relies on this).
+        function applyState(s) {
+          dev.set(s.develop);
+          curves.set(s.curves);
+          wheels.set(s.wheels);
+          curvesLink.sync();
+          queueCompose();
+          syncControls();
+        }
+        // Applies a partial state over the current one; a bad partial leaves the photo as it was.
+        function applyPartial(partial) {
+          const prev = getValues();
+          const next = mergeState(prev, partial);
+          try {
+            applyState(next);
+          } catch (err) {
+            applyState(prev);
+            throw err;
+          }
+        }
+
+        // ---- Developed preview ------------------------------------------------------
+        // develop's canvas is padded around the photo, so the photo box is found once per size by an alpha scan.
+        // `raw` is develop's output; `after` (the viewer source) is raw graded by the colour wheels.
+        let photo = null; // { name, stem, width, height }
+        let photoGen = 0; // bumps per setImage so the photo box is found again
+        let boxKey = "";
+        let box = null;
+        let viewerHasSource = false;
+        let renderWaiters = [];
+        const scratch = document.createElement("canvas");
+        const raw = document.createElement("canvas");
+        const after = document.createElement("canvas");
+        const before = document.createElement("canvas");
+
+        function opaqueBox(pixels, w, h) {
+          let minX = w,
+            minY = h,
+            maxX = -1,
+            maxY = -1;
+          for (let y = 0; y < h; y++) {
+            const row = y * w * 4;
+            for (let x = 0; x < w; x++) {
+              if (pixels[row + x * 4 + 3] > 127) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                maxY = y;
+              }
+            }
+          }
+          return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+        }
+        const wheelsNeutral = (v) =>
+          ["shadows", "midtones", "highlights", "global"].every(
+            (k) => v[k].s === 0 && v[k].l === 0,
+          );
+
+        // The viewer crop in the stage canvas's pixels (k = canvas width / preview width), so a bolt-on can keep marks inside it.
+        function stageCrop(k) {
+          const c = view.get().crop;
+          return { x: c.x * k, y: c.y * k, w: c.w * k, h: c.h * k, angle: c.angle };
+        }
+        function composeAfter() {
+          if (!box) return;
+          const ctx = after.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(raw, 0, 0);
+          if (!wheelsNeutral(wheels.get()))
+            ctx.putImageData(
+              wheels.applyTo(ctx.getImageData(0, 0, after.width, after.height)),
+              0,
+              0,
+            );
+          rt.runImageStages(after, { scale: 1, phase: "preview", info: { crop: stageCrop(1) } });
+          if (viewerHasSource) view.refresh();
+        }
+        let composeFrame = 0;
+        function queueCompose() {
+          if (composeFrame) return;
+          composeFrame = requestAnimationFrame(() => {
+            composeFrame = 0;
+            composeAfter();
+          });
+        }
+
+        function captureDeveloped() {
+          const src = engine.querySelector("canvas");
+          if (!src || src.width === 0) return;
+          const key = `${src.width}x${src.height}:${photoGen}`;
+          if (key !== boxKey) {
+            scratch.width = src.width;
+            scratch.height = src.height;
+            const sctx = scratch.getContext("2d", { willReadFrequently: true });
+            sctx.clearRect(0, 0, src.width, src.height);
+            sctx.drawImage(src, 0, 0);
+            box = opaqueBox(
+              sctx.getImageData(0, 0, src.width, src.height).data,
+              src.width,
+              src.height,
+            );
+            boxKey = key;
+          }
+          if (!box) return;
+          const resized = raw.width !== box.w || raw.height !== box.h;
+          if (resized) {
+            raw.width = after.width = box.w;
+            raw.height = after.height = box.h;
+          }
+          const rctx = raw.getContext("2d");
+          rctx.clearRect(0, 0, box.w, box.h);
+          rctx.drawImage(src, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+          composeAfter();
+          if (resized || !viewerHasSource) {
+            viewerHasSource = true;
+            return view.setSource(after);
+          }
+        }
+        // The WebGL buffer is only readable inside develop's 'render' event, so the copy happens here.
+        dev.on("render", () => {
+          const waiters = renderWaiters;
+          renderWaiters = [];
+          Promise.resolve(captureDeveloped()).then(() => {
+            for (const resolve of waiters) resolve();
+            updateStatus();
+          }, showError);
+        });
+        wheels.on("change", queueCompose);
+        // Resolves once the look set just now is on screen (develop.set always renders once a photo is open).
+        const nextRender = () =>
+          photo ? new Promise((resolve) => renderWaiters.push(resolve)) : Promise.resolve();
+
+        // ---- History commits ----------------------------------------------------------
+        async function commitNow(label) {
+          await nextRender();
+          if (composeFrame) {
+            cancelAnimationFrame(composeFrame);
+            composeFrame = 0;
+            composeAfter();
+          }
+          historyLink.commit(label);
+        }
+        let commitTimer = 0;
+        let pendingLabel = "";
+        function commitLater(label) {
+          pendingLabel = label;
+          clearTimeout(commitTimer);
+          commitTimer = setTimeout(() => {
+            commitTimer = 0;
+            historyLink.commit(pendingLabel);
+          }, 350);
+        }
+        function applyLook(name) {
+          applyState(lookState(name));
+          return commitNow(`Look: ${LOOKS[name].label}`);
+        }
+        function resetAll() {
+          applyState(clone(NEUTRAL));
+          return commitNow("Reset");
+        }
+
+        // ---- Basic and Color Mix panels (develop runs with controls: false) ---------------
+        const rows = new Map(); // develop key -> row
+        const mixRows = [];
+        let mixChannel = "hue";
+
+        function fmt(key, v) {
+          if (key === "exposure") return (v > 0 ? "+" : "") + v.toFixed(2);
+          const r = Math.round(v);
+          return (key !== "grain" && r > 0 ? "+" : "") + r;
+        }
+        function makeRow(parent, id, label, min, max, step, onInput) {
+          const row = document.createElement("div");
+          row.className = "row";
+          const input = document.createElement("input");
+          input.type = "range";
+          input.id = id;
+          input.min = String(min);
+          input.max = String(max);
+          input.step = String(step);
+          input.title = `${label}: double-click to reset`;
+          const lab = document.createElement("label");
+          lab.htmlFor = id;
+          lab.textContent = label;
+          const out = document.createElement("output");
+          out.htmlFor = id;
+          input.addEventListener("input", () => onInput(Number(input.value)));
+          input.addEventListener("dblclick", () => onInput(0));
+          lab.addEventListener("dblclick", () => onInput(0));
+          row.append(lab, input, out);
+          parent.append(row);
+          return { row, input, out };
+        }
+        function showRow(r, key, v) {
+          r.input.value = String(v);
+          r.out.textContent = fmt(key, v);
+          r.row.classList.toggle("edited", v !== 0);
+        }
+        function syncControls() {
+          const v = dev.get();
+          for (const [key, r] of rows) showRow(r, key, v[key]);
+          mixRows.forEach((r, i) => showRow(r, "hsl", v.hsl[mixChannel][i]));
+        }
+        function setDevParam(key, value) {
+          dev.set({ [key]: value });
+          showRow(rows.get(key), key, value);
+          commitLater(`${LABEL[key]} ${fmt(key, value)}`);
+        }
+        function setMix(i, value) {
+          const arr = dev.get().hsl[mixChannel].slice();
+          arr[i] = value;
+          dev.set({ hsl: { [mixChannel]: arr } });
+          showRow(mixRows[i], "hsl", value);
+          commitLater(`${BANDS[i]} ${HSL_CHANNELS[mixChannel]} ${fmt("hsl", value)}`);
+        }
+        function nudgeExposure(dir, big) {
+          const next =
+            Math.round(
+              Math.min(5, Math.max(-5, dev.get().exposure + dir * (big ? 0.5 : 0.1))) * 100,
+            ) / 100;
+          setDevParam("exposure", next);
+        }
+
+        const basic = $("basic");
+        for (const group of SLIDERS) {
+          const heading = document.createElement("div");
+          heading.className = "group";
+          heading.textContent = group.group;
+          basic.append(heading);
+          for (const [key, label, min, max, step] of group.rows) {
+            rows.set(
+              key,
+              makeRow(basic, `dev-${key}`, label, min, max, step, (v) => setDevParam(key, v)),
+            );
+          }
+        }
+        const mix = $("mix");
+        const seg = document.createElement("div");
+        seg.className = "seg";
+        seg.setAttribute("role", "group");
+        seg.setAttribute("aria-label", "Color Mix channel");
+        for (const [ch, label] of Object.entries(HSL_CHANNELS)) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = label;
+          b.dataset.ch = ch;
+          b.setAttribute("aria-pressed", String(ch === mixChannel));
+          b.addEventListener("click", () => {
+            mixChannel = ch;
+            for (const x of seg.children)
+              x.setAttribute("aria-pressed", String(x.dataset.ch === ch));
+            syncControls();
+          });
+          seg.append(b);
+        }
+        mix.append(seg);
+        BANDS.forEach((band, i) =>
+          mixRows.push(makeRow(mix, `mix-${i}`, band, -100, 100, 1, (v) => setMix(i, v))),
+        );
+
+        // ---- Viewer, status and header ---------------------------------------------
+        const statusEl = $("status");
+        const metaEl = $("meta");
+        let statusNote = "";
+        const MODE_NAMES = { single: "Single", split: "Before / After", side: "Side By Side" };
+        function updateStatus() {
+          const v = view.get();
+          const zoom = v.zoom === "fit" ? "Fit" : `${Math.round(v.zoom * 100)}%`;
+          const note = statusNote ? `${statusNote} · ` : "";
+          const size = after.width ? `Preview ${after.width} × ${after.height}` : "No preview";
+          statusEl.textContent = `${note}${MODE_NAMES[v.mode]} · ${zoom} · Crop ${v.crop?.aspect ?? "free"} · ${size} · ${MOD}K commands`;
+        }
+        function setStatusNote(text) {
+          statusNote = text;
+          updateStatus();
+        }
+        // exact: set this mode (native segmented control); otherwise the same key toggles back to single.
+        function setMode(mode, exact = false) {
+          view.set({ mode: exact || view.get().mode !== mode ? mode : "single" });
+          updateStatus();
+          persist();
+          rt.syncChrome();
+        }
+        view.on("change", () => {
+          updateStatus();
+          persist();
+          rt.syncChrome();
+        });
+        view.on("load", updateStatus);
+
+        // History rail and inspector panels
+        const work = $("work");
+        const railBtn = $("rail-toggle");
+        function setRail(open) {
+          work.classList.toggle("no-rail", !open);
+          $("rail").hidden = !open;
+          railBtn.setAttribute("aria-pressed", String(open));
+        }
+        railBtn.addEventListener("click", () => {
+          setRail($("rail").hidden);
+          persist();
+        });
+        function openPanelIds() {
+          const ids = [...document.querySelectorAll("details.panel[data-panel]")]
+            .filter((d) => d.open)
+            .map((d) => d.dataset.panel);
+          return $("rail").hidden ? ids : [...ids, "history"];
+        }
+        function setOpenPanels(ids) {
+          for (const d of document.querySelectorAll("details.panel[data-panel]"))
+            d.open = ids.includes(d.dataset.panel);
+          setRail(ids.includes("history"));
+        }
+        for (const d of document.querySelectorAll("details.panel[data-panel]"))
+          d.addEventListener("toggle", () => persist());
+        function togglePanel(id) {
+          if (id === "history") setRail($("rail").hidden);
+          else {
+            const d = document.querySelector(`details.panel[data-panel="${id}"]`);
+            d.open = !d.open;
+          }
+          persist();
+        }
+
+        // ---- Export -----------------------------------------------------------------
+        // Full resolution: develop.exportBlob, then the wheels on the CPU, then bolt-on image stages (scaled from the
+        // preview size), then the viewer's crop through a
+        // second (off-screen) viewer so straighten and quarter turns match what is on screen.
+        let exporting = false;
+        const exportBtn = $("export");
+        const EXPORT_TYPE = OPTS.exportFormat === "png" ? "image/png" : "image/jpeg";
+
+        async function toCanvas(blob) {
+          const bmp = await createImageBitmap(blob);
+          const canvas = document.createElement("canvas");
+          canvas.width = bmp.width;
+          canvas.height = bmp.height;
+          canvas.getContext("2d", { willReadFrequently: true }).drawImage(bmp, 0, 0);
+          bmp.close();
+          return canvas;
+        }
+        function canvasBlob(canvas, type) {
+          return new Promise((resolve, reject) =>
+            canvas.toBlob(
+              (b) => (b ? resolve(b) : reject(new Error("Export encode failed"))),
+              type,
+              0.92,
+            ),
+          );
+        }
+        async function exportPhoto(type = EXPORT_TYPE) {
+          if (!photo)
+            throw new Error("photo-develop: no photo is open, so there is nothing to export");
+          if (exporting) throw new Error("photo-develop: an export is already running");
+          exporting = true;
+          exportBtn.disabled = true;
+          const ext = type === "image/png" ? "png" : "jpg";
+          setStatusNote(`Exporting ${ext.toUpperCase()}`);
+          try {
+            const grade = wheels.get();
+            const c = view.get().crop;
+            const cropped =
+              c.angle !== 0 ||
+              c.x > 0.5 ||
+              c.y > 0.5 ||
+              c.w < after.width - 0.5 ||
+              c.h < after.height - 0.5;
+            const graded = !wheelsNeutral(grade);
+            const staged = rt.hasImageStages();
+            let blob = await dev.exportBlob({
+              type: graded || cropped || staged ? "image/png" : type,
+              quality: 0.92,
+            });
+            if (graded || cropped || staged) {
+              const full = await toCanvas(blob);
+              if (graded) {
+                const ctx = full.getContext("2d", { willReadFrequently: true });
+                ctx.putImageData(
+                  t3kit.colorwheels.apply(ctx.getImageData(0, 0, full.width, full.height), grade),
+                  0,
+                  0,
+                );
+              }
+              if (staged)
+                rt.runImageStages(full, {
+                  scale: full.width / after.width,
+                  phase: "export",
+                  info: { crop: stageCrop(full.width / after.width) },
+                });
+              if (cropped) {
+                const k = full.width / after.width;
+                await exporter.setSource(full);
+                exporter.set({
+                  crop: {
+                    x: c.x * k,
+                    y: c.y * k,
+                    w: c.w * k,
+                    h: c.h * k,
+                    angle: c.angle,
+                    aspect: c.aspect,
+                  },
+                });
+                blob = await exporter.exportBlob({ type, quality: 0.92 });
+              } else {
+                blob = await canvasBlob(full, type);
+              }
+            }
+            const file = new File([blob], `${photo.stem}-developed.${ext}`, { type });
+            await ws.attach(file);
+            await ws.download(file, file.name);
+            setStatusNote(`Exported ${file.name} (${Math.round(file.size / 1024)} KB)`);
+            return file;
+          } catch (err) {
+            setStatusNote("Export failed");
+            throw err;
+          } finally {
+            exporting = false;
+            exportBtn.disabled = false;
+          }
+        }
+        exportBtn.addEventListener("click", () => exportPhoto().catch(showError));
+        $("reset").addEventListener("click", () => resetAll());
+
+        // ---- Photo loading ----------------------------------------------------------
+        async function loadPhoto(asset) {
+          setStatusNote(`Opening ${asset.name}`);
+          const rendered = new Promise((resolve) => renderWaiters.push(resolve));
+          photoGen++;
+          const dims = await dev.setImage(asset.file ?? asset.url);
+          if (!dims) return false;
+          photo = {
+            name: asset.name,
+            stem: asset.name.replace(/\.[^.]+$/, ""),
+            width: dims.width,
+            height: dims.height,
+          };
+          const bmp = await createImageBitmap(
+            asset.file ?? (await (await fetch(asset.url)).blob()),
+            { imageOrientation: "from-image" },
+          );
+          const k = Math.min(1, PREVIEW_EDGE / Math.max(bmp.width, bmp.height));
+          before.width = Math.round(bmp.width * k);
+          before.height = Math.round(bmp.height * k);
+          before.getContext("2d").drawImage(bmp, 0, 0, before.width, before.height);
+          bmp.close();
+          await view.setBefore(before);
+          await rendered;
+          metaEl.textContent = `${photo.name} · ${photo.width} × ${photo.height}`;
+          setStatusNote("");
+          return true;
+        }
+
+        // ---- Command bar ------------------------------------------------------------
+        const cmdLayer = $("cmd");
+        const cmdInput = $("cmd-input");
+        const cmdList = $("cmd-list");
+        let cmdSel = 0;
+        function commands() {
+          return [
+            ...LOOK_ORDER.map((name, i) => ({
+              label: `Look: ${LOOKS[name].label}`,
+              hint: `Alt ${i + 1}`,
+              run: () => applyLook(name),
+            })),
+            ...(history
+              ? history.get().presets.map((p) => ({
+                  label: `Preset: ${p.name}`,
+                  run: () => history.applyPreset(p.name),
+                }))
+              : []),
+            { label: "Before / After", hint: "\\", run: () => setMode("split") },
+            { label: "Side By Side", hint: "Y", run: () => setMode("side") },
+            { label: "Fit", hint: "0", run: () => view.set({ zoom: "fit" }) },
+            { label: "100%", hint: "1", run: () => view.set({ zoom: 1 }) },
+            {
+              label: "Toggle Crop",
+              hint: "C",
+              run: () => view.set({ cropping: !view.get().cropping }),
+            },
+            ...ASPECTS.map((a) => ({
+              label: `Crop Aspect: ${a}`,
+              run: () => view.set({ cropping: true, aspect: a }),
+            })),
+            { label: "Rotate 90°", hint: "R", run: () => view.rotate(1) },
+            { label: "Exposure +0.1", hint: "K", run: () => nudgeExposure(1, false) },
+            { label: "Exposure −0.1", hint: "J", run: () => nudgeExposure(-1, false) },
+            { label: "Reset All", hint: "Alt 0", run: resetAll },
+            { label: "Undo", hint: `${MOD}Z`, run: () => history.undo() },
+            { label: "Redo", hint: `${MOD}⇧Z`, run: () => history.redo() },
+            {
+              label: "Export JPEG",
+              hint: OPTS.exportFormat === "jpeg" ? "E" : "",
+              run: () => exportPhoto("image/jpeg"),
+            },
+            {
+              label: "Export PNG",
+              hint: OPTS.exportFormat === "png" ? "E" : "",
+              run: () => exportPhoto("image/png"),
+            },
+            ...PANEL_IDS.map((id) => ({
+              label: `Toggle ${PANEL_TITLES[id]}`,
+              hint: id === "history" ? "H" : "",
+              run: () => togglePanel(id),
+            })),
+            ...extraCommands,
+          ];
+        }
+        function paletteItems() {
+          const typed = cmdInput.value.trim();
+          const q = typed.toLowerCase();
+          const items = commands().filter((c) => c.label.toLowerCase().includes(q));
+          if (/^save\s+\S/i.test(typed)) {
+            const name = typed.replace(/^save\s+/i, "").trim();
+            items.unshift({
+              label: `Save Preset: ${name}`,
+              hint: "Enter",
+              run: () => {
+                history.savePreset(name, getValues());
+                setStatusNote(`Saved preset ${name}`);
+              },
+            });
+          }
+          return items;
+        }
+        function renderPalette() {
+          const items = paletteItems();
+          cmdSel = Math.min(cmdSel, Math.max(0, items.length - 1));
+          cmdList.replaceChildren();
+          if (items.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "empty";
+            empty.textContent = "No matching command";
+            cmdList.append(empty);
+            return;
+          }
+          items.forEach((item, i) => {
+            const li = document.createElement("li");
+            li.setAttribute("role", "option");
+            li.setAttribute("aria-selected", String(i === cmdSel));
+            const label = document.createElement("span");
+            label.textContent = item.label;
+            li.append(label);
+            if (item.hint) {
+              const hint = document.createElement("span");
+              hint.className = "hint";
+              hint.textContent = item.hint;
+              li.append(hint);
+            }
+            li.addEventListener("click", () => runPaletteItem(i));
+            cmdList.append(li);
+          });
+          cmdList.children[cmdSel]?.scrollIntoView({ block: "nearest" });
+        }
+        function openPalette() {
+          cmdLayer.hidden = false;
+          cmdInput.value = "";
+          cmdSel = 0;
+          renderPalette();
+          cmdInput.focus();
+        }
+        function closePalette() {
+          cmdLayer.hidden = true;
+          cmdInput.blur();
+        }
+        function runPaletteItem(i) {
+          const item = paletteItems()[i];
+          closePalette();
+          if (item) Promise.resolve().then(item.run).catch(showError);
+        }
+        cmdInput.addEventListener("input", () => {
+          cmdSel = 0;
+          renderPalette();
+        });
+        cmdInput.addEventListener("keydown", (e) => {
+          const count = paletteItems().length;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            cmdSel = count === 0 ? 0 : (cmdSel + (e.key === "ArrowDown" ? 1 : -1) + count) % count;
+            renderPalette();
+            e.preventDefault();
+          } else if (e.key === "Enter") {
+            runPaletteItem(cmdSel);
+            e.preventDefault();
+          } else if (e.key === "Escape") {
+            closePalette();
+            e.preventDefault();
+          }
+        });
+        cmdLayer.querySelector("[data-close]").addEventListener("click", closePalette);
+        $("open-cmd").addEventListener("click", openPalette);
+        $("mod-key").textContent = MAC ? "⌘K" : "Ctrl+K";
+
+        // ---- Keyboard ---------------------------------------------------------------
+        // The viewer keeps its own keys (+ - 0 1 C G R arrows) while its stage is focused; history owns mod+Z.
+        document.addEventListener("keydown", (e) => {
+          if (!cmdLayer.hidden) return;
+          const t = e.target;
+          const mod = e.metaKey || e.ctrlKey;
+          if (mod && !e.altKey && e.key.toLowerCase() === "k") {
+            openPalette();
+            e.preventDefault();
+            return;
+          }
+          if (
+            t instanceof HTMLElement &&
+            (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+          )
+            return;
+          const key = e.key;
+          const plain = !mod && !e.altKey;
+          let handled = true;
+          if (plain && key === "/") openPalette();
+          else if (plain && key === "\\") setMode("split");
+          else if (plain && key.toLowerCase() === "y") setMode("side");
+          else if (plain && key.toLowerCase() === "h") togglePanel("history");
+          else if (plain && key.toLowerCase() === "e") exportPhoto().catch(showError);
+          else if (plain && key.toLowerCase() === "j") nudgeExposure(-1, e.shiftKey);
+          else if (plain && key.toLowerCase() === "k") nudgeExposure(1, e.shiftKey);
+          else if (!mod && e.altKey && /^Digit[1-5]$/.test(e.code))
+            applyLook(LOOK_ORDER[Number(e.code.slice(-1)) - 1]);
+          else if (!mod && e.altKey && e.code === "Digit0") resetAll();
+          else handled = false;
+          if (handled) e.preventDefault();
+        });
+
+        // ---- Persistence --------------------------------------------------------------
+        let booted = false;
+        let persistTimer = 0;
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => {
+            const v = view.get();
+            ws.setState({
+              v: 1,
+              key: STATE_KEY,
+              history: history.get(),
+              view: { mode: v.mode, crop: v.crop },
+              open: openPanelIds(),
+              controls: rt.state(),
+            });
+          }, 300);
+        }
+
+        // ---- Boot -------------------------------------------------------------------
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) && saved.v === 1 && saved.key === STATE_KEY && isPlain(saved.history)
+              ? saved
+              : null;
+          const images = (ready.assets ?? []).filter(
+            (a) =>
+              (a.mimeType || "").startsWith("image/") ||
+              /\.(jpe?g|png|webp|avif|gif)$/i.test(a.name || ""),
+          );
+          setOpenPanels(restored && Array.isArray(restored.open) ? restored.open : OPTS.openPanels);
+          view.set({ mode: restored?.view?.mode ?? OPTS.view });
+
+          // The starting look is applied before the photo opens, so the first render already shows it.
+          let start = null;
+          let label = "";
+          if (!restored) {
+            start = lookState(OPTS.look);
+            label = OPTS.look === "neutral" ? "" : `Look: ${LOOKS[OPTS.look].label}`;
+            if (Object.keys(OPTS.values).length > 0) {
+              try {
+                const withValues = mergeState(start, OPTS.values);
+                applyState(withValues);
+                start = withValues;
+                label = label ? `${label} + Values` : "Starting Values";
+              } catch (err) {
+                console.warn(
+                  `photo-develop: option "values" is not valid (${err.message}); using the look alone.`,
+                );
+              }
+            }
+            applyState(start);
+          }
+
+          let opened = false;
+          if (images.length === 0) setStatusNote("Attach a photo to start developing");
+          else opened = await loadPhoto(images[0]);
+
+          history = t3kit.history.create($("history"), {
+            title: "History",
+            label: "Original",
+            state: clone(NEUTRAL),
+            thumb: opened ? before : undefined,
+          });
+          if (restored) history.set(restored.history);
+          else if (label) history.push(label, getValues(), opened ? after : undefined);
+          // Bolt-on control edits are steps too: the runtime adds their values to every step and restores them on undo.
+          historyLink = rt.linkHistory(history, getValues, applyState, {
+            sources: { "Tone Curve": curves, "Color Grading": wheels },
+            thumb: () => (photo ? after : null),
+            commit: (label) => {
+              if (composeFrame) {
+                cancelAnimationFrame(composeFrame);
+                composeFrame = 0;
+                composeAfter();
+              }
+              historyLink.commit(label);
+            },
+          });
+          for (const name of LOOK_ORDER) {
+            if (!history.get().presets.some((p) => p.name === LOOKS[name].label))
+              history.savePreset(LOOKS[name].label, lookState(name));
+          }
+
+          const vs = restored?.view;
+          if (vs?.crop) view.set({ crop: vs.crop });
+          else if (OPTS.cropAspect !== "free")
+            view.set({ aspect: OPTS.cropAspect, cropping: true });
+
+          if (images.length > 1) {
+            const select = $("asset");
+            images.forEach((a, i) => {
+              const opt = document.createElement("option");
+              opt.value = String(i);
+              opt.textContent = a.name;
+              select.append(opt);
+            });
+            select.hidden = false;
+            select.addEventListener("change", () =>
+              loadPhoto(images[Number(select.value)]).catch(showError),
+            );
+          }
+
+          history.on("change", () => {
+            persist();
+            rt.emitChange();
+            rt.syncChrome();
+          });
+          rt.publish({
+            instances: {
+              develop: dev,
+              histogram: hist,
+              curves,
+              colorwheels: wheels,
+              viewer: view,
+              history,
+            },
+            saved: restored?.controls,
+          });
+          booted = true;
+          persist();
+          updateStatus();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        $("export").firstChild.textContent = `Export ${OPTS.exportFormat.toUpperCase()} `;
+        syncControls();
+        updateStatus();
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

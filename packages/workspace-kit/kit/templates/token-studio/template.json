@@ -1,0 +1,121 @@
+{
+  "id": "token-studio",
+  "title": "Design Token Studio",
+  "summary": "Design-token workspace for color systems: OKLCH ramps per family with editable anchors and per-step locks, semantic roles for light and dark, a WCAG 2.x or APCA contrast matrix with pass and fail badges and one-click nearest-passing fixes (imported families load locked so their exact colors stay; when a fix needs a step from one, Unlock and Fix All unlocks those families and fixes in one undo step) fed by a lightness curve, hue and chroma wheel, and a type and space form with a live specimen. Takes tokens.json (W3C or flat), globals.css or a tailwind.config.js colors block, plus an optional image to sample. Exports tokens.json, tokens.css and contrast-report.json; Send to Agent posts them with a short summary. Pick it for any palette, theme or accessibility-contrast token job.",
+  "kit": ["palette", "curves", "colorwheels", "propsform", "history", "links", "template-runtime"],
+  "chrome": false,
+  "verifyAssets": "tokens.json,sonoma.jpg",
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Design Token Studio",
+      "description": "Header title."
+    },
+    "format": {
+      "type": "string",
+      "enum": ["auto", "w3c", "css", "tailwind"],
+      "default": "auto",
+      "description": "Primary token file: auto keeps the input's flavour (W3C or flat JSON tokens.json, css as tokens.css, tailwind as theme.css); w3c, css or tailwind force it."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "default": [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950],
+      "description": "Ramp step numbers, ascending integers (at least three). Every family gets one row of these steps."
+    },
+    "method": {
+      "type": "string",
+      "enum": ["wcag", "apca"],
+      "default": "wcag",
+      "description": "Contrast method: WCAG 2.x ratio or APCA Lc."
+    },
+    "target": {
+      "type": "string",
+      "enum": ["AA", "AAA"],
+      "default": "AA",
+      "description": "Level the contrast matrix checks against: AA or AAA."
+    },
+    "theme": {
+      "type": "string",
+      "enum": ["light", "dark"],
+      "default": "light",
+      "description": "Role set shown and edited first: light or dark (both are always stored)."
+    },
+    "typeRatio": {
+      "type": "number",
+      "minimum": 1.1,
+      "maximum": 1.6,
+      "default": 1.2,
+      "description": "Modular type scale ratio (1.1 to 1.6) used by the specimen and the exported type tokens."
+    },
+    "baseSize": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 32,
+      "default": 16,
+      "description": "Base body size in px (10 to 32); the scale is built from it."
+    },
+    "seed": {
+      "type": "string",
+      "default": "#2A6F97",
+      "description": "Brand seed hex used to build the brand family when no tokens file is attached."
+    },
+    "view": {
+      "type": "string",
+      "enum": ["ramps", "contrast", "roles"],
+      "default": "ramps",
+      "description": "Starting center view: ramps, the contrast matrix or the roles table."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Dark APCA Contrast",
+      "theme": "dark",
+      "method": "apca",
+      "target": "AAA",
+      "view": "contrast"
+    },
+    {
+      "title": "Roles Review CSS Out",
+      "view": "roles",
+      "format": "css",
+      "typeRatio": 1.25,
+      "baseSize": 18
+    },
+    {
+      "title": "Tailwind Export",
+      "format": "tailwind",
+      "view": "contrast",
+      "theme": "dark"
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the tokens are loaded, the first render has happened and the template's panels exist. Add controls and buttons that act on the palette through t3template.instances.palette (palette.harmony, addFamily, editFamily, fix, select, set), the lightness and wheel panels through t3template.instances.curves and t3template.instances.colorwheels, and the type form through t3template.instances.propsform. Every palette edit is one undo step; a control edit is one step named after the control. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner. Imported file colours arrive locked (palette rule): the curve, wheel and Fix only move unlocked steps, so unlock a family (its lock button, or palette.set with steps[...].locked false) before reshaping it. The specimen reads the roles fg.default, fg.muted, bg.canvas, bg.surface, border, accent.bg, accent.fg and danger.fg.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string, button none. No panel = 'Extras'. Labels show about 14 characters. User edits and set() re-run the hooks; onChange runs on edits only. Control edits are undo steps.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> body element. 'top' = first in the inspector (above Lightness), 'bottom' = after History and before the composer.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: g | shift+g | mod+g (not in reservedShortcuts), title? }) -> button in the header toolbar.",
+      "refresh() re-renders the page (for state a hook reads that is not a control).",
+      "export() -> Promise<{ files: [{ name, type, size }] }>: runs the Export button: attaches and downloads the primary token file (format auto keeps the input: tokens.json for W3C or flat JSON with unknown keys and key order kept, tokens.css for CSS, theme.css for Tailwind), tokens.css (light and dark custom properties) unless it is the primary, and contrast-report.json [{ fg, bg, theme, ratio, apca, pass, fixedTo? }] (fixedTo = the fg role token when it moved from the loaded file). Send to Agent posts the same files (not downloaded) with a short summary message: families, contrast passes per theme and the roles that moved. Throws on failure.",
+      "getValues() -> { palette: { families, roles, pairs, unknown }, type: { baseSize, typeRatio, spacingUnit, radius }, view, theme, method, target, controls }.",
+      "setValues({ palette?, type?, view?, theme?, method?, target? }, label?) -> values: palette is a partial palette value (families, roles, pairs, unknown), type a partial type form; palette and type become one undo step named by label. Unknown keys throw.",
+      "addPreset(name, { palette?, type? }) / applyPreset(name): presets appear in the History panel.",
+      "on('change', cb(values)) -> off.",
+      "instances: { palette, curves, colorwheels, propsform, history }. palette has get(), set(partial) (silent), select(familyId), selected(), editFamily(id, { name?, hue?, chroma?, curve? }) (emits change), addFamily({ name, seed }) -> id, harmony(seedHex, 'analogous'|'triadic'|'split'|'tetradic'|'mono') -> hex[], sample(blob, { count }) -> Promise<hex[]>, report() -> rows, fix(pairIndex?) -> applied, configure({ view?, theme?, method?, target? })."
+    ],
+    "reservedShortcuts": ["1", "2", "3", "l", "f", "mod+z", "mod+shift+z"],
+    "example": "const pal = t3template.instances.palette;\nt3template.addControl({ id: 'harmony', label: 'Harmony', type: 'select', options: ['analogous', 'triadic', 'split', 'mono'], default: 'triadic', panel: 'Harmony Set' });\nt3template.addControl({ id: 'seed', label: 'Seed', type: 'color', default: '#2A6F97', panel: 'Harmony Set' });\nt3template.addControl({ id: 'add', label: 'Add Set', type: 'button', panel: 'Harmony Set', onClick: (t) => {\n  const c = t.getValues().controls;\n  pal.harmony(c.seed, c.harmony).slice(1).forEach((hex) => pal.addFamily({ name: `${c.harmony} ${hex.slice(1)}`, seed: hex }));\n} });\nt3template.addToolbarButton('Fix Failing', (t) => t.instances.palette.fix(), { shortcut: 'shift+f', title: 'Fix every failing pair' });"
+  }
+}

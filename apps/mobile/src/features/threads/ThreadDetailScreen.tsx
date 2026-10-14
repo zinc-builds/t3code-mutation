@@ -61,6 +61,7 @@ import {
 import {
   Alert,
   AppState,
+  BackHandler,
   Keyboard,
   Platform,
   useWindowDimensions,
@@ -149,6 +150,9 @@ import { useThreadQueuedCount } from "./ThreadQueueControl";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 import { resolveThreadFeedSubmissionAnchor } from "./thread-feed-live-follow";
 import { useGlobalVoiceInput } from "../voice-input/VoiceInputProvider";
+import { leaveThreadWorkspace, useThreadWorkspace } from "../../state/mutationWorkspace";
+import { ThreadWorkspace } from "./workspace/ThreadWorkspace";
+import { WorkspaceBackButton } from "./workspace/WorkspaceBackButton";
 
 export interface ThreadDetailScreenProps {
   readonly worktreeSetup?: WorktreeSetupCardProps | null;
@@ -411,6 +415,26 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     threadId: props.selectedThread.id,
   });
   const composerError = useAtomValue(threadComposerErrorsAtom)[selectedThreadKey]?.message ?? null;
+  // An active mutation workspace replaces the conversation; the composer stays.
+  const { active: activeWorkspace, threadImages: workspaceImages } = useThreadWorkspace(
+    props.environmentId,
+    props.selectedThread.id,
+  );
+  const leaveWorkspace = useCallback(
+    () => leaveThreadWorkspace(props.environmentId, props.selectedThread.id),
+    [props.environmentId, props.selectedThread.id],
+  );
+  const workspaceOpen = activeWorkspace !== null;
+  useEffect(() => {
+    if (!workspaceOpen || Platform.OS !== "android") return;
+    // Back leaves the workspace for the chat before it leaves the thread.
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!navigation.isFocused()) return false;
+      leaveWorkspace();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [leaveWorkspace, navigation, workspaceOpen]);
   const queuedCount = useThreadQueuedCount({
     environmentId: props.environmentId,
     threadId: props.selectedThread.id,
@@ -1090,7 +1114,8 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     });
   }, [freeze, scrollMessageToEnd]);
 
-  const showScrollToEndButton = contentPresentationKind === "ready" && !endFollowEnabled;
+  const showScrollToEndButton =
+    contentPresentationKind === "ready" && !endFollowEnabled && !workspaceOpen;
   const { themeAppearance } = useAppearancePreferences();
   const isDarkMode = themeAppearance === "dark";
 
@@ -1127,7 +1152,33 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   return (
     <View className="flex-1">
       {!usesNativeWorkspaceColumns ? <NativeLayoutObserver onChange={setScreenMetrics} /> : null}
-      {showContent ? (
+      {showContent && activeWorkspace !== null ? (
+        <View
+          className={Platform.OS === "android" ? "bg-thread-canvas" : "bg-screen"}
+          style={{
+            flex: 1,
+            // Clear of a transparent header above and the docked composer below.
+            paddingTop: props.usesAutomaticContentInsets === true ? navigationHeaderHeight : 0,
+            paddingBottom:
+              estimatedOverlayHeight + (showFloatingStatus ? FLOATING_WORKING_CONTROL_COVERAGE : 0),
+          }}
+        >
+          <ThreadWorkspace
+            environmentId={props.environmentId}
+            threadId={props.selectedThread.id}
+            workspace={activeWorkspace}
+            threadImages={workspaceImages}
+            agentWorking={props.activeThreadBusy}
+            composerDraftKey={props.composerDraftKey}
+            serverConfig={props.serverConfig}
+            onRestore={leaveWorkspace}
+          />
+          <WorkspaceBackButton
+            top={(props.usesAutomaticContentInsets === true ? navigationHeaderHeight : 0) + 8}
+            onPress={leaveWorkspace}
+          />
+        </View>
+      ) : showContent ? (
         <View
           style={{ flex: 1 }}
           onTouchStart={handleFeedTouchStart}

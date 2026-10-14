@@ -198,6 +198,7 @@ import type { QueuedThreadMessage } from "../../state/thread-outbox-model";
 import { resolveThreadFeedFixedItemSize } from "./thread-feed-item-size";
 import { htmlRenderFrameHeight } from "@t3tools/shared/htmlRender";
 import { htmlRenderRowHeight, ThreadHtmlRender } from "./HtmlRenderWebView";
+import { ThreadWorkspaceRow } from "./workspace/ThreadWorkspaceRow";
 import { ThreadMcpApp } from "./McpAppWebView";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import {
@@ -1068,6 +1069,18 @@ function renderFeedEntry(
         threadId={props.threadId}
         render={entry.render}
         frameWidth={props.contentWidth}
+        iconColor={iconSubtleColor}
+      />
+    );
+  }
+
+  if (entry.type === "workspace") {
+    return (
+      <ThreadWorkspaceRow
+        environmentId={props.environmentId}
+        threadId={props.threadId}
+        itemId={entry.itemId}
+        workspace={entry.workspace}
         iconColor={iconSubtleColor}
       />
     );

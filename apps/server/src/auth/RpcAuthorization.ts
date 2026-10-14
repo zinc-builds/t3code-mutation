@@ -169,6 +169,13 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.mcpAppsToolInfo]: AuthOrchestrationReadScope,
   [WS_METHODS.mcpAppsReadResource]: AuthOrchestrationReadScope,
   [WS_METHODS.mcpAppsUpdateModelContext]: AuthOrchestrationOperateScope,
+  // A workspace page stores its controls as the user works them, like any edit to the thread.
+  [WS_METHODS.workspaceReadState]: AuthOrchestrationReadScope,
+  [WS_METHODS.workspaceUpdateState]: AuthOrchestrationOperateScope,
+  // A workspace's live preview drives the environment's browser, like a server preview tab.
+  [WS_METHODS.workspacePreviewOpen]: AuthPreviewOperateScope,
+  [WS_METHODS.workspacePreviewAct]: AuthPreviewOperateScope,
+  [WS_METHODS.workspaceSubscribePreview]: AuthPreviewOperateScope,
   [WS_METHODS.subscribeVcsStatus]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeWorktreeSetup]: AuthOrchestrationReadScope,
   [WS_METHODS.worktreeSetupCancel]: AuthOrchestrationOperateScope,
@@ -261,6 +268,7 @@ const requiredScopesForRpcCall = (
     return [
       resource._tag === "workspace-file" ||
       resource._tag === "media-file" ||
+      resource._tag === "workspace-asset" ||
       resource._tag === "draft-workspace-file"
         ? AuthFilesystemReadScope
         : AuthOrchestrationReadScope,

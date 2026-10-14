@@ -63,6 +63,10 @@ import {
 import { compactDynamicToolOutput } from "@t3tools/shared/toolOutput";
 import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { mcpAppReferencesEqual, type McpAppReference } from "@t3tools/shared/mcpApp";
+import {
+  workspaceReferencesEqual,
+  type WorkspaceReference,
+} from "@t3tools/shared/mutationWorkspace";
 import { dynamicToolTitle } from "@t3tools/shared/toolActivity";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import {
@@ -79,7 +83,9 @@ function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   if (entry.kind === "proposed-plan") {
     return entry.proposedPlan.runId;
   }
-  if (entry.kind === "html-render" || entry.kind === "mcp-app") return entry.runId;
+  if (entry.kind === "html-render" || entry.kind === "mcp-app" || entry.kind === "workspace") {
+    return entry.runId;
+  }
   return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
 }
 
@@ -641,6 +647,12 @@ type MessagesTimelineRowContent =
       htmlRender: HtmlRenderReference;
     }
   | {
+      kind: "workspace";
+      id: string;
+      createdAt: string;
+      workspace: WorkspaceReference;
+    }
+  | {
       kind: "mcp-app";
       id: string;
       createdAt: string;
@@ -825,6 +837,7 @@ function deriveSupersededAttemptFolds(
       // A published page stays visible, as it does when its turn folds.
       entry.kind === "html-render" ||
       entry.kind === "mcp-app" ||
+      entry.kind === "workspace" ||
       timelineEntryIsPersistentResourceCard(entry) ||
       // A steer supersedes the attempt but leaves its children running.
       liveSubagentEntryIds.has(entry.id) ||
@@ -1818,6 +1831,16 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
+    if (timelineEntry.kind === "workspace") {
+      nextRows.push({
+        kind: "workspace",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        workspace: timelineEntry.workspace,
+      });
+      continue;
+    }
+
     if (timelineEntry.kind === "mcp-app") {
       nextRows.push({
         kind: "mcp-app",
@@ -2274,6 +2297,11 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       // Entries rebuild on any tool update; an equal page must keep its mounted frame.
       const bh = b as typeof a;
       return a.createdAt === bh.createdAt && htmlRenderReferencesEqual(a.htmlRender, bh.htmlRender);
+    }
+
+    case "workspace": {
+      const bw = b as typeof a;
+      return a.createdAt === bw.createdAt && workspaceReferencesEqual(a.workspace, bw.workspace);
     }
 
     case "mcp-app": {

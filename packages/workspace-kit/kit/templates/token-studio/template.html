@@ -1,0 +1,1977 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Design Token Studio</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 13px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      canvas:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+      kbd {
+        font: 10px/1 var(--font-mono);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 2px 4px;
+        color: var(--muted-foreground);
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        height: 100vh;
+      }
+      .top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0 6px 0 0;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .grow {
+        flex: 1 1 auto;
+      }
+      .tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 2px);
+        overflow: hidden;
+      }
+      .seg-btn {
+        height: 26px;
+        padding: 0 10px;
+        border: 0;
+        border-right: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .seg-btn:last-child {
+        border-right: 0;
+      }
+      .seg-btn[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+
+      .btn {
+        height: 26px;
+        padding: 0 9px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 2px);
+        background: transparent;
+        color: var(--foreground);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) {
+        background: var(--muted);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn.primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: transparent;
+      }
+      .btn.primary:hover:not(:disabled) {
+        opacity: 0.9;
+        background: var(--primary);
+      }
+      .icon-btn {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        display: inline-grid;
+        place-items: center;
+        flex: none;
+      }
+      .icon-btn:hover {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .icon-btn[aria-pressed="true"] {
+        color: var(--foreground);
+        border-color: var(--border);
+        background: var(--muted);
+      }
+      .sel,
+      .txt {
+        height: 26px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 2px);
+        background: var(--background);
+        padding: 0 6px;
+        font-size: 12px;
+        min-width: 0;
+      }
+      .txt {
+        width: 100%;
+      }
+
+      .cols {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr) 360px;
+        min-height: 0;
+      }
+      .left,
+      .center,
+      .right {
+        min-height: 0;
+        overflow: auto;
+      }
+      .left {
+        border-right: 1px solid var(--border);
+        padding: 10px;
+      }
+      .center {
+        padding: 10px 12px;
+      }
+      .right {
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      /* The panels scroll; the composer slot stays pinned below them. */
+      .right-scroll {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .block {
+        margin-bottom: 16px;
+      }
+      h2 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted-foreground);
+      }
+      h3 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted-foreground);
+      }
+      .hint {
+        margin: 0 0 6px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .status {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+        min-height: 1.4em;
+      }
+
+      .list {
+        list-style: none;
+        margin: 0 0 8px;
+        padding: 0;
+        display: grid;
+        gap: 2px;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 4px;
+      }
+      .item.is-on {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .item-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 4px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .ramp {
+        display: flex;
+        height: 6px;
+        margin-top: 4px;
+        border-radius: 2px;
+        overflow: hidden;
+        outline: 1px solid var(--border);
+        outline-offset: -1px;
+      }
+      .ramp i {
+        flex: 1 1 0;
+      }
+      .fam-text {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .fam-head {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+      }
+      .chip {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        flex: none;
+      }
+      .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .sub {
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font: 11px/1 var(--font-mono);
+        white-space: nowrap;
+      }
+      .item.is-on .sub {
+        color: inherit;
+        opacity: 0.8;
+      }
+      .role {
+        display: grid;
+        grid-template-columns: 14px minmax(0, 1fr) 84px;
+        gap: 6px;
+        align-items: center;
+        padding: 3px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .role .sel {
+        width: 84px;
+      }
+      .role-name {
+        font-size: 12px;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pair {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .pair-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 4px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .pair-main:hover {
+        background: var(--muted);
+      }
+      .pair.is-on .pair-main {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .pair.is-on .sub {
+        color: inherit;
+        opacity: 0.85;
+      }
+      .pair-main .name {
+        max-width: 100%;
+      }
+      .badge {
+        flex: none;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+      }
+      .badge.pass {
+        color: var(--success);
+        border-color: var(--success);
+      }
+      .badge.fail {
+        color: var(--destructive);
+        border-color: var(--destructive);
+      }
+      .samples {
+        list-style: none;
+        margin: 0 0 8px;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .sample-chip {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        padding: 0;
+      }
+      .stack {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .row .txt {
+        flex: 1 1 auto;
+      }
+      .swatch-input {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid var(--input);
+        border-radius: 4px;
+        background: transparent;
+        flex: none;
+      }
+
+      .palette-host .t3k-palette-bar,
+      .palette-host [data-family],
+      .palette-host [data-panel="contrast"] > .t3k-palette-controls:first-child,
+      .palette-host [data-pairs] {
+        display: none !important;
+      }
+
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 10px;
+        background: var(--card);
+        color: var(--card-foreground);
+      }
+      .panel + .panel,
+      .panel + details,
+      details + .panel,
+      details + details {
+        margin-top: 0;
+      }
+      .panel-flush {
+        padding: 0;
+        overflow: hidden;
+      }
+      .panel-note {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        margin: 0 0 6px;
+      }
+      .curves-host {
+        height: 200px;
+        overflow: hidden;
+      }
+      .readout {
+        margin: 0 0 8px;
+        font: 11px/1.5 var(--font-mono);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .readout b {
+        color: var(--foreground);
+        font-weight: 600;
+      }
+      .wheel-host [hidden] {
+        display: none !important;
+      }
+      .wheel-host .t3k-colorwheels-lum,
+      .wheel-host .t3k-colorwheels-tonal-row,
+      .wheel-host .t3k-colorwheels-head {
+        display: none !important;
+      }
+      .wheel-host .t3k-colorwheels-grid {
+        --t3k-colorwheels-cols: 1;
+      }
+      .wheel-host.is-idle {
+        opacity: 0.5;
+      }
+      .history-host {
+        height: 280px;
+      }
+
+      .spec {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 8px;
+        font-family: var(--font-sans);
+      }
+      .spec-kicker {
+        margin: 0 0 6px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .spec-surface {
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .spec h4 {
+        margin: 0 0 4px;
+        font-weight: 650;
+        line-height: 1.15;
+      }
+      .spec p {
+        margin: 0 0 8px;
+        line-height: 1.45;
+      }
+      .spec-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+      .spec-btn {
+        border: 0;
+        padding: 6px 12px;
+        font-weight: 600;
+        cursor: default;
+      }
+      .spec-input {
+        flex: 1 1 120px;
+        min-width: 0;
+        border: 1px solid;
+        padding: 5px 8px;
+        background: transparent;
+      }
+      .spec-danger {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .bolt summary {
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 12px;
+        padding: 6px 0;
+      }
+      .bolt {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 6px 10px;
+        background: var(--card);
+        color: var(--card-foreground);
+      }
+      .composer {
+        flex: none;
+        min-width: 0;
+        padding: 8px 10px 10px;
+        border-top: 1px solid var(--border);
+      }
+
+      @media (max-width: 1100px) {
+        .cols {
+          grid-template-columns: 220px minmax(0, 1fr) 340px;
+        }
+      }
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          min-height: 100vh;
+        }
+        .cols {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .left,
+        .center,
+        .right,
+        .right-scroll {
+          overflow: visible;
+          border: 0;
+          padding: 12px 16px;
+        }
+        .right {
+          border-top: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <h1 class="title" id="title">Design Token Studio</h1>
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" class="seg-btn" data-view-btn="ramps" aria-pressed="true">
+            Ramps <kbd>1</kbd>
+          </button>
+          <button type="button" class="seg-btn" data-view-btn="contrast" aria-pressed="false">
+            Contrast <kbd>2</kbd>
+          </button>
+          <button type="button" class="seg-btn" data-view-btn="roles" aria-pressed="false">
+            Roles <kbd>3</kbd>
+          </button>
+        </div>
+        <label class="field"
+          >Method
+          <select id="method" class="sel" aria-label="Contrast method">
+            <option value="wcag">WCAG 2.x</option>
+            <option value="apca">APCA</option>
+          </select>
+        </label>
+        <label class="field"
+          >Level
+          <select id="target" class="sel" aria-label="Contrast level">
+            <option value="AA">AA</option>
+            <option value="AAA">AAA</option>
+          </select>
+        </label>
+        <div
+          class="seg"
+          role="group"
+          aria-label="Theme (L toggles)"
+          title="Light or dark roles (L)"
+        >
+          <button type="button" class="seg-btn" data-theme-set="light" aria-pressed="true">
+            Light
+          </button>
+          <button type="button" class="seg-btn" data-theme-set="dark" aria-pressed="false">
+            Dark <kbd>L</kbd>
+          </button>
+        </div>
+        <button
+          type="button"
+          class="btn"
+          id="fix-all"
+          title="Fix every failing pair (nearest passing unlocked step)"
+        >
+          <span id="fix-all-label">Fix All Failing</span>
+        </button>
+        <div class="grow"></div>
+        <div id="extra-tools" class="tools"></div>
+        <button
+          type="button"
+          class="btn"
+          id="send"
+          title="Send the palette to the agent: a short summary with the token files and contrast-report.json"
+        >
+          Send to Agent
+        </button>
+        <button type="button" class="btn primary" id="export">Export</button>
+      </header>
+
+      <div class="cols">
+        <aside class="left" aria-label="Families and semantic roles">
+          <section class="block">
+            <h2>Families</h2>
+            <ul class="list" id="families"></ul>
+            <form class="stack" id="add-form">
+              <div class="row">
+                <input
+                  type="color"
+                  id="add-seed"
+                  class="swatch-input"
+                  value="#346bf1"
+                  aria-label="Seed color"
+                />
+                <input
+                  type="text"
+                  id="add-name"
+                  class="txt"
+                  placeholder="New family name"
+                  maxlength="40"
+                  aria-label="New family name"
+                />
+              </div>
+              <div class="row"><button type="submit" class="btn">Add Color</button></div>
+            </form>
+            <div class="row">
+              <button type="button" class="btn" id="sample" disabled>Sample From Image</button>
+            </div>
+            <ul class="samples" id="samples" aria-label="Sampled colors"></ul>
+            <div class="row">
+              <select id="harmony-mode" class="sel" aria-label="Harmony">
+                <option value="analogous">Analogous</option>
+                <option value="triadic">Triadic</option>
+                <option value="split">Split</option>
+                <option value="mono">Monochrome</option>
+              </select>
+              <button type="button" class="btn" id="harmonize" disabled>Harmonize</button>
+            </div>
+          </section>
+          <section class="block">
+            <h2>Semantic Roles</h2>
+            <ul class="list" id="roles" aria-label="Roles for the selected theme"></ul>
+          </section>
+          <section class="block">
+            <h2>Contrast Pairs</h2>
+            <ul class="list" id="pairs" aria-label="Contrast pairs for the selected theme"></ul>
+          </section>
+        </aside>
+
+        <main class="center">
+          <p class="status" id="status" aria-live="polite"></p>
+          <div id="palette" class="palette-host"></div>
+        </main>
+
+        <aside class="right" aria-label="Inspector">
+          <div class="right-scroll">
+            <div id="panels-top" style="display: grid; gap: 8px"></div>
+            <section class="panel">
+              <h3>Lightness</h3>
+              <p class="readout" id="step-readout"></p>
+              <p class="panel-note" id="curve-note">
+                Drag to shape every step and contrast pair of the selected family.
+              </p>
+              <div id="curves" class="curves-host"></div>
+            </section>
+            <section class="panel">
+              <h3>Hue and Chroma</h3>
+              <div id="wheel" class="wheel-host"></div>
+            </section>
+            <section class="panel">
+              <h3>Type and Space</h3>
+              <div id="type-form"></div>
+            </section>
+            <section class="panel">
+              <h3>Specimen</h3>
+              <div class="spec" id="spec-light">
+                <p class="spec-kicker">Light</p>
+                <div class="spec-surface">
+                  <h4 class="spec-h">Heading</h4>
+                  <p class="spec-body">
+                    Body copy sets the reading size, and every color here comes from the tokens.
+                  </p>
+                  <p class="spec-muted">Caption and metadata</p>
+                  <div class="spec-row">
+                    <button type="button" class="spec-btn">Save Changes</button>
+                    <input
+                      class="spec-input"
+                      value="Input value"
+                      aria-label="Light specimen input"
+                    />
+                  </div>
+                  <p class="spec-danger">Error: this field is required</p>
+                </div>
+              </div>
+              <div class="spec" id="spec-dark">
+                <p class="spec-kicker">Dark</p>
+                <div class="spec-surface">
+                  <h4 class="spec-h">Heading</h4>
+                  <p class="spec-body">
+                    Body copy sets the reading size, and every color here comes from the tokens.
+                  </p>
+                  <p class="spec-muted">Caption and metadata</p>
+                  <div class="spec-row">
+                    <button type="button" class="spec-btn">Save Changes</button>
+                    <input
+                      class="spec-input"
+                      value="Input value"
+                      aria-label="Dark specimen input"
+                    />
+                  </div>
+                  <p class="spec-danger">Error: this field is required</p>
+                </div>
+              </div>
+            </section>
+            <section class="panel panel-flush">
+              <div id="history" class="history-host"></div>
+            </section>
+            <div id="panels-bottom" style="display: grid; gap: 8px"></div>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const esc = (s) =>
+          String(s).replace(
+            /[&<>"']/g,
+            (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+          );
+        const HEX = /^#[0-9a-fA-F]{6}$/;
+        const cssName = (name) => "--" + name;
+        const MAX_CHROMA = 0.4;
+        const THEMES = ["light", "dark"];
+        const VIEW_KEYS = { 1: "ramps", 2: "contrast", 3: "roles" };
+        const APPLY_KEYS = ["palette", "type", "view", "theme", "method", "target"];
+        const LOCK_SVG =
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+        const UNLOCK_SVG =
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+        const ROLE_SPEC = {
+          light: {
+            "fg.default": ["neutral", 900],
+            "fg.muted": ["neutral", 500],
+            "bg.canvas": ["neutral", 50],
+            "bg.surface": ["neutral", 200],
+            border: ["neutral", 300],
+            "accent.fg": ["neutral", 50],
+            "accent.bg": ["brand", 600],
+            "danger.fg": ["danger", 700],
+          },
+          dark: {
+            "fg.default": ["neutral", 50],
+            "fg.muted": ["neutral", 300],
+            "bg.canvas": ["neutral", 950],
+            "bg.surface": ["neutral", 900],
+            border: ["neutral", 700],
+            "accent.fg": ["neutral", 100],
+            "accent.bg": ["brand", 400],
+            "danger.fg": ["danger", 500],
+          },
+        };
+        const PAIR_SPEC = [
+          { fg: "fg.default", bg: "bg.canvas", use: "text" },
+          { fg: "fg.default", bg: "bg.surface", use: "text" },
+          { fg: "fg.muted", bg: "bg.canvas", use: "text" },
+          { fg: "fg.muted", bg: "bg.surface", use: "text" },
+          { fg: "accent.fg", bg: "accent.bg", use: "text" },
+          { fg: "danger.fg", bg: "bg.canvas", use: "text" },
+        ];
+
+        // ---- Options: lenient, bad values fall back to the default with a warning ----
+        const DEFAULT_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+        const SPEC = {
+          title: {
+            default: "Design Token Studio",
+            ok: (v) => typeof v === "string" && v.trim() !== "",
+          },
+          format: { default: "auto", ok: (v) => ["auto", "w3c", "css", "tailwind"].includes(v) },
+          steps: {
+            default: DEFAULT_STEPS,
+            ok: (v) =>
+              Array.isArray(v) &&
+              v.length >= 3 &&
+              v.every(
+                (n, i) => Number.isInteger(n) && n > 0 && n < 1000 && (i === 0 || n > v[i - 1]),
+              ),
+          },
+          method: { default: "wcag", ok: (v) => v === "wcag" || v === "apca" },
+          target: { default: "AA", ok: (v) => v === "AA" || v === "AAA" },
+          theme: { default: "light", ok: (v) => v === "light" || v === "dark" },
+          typeRatio: { default: 1.2, ok: (v) => typeof v === "number" && v >= 1.1 && v <= 1.6 },
+          baseSize: { default: 16, ok: (v) => Number.isInteger(v) && v >= 10 && v <= 32 },
+          seed: { default: "#2A6F97", ok: (v) => typeof v === "string" && HEX.test(v) },
+          view: { default: "ramps", ok: (v) => ["ramps", "contrast", "roles"].includes(v) },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn("token-studio: options are not valid JSON; using defaults.", err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          EXPLICIT.clear();
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) {
+              out[key] = clone(v);
+              EXPLICIT.add(key);
+            } else {
+              console.warn(
+                `token-studio: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          return out;
+        }
+        const EXPLICIT = new Set(); // option keys the caller passed with a valid value
+        const OPTS = readOptions();
+        const STEPS = OPTS.steps;
+        const nearestStep = (s) =>
+          STEPS.reduce((best, n) => (Math.abs(n - s) < Math.abs(best - s) ? n : best), STEPS[0]);
+
+        // ---- UI state (view and contrast settings are configuration, not history) ----
+        const ui = {
+          view: OPTS.view,
+          theme: OPTS.theme,
+          method: OPTS.method,
+          target: OPTS.target,
+          pair: 0,
+        };
+        let flashText = "";
+        let booted = false;
+        let busy = false;
+        let history = null;
+        let historyLink = null;
+        let sourceKind = "w3c";
+        let sourceName = "";
+        let roleLayout = "top"; // "color.role" when a W3C file keeps its roles inside the color group
+        let w3cOrder = null; // the top-level key order of the W3C file that came in
+        let imageAsset = null;
+        let loadedRoles = { light: {}, dark: {} }; // roles as the input file set them, for contrast-report fixedTo
+        let pairPicked = false; // false: the selected pair follows the first failing pair
+        let renderFrame = 0;
+        let persistTimer = 0;
+
+        // ---- Instances ----
+        const pal = t3kit.palette.create($("palette"), {
+          view: ui.view,
+          theme: ui.theme,
+          method: ui.method,
+          target: ui.target,
+          steps: STEPS,
+        });
+        const curves = t3kit.curves.create($("curves"), {
+          channels: ["rgb"],
+          label: "Lightness curve",
+        });
+        const wheel = t3kit.colorwheels.create($("wheel"), {
+          global: true,
+          tonal: false,
+          header: false,
+          size: 170,
+          label: "Hue and Chroma",
+        });
+        for (const w of $("wheel").querySelectorAll(".t3k-colorwheels-wheel")) {
+          if (w.querySelector(".t3k-colorwheels-name")?.textContent.trim() !== "Global")
+            w.hidden = true;
+        }
+        const typeForm = t3kit.propsform.create($("type-form"), {
+          schema: {
+            baseSize: {
+              type: "integer",
+              default: OPTS.baseSize,
+              min: 10,
+              max: 32,
+              step: 1,
+              unit: "px",
+              group: "Type",
+              label: "Base size",
+            },
+            typeRatio: {
+              type: "number",
+              default: OPTS.typeRatio,
+              min: 1.1,
+              max: 1.6,
+              step: 0.01,
+              group: "Type",
+              label: "Scale ratio",
+            },
+            spacingUnit: {
+              type: "integer",
+              default: 4,
+              min: 2,
+              max: 8,
+              step: 1,
+              unit: "px",
+              group: "Space",
+              label: "Spacing unit",
+            },
+            radius: {
+              type: "integer",
+              default: 8,
+              min: 0,
+              max: 24,
+              step: 1,
+              unit: "px",
+              group: "Space",
+              label: "Radius",
+            },
+          },
+          value: { baseSize: OPTS.baseSize, typeRatio: OPTS.typeRatio, spacingUnit: 4, radius: 8 },
+        });
+
+        // ---- Helpers ----
+        const reportError = (err) => rt.reportError(err);
+        const guard =
+          (fn) =>
+          (...args) => {
+            try {
+              return fn(...args);
+            } catch (err) {
+              reportError(err);
+              return undefined;
+            }
+          };
+        const isTyping = (el) =>
+          Boolean(el) && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+        let flashTimer = 0;
+        const flash = (msg) => {
+          flashText = msg;
+          clearTimeout(flashTimer);
+          flashTimer = setTimeout(() => {
+            flashText = "";
+            renderAll();
+          }, 5000);
+          renderAll();
+        };
+        const selectedFamily = () => {
+          const id = pal.selected().familyId;
+          return pal.get().families.find((f) => f.id === id) ?? null;
+        };
+        const oklchText = (o) =>
+          `oklch(${(o[0] * 100).toFixed(1)}% ${o[1].toFixed(3)} ${Number.isFinite(o[2]) ? Math.round(o[2]) : 0})`;
+        const tokenHex = (v, token) => {
+          if (!token) return null;
+          const [fam, step] = token.split(".");
+          const family = v.families.find((f) => f.id === fam);
+          return family?.steps[step]?.hex ?? null;
+        };
+        const tokenOptions = (families, selected) =>
+          families
+            .map(
+              (f) =>
+                `<optgroup label="${esc(f.name)}">${STEPS.map((s) => `<option value="${esc(f.id)}.${s}"${selected === `${f.id}.${s}` ? " selected" : ""}>${s}</option>`).join("")}</optgroup>`,
+            )
+            .join("");
+
+        function getState() {
+          const v = pal.get();
+          return {
+            palette: { families: v.families, roles: v.roles, pairs: v.pairs, unknown: v.unknown },
+            type: typeForm.get().values,
+          };
+        }
+        function getValues() {
+          return {
+            ...getState(),
+            view: ui.view,
+            theme: ui.theme,
+            method: ui.method,
+            target: ui.target,
+          };
+        }
+        function mergeState(state, partial) {
+          return {
+            palette: { ...state.palette, ...(partial.palette ?? {}) },
+            type: { ...state.type, ...(partial.type ?? {}) },
+          };
+        }
+        function applyState(s) {
+          pal.set({
+            families: s.palette.families,
+            roles: s.palette.roles,
+            pairs: s.palette.pairs,
+            unknown: s.palette.unknown,
+          });
+          typeForm.set({ values: s.type });
+          syncAll();
+        }
+        function commitNow(label) {
+          if (historyLink) historyLink.commit(label);
+        }
+        function setUi(patch) {
+          Object.assign(ui, patch);
+          pal.configure({ view: ui.view, theme: ui.theme, method: ui.method, target: ui.target });
+          renderAll();
+        }
+        function applyPartial(partial, label) {
+          if (!isPlain(partial)) throw new TypeError("t3template.setValues needs an object");
+          const bad = Object.keys(partial).find((k) => !APPLY_KEYS.includes(k));
+          if (bad)
+            throw new TypeError(
+              `t3template.setValues: unknown key "${bad}" (use palette, type, view, theme, method, target)`,
+            );
+          const edit = partial.palette !== undefined || partial.type !== undefined;
+          if (partial.palette !== undefined)
+            pal.set(mergeState(getState(), { palette: partial.palette }).palette);
+          if (partial.type !== undefined) typeForm.set({ values: partial.type });
+          const config = {};
+          for (const k of ["view", "theme", "method", "target"])
+            if (partial[k] !== undefined) config[k] = partial[k];
+          if (Object.keys(config).length) setUi(config);
+          syncAll();
+          if (edit) commitNow(label || "Set Values");
+          return getValues();
+        }
+
+        // ---- Inspector sync: the selected family drives the wheel; the curve link handles the curve ----
+        function syncInspector() {
+          const fam = selectedFamily();
+          $("wheel").classList.toggle("is-idle", !fam);
+          if (fam) wheel.set({ global: { h: fam.hue, s: Math.min(1, fam.chroma / MAX_CHROMA) } });
+        }
+        function syncAll() {
+          syncInspector();
+          renderAll();
+        }
+
+        // ---- Rendering (one frame at most) ----
+        function renderAll() {
+          if (renderFrame) return;
+          renderFrame = requestAnimationFrame(() => {
+            renderFrame = 0;
+            paintFamilies();
+            paintRoles();
+            paintPairs();
+            paintSpecimens();
+            paintChrome();
+          });
+        }
+        function paintFamilies() {
+          const v = pal.get();
+          const on = pal.selected().familyId;
+          const rows = v.families.map((f) => {
+            const li = document.createElement("li");
+            const locked = STEPS.every((s) => f.steps[String(s)]?.locked);
+            const count = STEPS.filter((s) => f.steps[String(s)]?.locked).length;
+            const mid = f.steps[String(nearestStep(500))]?.hex ?? "transparent";
+            const ramp = STEPS.map(
+              (s) => `<i style="background:${f.steps[String(s)]?.hex ?? "transparent"}"></i>`,
+            ).join("");
+            const sub =
+              count === 0 ? esc(f.id) : count === STEPS.length ? "locked" : `${count} locked`;
+            li.className = "item" + (f.id === on ? " is-on" : "");
+            li.innerHTML =
+              `<button type="button" class="item-main" data-fam="${esc(f.id)}" aria-current="${f.id === on ? "true" : "false"}">` +
+              `<span class="chip" style="background:${mid}"></span><span class="fam-text"><span class="fam-head"><span class="name">${esc(f.name)}</span><span class="sub">${sub}</span></span><span class="ramp" aria-hidden="true">${ramp}</span></span></button>` +
+              `<button type="button" class="icon-btn" data-lock="${esc(f.id)}" aria-pressed="${locked}" aria-label="${locked ? "Unlock" : "Lock"} every step of ${esc(f.name)}" title="${locked ? "Unlock every step (the curve, hue and chroma then reshape them)" : "Lock every step"}">${locked ? LOCK_SVG : UNLOCK_SVG}</button>`;
+            return li;
+          });
+          $("families").replaceChildren(...rows);
+        }
+        function paintRoles() {
+          const v = pal.get();
+          const rows = Object.keys(v.roles[ui.theme] ?? {})
+            .sort()
+            .map((role) => {
+              const token = v.roles[ui.theme][role];
+              const li = document.createElement("li");
+              li.className = "role";
+              li.innerHTML =
+                `<span class="chip" style="background:${tokenHex(v, token) ?? "transparent"}"></span>` +
+                `<span class="role-name" title="${esc(role)}">${esc(role)}</span>` +
+                `<select class="sel" data-role="${esc(role)}" aria-label="Token for ${esc(role)} (${ui.theme})">${tokenOptions(v.families, token)}</select>`;
+              return li;
+            });
+          $("roles").replaceChildren(...rows);
+        }
+        function paintPairs() {
+          const rows = pal.report().filter((r) => r.theme === ui.theme);
+          if (!pairPicked || !rows.some((r) => r.pair === ui.pair))
+            ui.pair = (rows.find((r) => !r.pass) ?? rows[0])?.pair ?? 0;
+          const items = rows.map((r) => {
+            const li = document.createElement("li");
+            const metric = ui.method === "apca" ? `Lc ${r.apca}` : `${r.ratio.toFixed(2)}:1`;
+            const fix =
+              r.pass || !r.fix
+                ? ""
+                : `<button type="button" class="btn" data-fix="${r.pair}" title="Repoint ${esc(r.fg)} to ${esc(r.fix.token)}">Fix</button>`;
+            li.className = "pair" + (r.pair === ui.pair ? " is-on" : "");
+            li.innerHTML =
+              `<button type="button" class="pair-main" data-pair="${r.pair}" aria-pressed="${r.pair === ui.pair}">` +
+              `<span class="name">${esc(r.fg)} on ${esc(r.bg)}</span><span class="sub">${esc(metric)} · ${esc(r.use)}</span></button>` +
+              `<span class="badge ${r.pass ? "pass" : "fail"}">${r.pass ? "Pass" : "Fail"}</span>${fix}`;
+            return li;
+          });
+          $("pairs").replaceChildren(...items);
+        }
+        function paintSpecimens() {
+          const v = pal.get();
+          const base = typeForm.get().values;
+          for (const theme of THEMES) {
+            const el = $(`spec-${theme}`);
+            const c = (role) => tokenHex(v, v.roles[theme]?.[role]) ?? "transparent";
+            const surface = el.querySelector(".spec-surface");
+            el.style.background = c("bg.canvas");
+            el.style.color = c("fg.default");
+            el.style.borderColor = c("border");
+            el.style.borderRadius = `${base.radius}px`;
+            el.style.padding = `${base.spacingUnit * 3}px`;
+            el.querySelector(".spec-kicker").style.color = c("fg.muted");
+            surface.style.background = c("bg.surface");
+            surface.style.borderRadius = `${Math.max(0, base.radius - 2)}px`;
+            surface.style.padding = `${base.spacingUnit * 2}px`;
+            const h = el.querySelector(".spec-h");
+            h.style.color = c("fg.default");
+            h.style.fontSize = `${(base.baseSize * base.typeRatio ** 2).toFixed(1)}px`;
+            const body = el.querySelector(".spec-body");
+            body.style.color = c("fg.default");
+            body.style.fontSize = `${base.baseSize}px`;
+            const muted = el.querySelector(".spec-muted");
+            muted.style.color = c("fg.muted");
+            muted.style.fontSize = `${(base.baseSize / base.typeRatio).toFixed(1)}px`;
+            const btn = el.querySelector(".spec-btn");
+            btn.style.background = c("accent.bg");
+            btn.style.color = c("accent.fg");
+            btn.style.borderRadius = `${base.radius}px`;
+            btn.style.fontSize = `${base.baseSize}px`;
+            const input = el.querySelector(".spec-input");
+            input.style.background = c("bg.canvas");
+            input.style.color = c("fg.default");
+            input.style.borderColor = c("border");
+            input.style.borderRadius = `${base.radius}px`;
+            input.style.fontSize = `${base.baseSize}px`;
+            const danger = el.querySelector(".spec-danger");
+            danger.style.color = c("danger.fg");
+            danger.style.fontSize = `${(base.baseSize / base.typeRatio).toFixed(1)}px`;
+          }
+        }
+        function paintChrome() {
+          for (const b of document.querySelectorAll("[data-view-btn]"))
+            b.setAttribute("aria-pressed", String(b.dataset.viewBtn === ui.view));
+          $("method").value = ui.method;
+          $("target").value = ui.target;
+          for (const b of document.querySelectorAll("[data-theme-set]"))
+            b.setAttribute("aria-pressed", String(b.dataset.themeSet === ui.theme));
+          const all = pal.report();
+          const rows = all.filter((r) => r.theme === ui.theme);
+          const fails = rows.filter((r) => !r.pass).length;
+          const themeName = ui.theme === "dark" ? "Dark" : "Light";
+          const method = ui.method === "apca" ? "APCA" : "WCAG 2.x";
+          const summary =
+            rows.length === 0
+              ? "No contrast pairs yet."
+              : fails === 0
+                ? `All ${rows.length} pairs pass ${ui.target} (${method}) in ${themeName}.`
+                : `${fails} of ${rows.length} pairs fail ${ui.target} (${method}) in ${themeName}.`;
+          const v = pal.get();
+          const stuck = rows.filter((r) => !r.pass && !r.fix);
+          const lockedStuck = stuck.filter((r) => lockedFamilyOf(v, r) !== null).length;
+          const blockers = lockedBlockers();
+          const hint =
+            stuck.length === 0
+              ? ""
+              : lockedStuck > 0
+                ? ` ${lockedStuck} ${lockedStuck === 1 ? "needs" : "need"} a step from a locked family: Unlock and Fix All unlocks it.`
+                : ` ${stuck.length} ${stuck.length === 1 ? "has" : "have"} no passing step in its family: reshape the lightness curve.`;
+          $("status").textContent = (flashText ? `${flashText} ` : "") + summary + hint;
+          // Imported families load locked; when a fix needs one, Fix All offers to unlock it in the same step.
+          const fixAll = $("fix-all");
+          fixAll.disabled = !all.some((r) => !r.pass && r.fix) && blockers.length === 0;
+          $("fix-all-label").textContent = blockers.length
+            ? "Unlock and Fix All"
+            : "Fix All Failing";
+          fixAll.title = blockers.length
+            ? `Unlock ${blockers.map((f) => f.name).join(", ")} (locked on import, so their exact colors stay until you rework them), then fix every failing pair. One undo step.`
+            : "Fix every failing pair (nearest passing unlocked step)";
+          $("harmonize").disabled = !selectedFamily();
+          $("sample").disabled = !imageAsset;
+          const fam = selectedFamily();
+          $("wheel").classList.toggle("is-idle", !fam);
+          const frozen = fam !== null && STEPS.every((s) => fam.steps[String(s)]?.locked);
+          const sel = pal.selected();
+          const stepKey = String(sel.step ?? nearestStep(500));
+          const step = fam?.steps[stepKey];
+          $("step-readout").innerHTML = step
+            ? `<b>${esc(fam.name)} ${esc(stepKey)}</b> ${esc(step.hex)} ${esc(oklchText(step.oklch ?? t3kit.palette.toOklch(step.hex)))}${step.locked ? " · locked" : ""}`
+            : "Select a family.";
+          $("curve-note").textContent = frozen
+            ? "Every step of this family is locked, so the curve cannot move it. Unlock the family to shape its lightness."
+            : "Drag to shape every step and contrast pair of the selected family.";
+        }
+
+        // ---- Actions (each edit becomes one history step) ----
+        function toggleLock(id) {
+          const v = pal.get();
+          const fam = v.families.find((f) => f.id === id);
+          if (!fam) return;
+          const lock = !STEPS.every((s) => fam.steps[String(s)]?.locked);
+          const families = v.families.map((f) =>
+            f.id !== id
+              ? f
+              : {
+                  ...f,
+                  steps: Object.fromEntries(
+                    STEPS.map((s) => [String(s), { hex: f.steps[String(s)].hex, locked: lock }]),
+                  ),
+                },
+          );
+          pal.set({ families, roles: v.roles, pairs: v.pairs, unknown: v.unknown });
+          commitNow(`${lock ? "Lock" : "Unlock"} ${fam.name}`);
+          syncAll();
+        }
+        // The fully locked family of a failing pair's fg role, or null.
+        function lockedFamilyOf(v, r) {
+          const id = String(v.roles[r.theme]?.[r.fg] ?? "").split(".")[0];
+          const fam = v.families.find((f) => f.id === id);
+          return fam && STEPS.every((s) => fam.steps[String(s)]?.locked) ? fam : null;
+        }
+        // Fully locked families that hold the fg of a failing pair with no passing unlocked step, in either theme.
+        function lockedBlockers() {
+          const v = pal.get();
+          const out = new Map();
+          for (const r of pal.report()) {
+            if (r.pass || r.fix) continue;
+            const fam = lockedFamilyOf(v, r);
+            if (fam) out.set(fam.id, fam);
+          }
+          return [...out.values()];
+        }
+        // Fix All: unlocks the locked families its fixes need (their steps then follow the curve, hue and chroma), then
+        // repoints every failing fg role to its nearest passing step. One undo step for both.
+        function fixAll() {
+          if (pal.get().pairs.length === 0) return flash("No contrast pairs to fix.");
+          const unlock = lockedBlockers();
+          if (unlock.length) {
+            const v = pal.get();
+            const ids = new Set(unlock.map((f) => f.id));
+            const families = v.families.map((f) =>
+              !ids.has(f.id)
+                ? f
+                : {
+                    ...f,
+                    steps: Object.fromEntries(
+                      STEPS.map((s) => [String(s), { hex: f.steps[String(s)].hex, locked: false }]),
+                    ),
+                  },
+            );
+            pal.set({ families, roles: v.roles, pairs: v.pairs, unknown: v.unknown });
+          }
+          const applied = pal.fix();
+          const names = unlock.map((f) => f.name).join(", ");
+          if (applied.length || unlock.length)
+            commitNow(unlock.length ? `Unlock ${names} and Fix All` : "Fix All Failing");
+          syncAll();
+          const fixed = `Fixed ${applied.length} ${applied.length === 1 ? "pair" : "pairs"}`;
+          return flash(
+            unlock.length
+              ? `Unlocked ${names}. ${fixed}.`
+              : applied.length
+                ? `${fixed}.`
+                : "Nothing to fix here.",
+          );
+        }
+        function fixPair(index) {
+          if (pal.get().pairs.length === 0) return flash("No contrast pairs to fix.");
+          const applied = pal.fix(index);
+          const pair = index === undefined ? null : pal.get().pairs[index];
+          if (applied.length) commitNow(pair ? `Fix ${pair.fg} on ${pair.bg}` : "Fix All Failing");
+          syncAll();
+          return flash(
+            applied.length
+              ? `Fixed ${applied.length} ${applied.length === 1 ? "pair" : "pairs"}.`
+              : "Nothing to fix here.",
+          );
+        }
+        function addColor(e) {
+          e.preventDefault();
+          const v = pal.get();
+          const name = $("add-name").value.trim() || `Color ${v.families.length + 1}`;
+          const id = pal.addFamily({ name, seed: $("add-seed").value });
+          pal.select(id);
+          $("add-name").value = "";
+          commitNow(`Add ${name}`);
+          syncAll();
+          flash(`Added ${name}.`);
+        }
+        function harmonize() {
+          const fam = selectedFamily();
+          if (!fam) return;
+          const mode = $("harmony-mode").value;
+          const seed = fam.steps[String(nearestStep(500))].hex;
+          const hexes = pal.harmony(seed, mode).slice(1);
+          for (const hex of hexes)
+            pal.addFamily({ name: `${fam.name} ${mode} ${hex.slice(1)}`, seed: hex });
+          commitNow(`Harmonize ${fam.name}`);
+          syncAll();
+          flash(`Added ${hexes.length} ${mode} families.`);
+        }
+        async function sampleImage() {
+          if (!imageAsset) return;
+          const hexes = await pal.sample(imageAsset.file ?? imageAsset.url, { count: 6 });
+          $("samples").replaceChildren(
+            ...hexes.map((hex) => {
+              const li = document.createElement("li");
+              li.innerHTML = `<button type="button" class="sample-chip" data-sample="${esc(hex)}" style="background:${esc(hex)}" title="${esc(hex)}" aria-label="Add sampled color ${esc(hex)}"></button>`;
+              return li;
+            }),
+          );
+          flash(`Sampled ${hexes.length} colors. Click one to add it.`);
+        }
+        function addSample(hex) {
+          const id = pal.addFamily({ name: `Sample ${hex.slice(1)}`, seed: hex });
+          pal.select(id);
+          commitNow(`Add Sample ${hex}`);
+          syncAll();
+          flash(`Added ${hex}.`);
+        }
+
+        // ---- Tokens in and out ----
+        function kindOf(text) {
+          const t = text.trim();
+          if (!t.startsWith("{")) return /@theme\b/.test(t) ? "tailwind" : "css";
+          if (/"\$(value|type)"/.test(t)) return "w3c";
+          const doc = JSON.parse(t);
+          return doc.v === 1 && Array.isArray(doc.families) ? "json" : "flat";
+        }
+        // ---- Flat JSON: { neutral: { "50": "#hex" } } or { "color-neutral-50": "#hex" }, any nesting ----
+        // flatSource keeps the parsed file and where each step lives, so export writes the values back in place.
+        let flatSource = null;
+        const FLAT_KEY = /^(?:color-)?([a-z][a-z0-9-]*?)-(\d+)$/i;
+        const famIdOf = (name) =>
+          String(name)
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+        function readFlat(raw) {
+          const doc = JSON.parse(raw);
+          const places = new Map(); // "fam.step" -> path array
+          const groups = new Map(); // fam -> path of its group object (null for top-level flat keys)
+          const walk = (node, path) => {
+            if (!isPlain(node)) return;
+            const numeric = Object.entries(node).filter(
+              ([k, v]) => /^\d+$/.test(k) && typeof v === "string" && HEX.test(v),
+            );
+            if (numeric.length >= 2 && path.length) {
+              const fam = famIdOf(path[path.length - 1]);
+              groups.set(fam, path);
+              for (const [k] of numeric) places.set(`${fam}.${k}`, [...path, k]);
+            }
+            for (const [k, v] of Object.entries(node)) {
+              if (k === "roles" || k === "pairs") continue;
+              const m = typeof v === "string" && HEX.test(v) ? k.match(FLAT_KEY) : null;
+              if (m && !/^\d+$/.test(k)) {
+                const fam = famIdOf(m[1]);
+                if (!groups.has(fam)) groups.set(fam, null);
+                places.set(`${fam}.${m[2]}`, [...path, k]);
+              } else if (isPlain(v)) walk(v, [...path, k]);
+            }
+          };
+          walk(doc, []);
+          if (places.size === 0)
+            throw new Error(
+              'token-studio: the JSON file has no colour steps (expected { family: { "50": "#hex" } } or "color-family-50": "#hex")',
+            );
+          flatSource = { doc, places, groups };
+          const lines = [...places.entries()].map(([token, path]) => {
+            const [fam, step] = token.split(".");
+            return `  ${cssName(`color-${fam}-${step}`)}: ${path.reduce((n, k) => n[k], doc)};`;
+          });
+          return `:root {\n${lines.join("\n")}\n}\n`;
+        }
+        // Applies the roles and pairs a flat file carries (as written by this template's export).
+        function adoptFlatRoles() {
+          const { doc } = flatSource;
+          const v = pal.get();
+          const roles =
+            isPlain(doc.roles) && isPlain(doc.roles.light) && isPlain(doc.roles.dark)
+              ? remapRoleSteps(clone(doc.roles))
+              : null;
+          const pairs = Array.isArray(doc.pairs) ? doc.pairs : null;
+          if (roles || pairs)
+            pal.set({
+              families: v.families,
+              roles: roles ?? v.roles,
+              pairs: pairs ?? v.pairs,
+              unknown: v.unknown,
+            });
+        }
+        function flatText() {
+          const { doc: source, places, groups } = flatSource;
+          const doc = clone(source);
+          const v = pal.get();
+          const setAt = (path, value) => {
+            let node = doc;
+            for (const k of path.slice(0, -1)) node = isPlain(node[k]) ? node[k] : (node[k] = {});
+            node[path[path.length - 1]] = value;
+          };
+          const firstGroup = [...groups.values()].find((g) => g !== null);
+          const parent = firstGroup ? firstGroup.slice(0, -1) : [];
+          for (const f of v.families) {
+            for (const s of STEPS) {
+              const hex = f.steps[String(s)]?.hex;
+              if (!hex) continue;
+              const known = places.get(`${f.id}.${s}`);
+              if (known) setAt(known, hex);
+              else if (groups.get(f.id)) setAt([...groups.get(f.id), String(s)], hex);
+              else if (groups.has(f.id)) setAt([...parent, `color-${f.id}-${s}`], hex);
+              else setAt([...parent, f.id, String(s)], hex);
+            }
+          }
+          doc.roles = v.roles;
+          doc.pairs = v.pairs;
+          return doc;
+        }
+        // Role tokens that name a step the configured steps lack move to the nearest step ({color.neutral.50} or neutral.50).
+        function remapRoleSteps(node) {
+          if (typeof node === "string") {
+            return node
+              .replace(
+                /^\{color\.([\w-]+)\.(\d+)\}$/,
+                (_, f, st) => `{color.${f}.${nearestStep(Number(st))}}`,
+              )
+              .replace(/^([\w-]+)\.(\d+)$/, (_, f, st) => `${f}.${nearestStep(Number(st))}`);
+          }
+          if (Array.isArray(node)) return node.map(remapRoleSteps);
+          if (isPlain(node))
+            return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, remapRoleSteps(v)]));
+          return node;
+        }
+        // A tailwind.config.js colors block becomes the v4 @theme CSS that the palette reads.
+        function tailwindConfigToCss(src) {
+          const at = src.search(/colors\s*:\s*\{/);
+          if (at < 0) throw new Error("token-studio: the tailwind config has no colors block");
+          const open = src.indexOf("{", at);
+          let depth = 0;
+          let close = open;
+          for (; close < src.length; close++) {
+            if (src[close] === "{") depth++;
+            else if (src[close] === "}" && --depth === 0) break;
+          }
+          const body = src.slice(open + 1, close);
+          const lines = [];
+          for (const fam of body.matchAll(/(['"]?)([\w-]+)\1\s*:\s*\{([^{}]*)\}/g)) {
+            for (const step of fam[3].matchAll(/(['"]?)(\d+)\1\s*:\s*(['"])(#[0-9a-fA-F]{6})\3/g)) {
+              lines.push(`  ${cssName(`color-${fam[2]}-${step[2]}`)}: ${step[4]};`);
+            }
+          }
+          if (lines.length === 0)
+            throw new Error("token-studio: the tailwind colors block has no 50 to 950 color steps");
+          return `@theme {\n${lines.join("\n")}\n}\n`;
+        }
+        async function readText(asset) {
+          if (asset.file) return asset.file.text();
+          const res = await fetch(asset.url);
+          return res.text();
+        }
+        function seedDefaults() {
+          pal.addFamily({ name: "Neutral", seed: "#64748B" });
+          pal.addFamily({ name: "Brand", seed: OPTS.seed });
+          pal.addFamily({ name: "Danger", seed: "#C2410C" });
+          pal.addFamily({ name: "Success", seed: "#15803D" });
+          ensureRoles();
+        }
+        // Fills roles and pairs with the default semantic set when a file did not bring them.
+        function ensureRoles() {
+          const v = pal.get();
+          const hasRoles =
+            Object.keys(v.roles.light).length > 0 && Object.keys(v.roles.dark).length > 0;
+          if (hasRoles && v.pairs.length > 0) return;
+          const fams = v.families;
+          if (fams.length === 0) return;
+          const pick = (id, fallback) =>
+            (fams.find((f) => f.id === id) ?? fams[Math.min(fallback, fams.length - 1)]).id;
+          const ids = {
+            neutral: pick("neutral", 0),
+            brand: pick("brand", 1),
+            danger: pick("danger", 2),
+          };
+          const roles = hasRoles ? v.roles : { light: {}, dark: {} };
+          if (!hasRoles) {
+            for (const theme of THEMES) {
+              for (const [role, [fam, step]] of Object.entries(ROLE_SPEC[theme]))
+                roles[theme][role] = `${ids[fam]}.${nearestStep(step)}`;
+            }
+          }
+          const pairs =
+            v.pairs.length > 0
+              ? v.pairs
+              : PAIR_SPEC.filter((p) => THEMES.every((t) => roles[t][p.fg] && roles[t][p.bg]));
+          pal.set({ families: v.families, roles, pairs, unknown: v.unknown });
+        }
+        // The palette reads roles at the top level; a W3C file that keeps them under color.role is hoisted for import.
+        function hoistW3cRoles(raw) {
+          const doc = JSON.parse(raw);
+          w3cOrder = Object.keys(doc);
+          const role = doc.color?.role;
+          if (isPlain(doc.roles)) doc.roles = remapRoleSteps(doc.roles);
+          if (!isPlain(role) || !(role.light || role.dark)) return JSON.stringify(doc);
+          roleLayout = "color.role";
+          const { color, ...rest } = doc;
+          const { role: _moved, ...families } = color;
+          return JSON.stringify({ ...rest, color: families, roles: remapRoleSteps(role) });
+        }
+        // Puts the roles back into color.role when the file had them there, and the top-level keys back in file order.
+        function restoreW3cLayout(doc) {
+          let out = doc;
+          if (roleLayout === "color.role") {
+            const { roles, ...rest } = doc;
+            rest.color = { ...rest.color, role: roles };
+            out = rest;
+          }
+          if (!w3cOrder) return out;
+          const ordered = {};
+          for (const key of w3cOrder) if (key in out) ordered[key] = out[key];
+          for (const key of Object.keys(out)) if (!(key in ordered)) ordered[key] = out[key];
+          return ordered;
+        }
+        // Type and space from the file (typography.base, typography.ratio, space.unit, radius.md, or the matching
+        // custom properties of a tokens.css this template wrote). File values win unless the option was passed.
+        function adoptFileScale(raw, kind) {
+          const num = (v) => {
+            const x = isPlain(v) && "$value" in v ? v.$value : v;
+            const n = typeof x === "number" ? x : Number.parseFloat(String(x ?? ""));
+            return Number.isFinite(n) ? n : undefined;
+          };
+          let found = {};
+          if (kind === "w3c" || kind === "json" || kind === "flat") {
+            const doc = JSON.parse(raw);
+            found = {
+              baseSize: num(doc.typography?.base),
+              typeRatio: num(doc.typography?.ratio),
+              spacingUnit: num(doc.space?.unit),
+              radius: num(doc.radius?.md),
+            };
+          } else {
+            const prop = (name) => {
+              const m = raw.match(new RegExp(`${cssName(name)}\\s*:\\s*([0-9.]+)`));
+              return m ? Number(m[1]) : undefined;
+            };
+            found = {
+              baseSize: prop("type-base") ?? prop("text-base"),
+              typeRatio: prop("type-ratio"),
+              spacingUnit: prop("space-unit") ?? prop("spacing"),
+              radius: prop("radius-md"),
+            };
+          }
+          const optionKey = { baseSize: "baseSize", typeRatio: "typeRatio" };
+          const values = {};
+          for (const [k, v] of Object.entries(found)) {
+            if (v === undefined || (optionKey[k] && EXPLICIT.has(optionKey[k]))) continue;
+            values[k] = k === "typeRatio" ? Math.min(1.6, Math.max(1.1, v)) : Math.round(v);
+          }
+          if (Object.keys(values).length) typeForm.set({ values });
+        }
+        async function loadInputs(assets) {
+          const tokenAsset = assets.find((a) => /\.(json|css|js|mjs|cjs|ts)$/i.test(a.name ?? ""));
+          imageAsset = assets.find((a) => String(a.mimeType ?? "").startsWith("image/")) ?? null;
+          if (!tokenAsset) return seedDefaults();
+          const raw = await readText(tokenAsset);
+          sourceName = tokenAsset.name;
+          let result;
+          if (/\.(js|mjs|cjs|ts)$/i.test(tokenAsset.name)) {
+            sourceKind = "tailwind";
+            result = pal.import(tailwindConfigToCss(raw), { format: "tailwind" });
+          } else {
+            sourceKind = kindOf(raw);
+            if (sourceKind === "flat") {
+              result = pal.import(readFlat(raw), { format: "css" });
+              adoptFlatRoles();
+            } else if (sourceKind === "json") {
+              const doc = JSON.parse(raw);
+              doc.roles = remapRoleSteps(doc.roles);
+              result = pal.import(JSON.stringify(doc), { format: "json" });
+            } else
+              result = pal.import(sourceKind === "w3c" ? hoistW3cRoles(raw) : raw, {
+                format: sourceKind,
+              });
+          }
+          ensureRoles();
+          adoptFileScale(raw, sourceKind);
+          if (result.warnings.length) flashText = result.warnings.join("; ");
+          return undefined;
+        }
+
+        // ---- Export: the tokens file, tokens.css and the contrast report ----
+        function outputKind() {
+          return OPTS.format === "auto" ? sourceKind : OPTS.format;
+        }
+        const FILE_FOR = {
+          w3c: ["tokens.json", "application/json"],
+          json: ["tokens.json", "application/json"],
+          flat: ["tokens.json", "application/json"],
+          css: ["tokens.css", "text/css"],
+          tailwind: ["theme.css", "text/css"],
+        };
+        function tokenJsonText(kind) {
+          const doc =
+            kind === "flat"
+              ? flatText()
+              : kind === "w3c"
+                ? restoreW3cLayout(JSON.parse(pal.export(kind)))
+                : JSON.parse(pal.export(kind));
+          const v = typeForm.get().values;
+          const w3c = kind === "w3c";
+          const tok = (value, type) => (w3c ? { $type: type, $value: value } : value);
+          doc.typography = {
+            ...(isPlain(doc.typography) ? doc.typography : {}),
+            base: tok(`${v.baseSize}px`, "dimension"),
+            ratio: tok(v.typeRatio, "number"),
+          };
+          doc.radius = {
+            ...(isPlain(doc.radius) ? doc.radius : {}),
+            md: tok(`${v.radius}px`, "dimension"),
+          };
+          doc.space = {
+            ...(isPlain(doc.space) ? doc.space : {}),
+            unit: tok(`${v.spacingUnit}px`, "dimension"),
+          };
+          return JSON.stringify(doc, null, 2) + "\n";
+        }
+        function cssText() {
+          const v = typeForm.get().values;
+          return `${pal.export("css")}\n:root {\n  ${cssName("type-base")}: ${v.baseSize}px;\n  ${cssName("type-ratio")}: ${v.typeRatio};\n  ${cssName("space-unit")}: ${v.spacingUnit}px;\n  ${cssName("radius-md")}: ${v.radius}px;\n}\n`;
+        }
+        function tailwindText() {
+          const v = typeForm.get().values;
+          return `${pal.export("tailwind")}\n@theme {\n  ${cssName("spacing")}: ${v.spacingUnit}px;\n  ${cssName("radius-md")}: ${v.radius}px;\n  ${cssName("text-base")}: ${v.baseSize}px;\n}\n`;
+        }
+        function primaryText(kind) {
+          if (kind === "css") return cssText();
+          if (kind === "tailwind") return tailwindText();
+          return tokenJsonText(kind);
+        }
+        // fixedTo: the fg role's token when it differs from the one the input file set (a Fix, or a role edit).
+        function changedFg(r) {
+          const now = pal.get().roles[r.theme]?.[r.fg];
+          const was = loadedRoles[r.theme]?.[r.fg];
+          return now && now !== was ? now : null;
+        }
+        function reportRows() {
+          return pal.report().map((r) => ({
+            fg: r.fg,
+            bg: r.bg,
+            theme: r.theme,
+            ratio: r.ratio,
+            apca: r.apca,
+            pass: r.pass,
+            ...(changedFg(r) ? { fixedTo: changedFg(r) } : {}),
+          }));
+        }
+        function buildFiles() {
+          const kind = outputKind();
+          const [name, type] = FILE_FOR[kind];
+          const files = [new File([primaryText(kind)], name, { type })];
+          if (kind !== "css") files.push(new File([cssText()], "tokens.css", { type: "text/css" }));
+          files.push(
+            new File([JSON.stringify(reportRows(), null, 2) + "\n"], "contrast-report.json", {
+              type: "application/json",
+            }),
+          );
+          return files;
+        }
+        async function runExport() {
+          if (busy) throw new Error("token-studio: an export is already running");
+          busy = true;
+          try {
+            const files = buildFiles();
+            for (const f of files) {
+              await ws.attach(f);
+              await ws.download(f, f.name);
+            }
+            flash(`Exported ${files.length} files.`);
+            return files;
+          } finally {
+            busy = false;
+          }
+        }
+        // The chat message that goes with Send: the palette's contrast state and the roles the user moved.
+        function paletteMessage(files) {
+          const v = pal.get();
+          const rows = reportRows();
+          const method = ui.method === "apca" ? "APCA" : "WCAG 2.x";
+          const lines = [
+            `Tokens: ${v.families.length} famil${v.families.length === 1 ? "y" : "ies"} (${v.families.map((f) => f.name).join(", ")}).`,
+          ];
+          const per = ["light", "dark"]
+            .map((theme) => {
+              const of = rows.filter((r) => r.theme === theme);
+              return of.length
+                ? `${of.filter((r) => r.pass).length} of ${of.length} in ${theme}`
+                : "";
+            })
+            .filter(Boolean);
+          if (per.length) lines.push(`Contrast ${ui.target} (${method}): ${per.join(", ")} pass.`);
+          const moved = rows.filter((r) => r.fixedTo);
+          if (moved.length) {
+            const shown = moved.slice(0, 4).map((r) => `${r.fg} (${r.theme}) to ${r.fixedTo}`);
+            lines.push(
+              `Moved ${moved.length} role${moved.length === 1 ? "" : "s"}: ${shown.join(", ")}${moved.length > 4 ? ", and more" : ""}.`,
+            );
+          }
+          lines.push(`Files: ${files.map((f) => f.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+        // Send to Agent: the summary and the token files as one chat message. Called straight from the click (T3 sends
+        // only during the user's gesture).
+        async function sendToAgent() {
+          if (busy) throw new Error("token-studio: an export is already running");
+          busy = true;
+          try {
+            const files = buildFiles();
+            await ws.send(paletteMessage(files), { files });
+            flash(`Sent the palette to the agent with ${files.length} files.`);
+            return files;
+          } finally {
+            busy = false;
+          }
+        }
+
+        // ---- Persistence (per-workspace state) ----
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => {
+            Promise.resolve(
+              ws.setState({
+                v: 1,
+                source: sourceName,
+                history: history.get(),
+                controls: rt.state(),
+              }),
+            ).catch(reportError);
+          }, 300);
+        }
+
+        // ---- Runtime (window.t3template) ----
+        const rt = t3kit.templateRuntime.create({
+          id: "token-studio",
+          pipeline: "data",
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "bolt";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            $(position === "top" ? "panels-top" : "panels-bottom").append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getValues(),
+          setValues: (partial, label) => applyPartial(partial, label),
+          addPreset: (name, values) => history.savePreset(name, mergeState(getState(), values)),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => runExport(),
+          reservedKeys: ["1", "2", "3", "l", "f", "mod+z", "mod+shift+z"],
+          onBoltOnChange() {
+            renderAll();
+            persist();
+          },
+        });
+
+        // ---- Boot ----
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          await loadInputs(ready.assets ?? []);
+          loadedRoles = clone(pal.get().roles);
+          history = t3kit.history.create($("history"), {
+            state: getState(),
+            label: "Start",
+            title: "History",
+            presetPlaceholder: "Name this palette",
+            limit: 200,
+          });
+          const restored =
+            isPlain(saved) && saved.v === 1 && saved.source === sourceName && isPlain(saved.history)
+              ? saved
+              : null;
+          if (restored) history.set(restored.history);
+          historyLink = rt.linkHistory(history, getState, applyState, {
+            sources: { "Palette Edit": pal, "Type Edit": typeForm },
+            idleMs: 300,
+          });
+          t3kit.links.curvesPalette(curves, pal);
+          rt.publish({
+            instances: { palette: pal, curves, colorwheels: wheel, propsform: typeForm, history },
+            saved: restored ? restored.controls : undefined,
+          });
+          pal.on("change", () => syncAll());
+          pal.on("select", () => syncAll());
+          pal.on("report", () => renderAll());
+          wheel.on("change", ({ global }) => {
+            const fam = selectedFamily();
+            if (fam) pal.editFamily(fam.id, { hue: global.h, chroma: global.s * MAX_CHROMA });
+          });
+          typeForm.on("change", () => renderAll());
+          history.on("change", () => {
+            persist();
+            rt.emitChange();
+            renderAll();
+          });
+          wire();
+          booted = true;
+          if (!pal.selected().familyId && pal.get().families.length > 0)
+            pal.select(pal.get().families[0].id);
+          syncAll();
+          persist();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        function wire() {
+          $("title").textContent = OPTS.title;
+          document.title = OPTS.title;
+          $("method").addEventListener(
+            "change",
+            guard(() => setUi({ method: $("method").value })),
+          );
+          $("target").addEventListener(
+            "change",
+            guard(() => setUi({ target: $("target").value })),
+          );
+          for (const b of document.querySelectorAll("[data-theme-set]")) {
+            b.addEventListener(
+              "click",
+              guard(() => setUi({ theme: b.dataset.themeSet })),
+            );
+          }
+          for (const b of document.querySelectorAll("[data-view-btn]")) {
+            b.addEventListener(
+              "click",
+              guard(() => setUi({ view: b.dataset.viewBtn })),
+            );
+          }
+          $("fix-all").addEventListener(
+            "click",
+            guard(() => fixAll()),
+          );
+          $("send").addEventListener("click", () => sendToAgent().catch(reportError));
+          $("export").addEventListener("click", () => runExport().catch(reportError));
+          $("add-form").addEventListener("submit", guard(addColor));
+          $("sample").addEventListener("click", () => sampleImage().catch(reportError));
+          $("samples").addEventListener(
+            "click",
+            guard((e) => {
+              const b = e.target.closest("[data-sample]");
+              if (b) addSample(b.dataset.sample);
+            }),
+          );
+          $("harmonize").addEventListener("click", guard(harmonize));
+          $("families").addEventListener(
+            "click",
+            guard((e) => {
+              const lock = e.target.closest("[data-lock]");
+              if (lock) return toggleLock(lock.dataset.lock);
+              const pick = e.target.closest("[data-fam]");
+              if (pick) pal.select(pick.dataset.fam);
+              return undefined;
+            }),
+          );
+          $("roles").addEventListener(
+            "change",
+            guard((e) => {
+              const sel = e.target.closest("[data-role]");
+              if (!sel) return;
+              const role = sel.dataset.role;
+              const v = pal.get();
+              const roles = { light: { ...v.roles.light }, dark: { ...v.roles.dark } };
+              roles[ui.theme][role] = sel.value;
+              pal.set({ families: v.families, roles, pairs: v.pairs, unknown: v.unknown });
+              commitNow(`Role ${role} to ${sel.value}`);
+              syncAll();
+            }),
+          );
+          $("pairs").addEventListener(
+            "click",
+            guard((e) => {
+              const fix = e.target.closest("[data-fix]");
+              if (fix) return fixPair(Number(fix.dataset.fix));
+              const pick = e.target.closest("[data-pair]");
+              if (pick) {
+                ui.pair = Number(pick.dataset.pair);
+                pairPicked = true;
+                renderAll();
+              }
+              return undefined;
+            }),
+          );
+          document.addEventListener(
+            "keydown",
+            guard((e) => {
+              if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target))
+                return;
+              if (VIEW_KEYS[e.key]) return setUi({ view: VIEW_KEYS[e.key] });
+              if (e.shiftKey) return undefined;
+              const key = e.key.toLowerCase();
+              if (key === "l") {
+                // The palette uses L to lock a step while its ramp canvas has focus.
+                if (e.target instanceof Element && e.target.closest("#palette")) return undefined;
+                return setUi({ theme: ui.theme === "light" ? "dark" : "light" });
+              }
+              if (key === "f") return fixPair(ui.pair);
+              return undefined;
+            }),
+          );
+        }
+
+        boot().catch(reportError);
+      })();
+    </script>
+  </body>
+</html>
