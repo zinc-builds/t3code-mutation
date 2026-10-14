@@ -45,7 +45,8 @@ A template is a complete, pro-grade workspace (photo develop, video edit…) com
   - report errors with `rt.reportError(err)` (console.error plus the shared dismissible banner);
   - run `options.customScript` last, once the media is loaded and the first preview rendered, with `rt.runCustomScript(code, options)`. Pass `options.controls` through: it seeds control values.
 - `template.json` carries a `boltOn` section: `summary`, `api` (one line per call, with this template's values shape, buffer sizes and where panels land), `reservedShortcuts` and one runnable `example` customScript. Agents read only this, so keep it exact and test the example. Options include `customScript` and `controls`.
-- Export: an Export action that uses the primitive's full-res export, then `t3.workspace.attach(file)` (send to chat) and `t3.workspace.download(file, name)`.
+- Export: an Export action that uses the primitive's full-res export, then `t3.workspace.attach(file)` (stages it in the composer) and `t3.workspace.download(file, name)`.
+- Send means send: a button labelled Send calls `t3.workspace.send(text, { files })` straight from the user's click or key press, with a short generated message that sums up what the user decided plus the files. A button that only stages files with `attach` is labelled Attach (or Attach to Chat). Decision and review templates Send; media exports may Attach, where the user usually adds their own words.
 - Mark the composer slot with `data-t3-composer` (bottom of the right inspector, ≥320px wide).
 - Theme vars only, dense pro layout, keyboard shortcuts, no idle animation loops. It must look and feel like a shipping pro app.
 

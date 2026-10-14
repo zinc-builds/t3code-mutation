@@ -553,8 +553,14 @@
         <button type="button" class="btn" id="export" data-needs-component>
           Export <kbd>E</kbd>
         </button>
-        <button type="button" class="btn btn-primary" id="send" data-needs-component>
-          Send to Chat
+        <button
+          type="button"
+          class="btn btn-primary"
+          id="send"
+          data-needs-component
+          title="Send these props to the agent: a short summary with props.json, the usage snippet and matrix.png"
+        >
+          Send to Agent
         </button>
       </header>
 
@@ -1308,7 +1314,37 @@
           }
         }
         const exportAll = () => runOnce((file) => ws.download(file, file.name));
-        const sendAll = () => runOnce((file) => ws.attach(file));
+        // The chat message that goes with Send: the props the user settled on, in a few lines.
+        function propsMessage(active, files) {
+          const where = [
+            active.state !== "default" ? `${active.state} state` : "",
+            `${active.width}px wide`,
+          ].filter(Boolean);
+          const lines = [
+            `Props for ${component.name}: ${summaryOf(active.props)} (${where.join(", ")}).`,
+          ];
+          if (pins.length) {
+            const shown = pins.slice(0, 3).map((p) => summaryOf(p.props));
+            lines.push(
+              `${pins.length} pinned variant${pins.length === 1 ? "" : "s"}: ${shown.join("; ")}${pins.length > 3 ? "; and more" : ""}.`,
+            );
+          }
+          lines.push(`Files: ${files.map((f) => f.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+        // Send to Agent: posts the summary with the files. Starts from the user's click (T3 sends only during the
+        // user's gesture), so it builds the files and sends at once.
+        async function sendAll() {
+          if (busy) throw new Error(`${TEMPLATE}: an export or send is already running`);
+          busy = true;
+          try {
+            const files = await buildFiles();
+            await ws.send(propsMessage(activeCell(), files), { files });
+            return files;
+          } finally {
+            busy = false;
+          }
+        }
 
         // ---- Edits, history and state --------------------------------------------------
         function applySnapshot(s) {

@@ -1,7 +1,7 @@
 {
   "id": "data-explore",
   "title": "Data Explore",
-  "summary": "Keyboard-first explorer for a CSV or JSON dataset: a dense datagrid with per-column filters, two linked charts (each draws the grid's filtered rows; brush a range or a category and the grid and the other chart narrow to it), column stats, a Group By table that filters on click, undo history with presets, and a command palette (Cmd+K). Exports the filtered CSV and one PNG per chart. Pick it for any tabular data question: explore, slice, count, compare.",
+  "summary": "Keyboard-first explorer for a CSV or JSON dataset: a dense datagrid with per-column filters, two linked charts (each draws the grid's filtered rows; brush a range or a category and the grid and the other chart narrow to it), column stats, a Group By table that filters on click, undo history with presets, and a command palette (Cmd+K). Send to Agent (S) posts the user's findings (rows kept, filters, brushes, sort, Group By) as a short message with findings.json, the filtered CSV and the chart PNGs; Export attaches and downloads the CSV and PNGs. Pick it for any tabular data question: explore, slice, count, compare.",
   "kit": ["datagrid", "chart", "history", "links", "template-runtime"],
   "chrome": false,
   "options": {
@@ -132,13 +132,14 @@
       "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. User edits run every hook and re-render; onChange runs on user edits only, not on load. Every control edit is one undo step.",
       "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes; the same title returns the same panel). 'top' = after Active Filters and Column Stats, before Group By (first in view on load); 'bottom' = after History.",
       "addToolbarButton(label, onClick(t3template), { shortcut?: 'shift+m' (any key not in reservedShortcuts), title? }) -> button (also listed in the command palette, Cmd+K).   refresh() re-renders the readouts, chips, stats and Group By table after silent grid or chart changes.",
-      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: the filtered CSV (visible columns, filtered rows) and one PNG per chart, sent to t3.workspace.attach and downloaded. The same as the Export button; it throws on failure.",
+      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: the filtered CSV (visible columns, filtered rows) and one PNG per chart, sent to t3.workspace.attach and downloaded. The same as the Export button; it throws on failure. Send to Agent (S) is not part of export(): during the user's click or key press it posts a short summary with findings.json { dataset, rows, total, filters, sort, brushes, selected, charts, groupBy? { by, value, agg, groups, top } } and the same files.",
       "getValues() -> { filters: { column: text }, sort: { id, dir } | null, charts: [{ type, x, y, series, aggregate }], pivot: { by, value, agg }, controls }.   setValues({ filters?, sort?, charts?, pivot? }, label?) -> Promise<values>: strict, so unknown keys and unknown columns throw. filters replaces the whole object; sort replaces; charts[i] merges into chart i (changing its x clears that chart's brush); pivot merges. One undo step.",
       "addPreset(name, { filters?, sort?, charts?, pivot? }) / applyPreset(name): a preset is a full view, as setValues takes it. Presets and history steps also hold column order and brushes.   on('change', cb(values)) -> off.",
       "instances: { grid (t3kit.datagrid; grid.get().filters is the live filter object, grid.view() the filtered source row indices, grid.match(filters) the rows any filter object keeps), charts (t3kit.chart instances, index 0 = first chart; a getter, so it follows dataset switches), history (t3kit.history) }."
     ],
     "reservedShortcuts": [
       "e",
+      "s",
       "x",
       "t",
       "i",

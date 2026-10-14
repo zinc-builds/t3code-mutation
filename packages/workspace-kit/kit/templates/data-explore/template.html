@@ -539,6 +539,14 @@
           Clear <kbd>X</kbd>
         </button>
         <button class="btn" id="open-cmd" type="button">Commands <kbd id="mod-key">K</kbd></button>
+        <button
+          class="btn"
+          id="send"
+          type="button"
+          title="Send these findings to the agent: a short summary with findings.json, the filtered CSV and the chart PNGs (S)"
+        >
+          Send to Agent <kbd>S</kbd>
+        </button>
         <button class="btn btn-primary" id="export" type="button">Export <kbd>E</kbd></button>
       </header>
       <div class="work" id="work">
@@ -602,6 +610,7 @@
       <footer class="status" id="status" role="status">
         <span id="status-main"></span>
         <span class="hints">
+          <span><kbd>S</kbd> send</span>
           <span><kbd>E</kbd> export</span>
           <span><kbd>X</kbd> clear</span>
           <span><kbd>T</kbd> type</span>
@@ -1479,29 +1488,116 @@
           }
           return `${lines.join("\n")}\n`;
         }
+        // The filtered CSV and one PNG per chart (what Export delivers).
+        async function viewFiles() {
+          const files = [
+            new File([csvText()], `${current.stem}-filtered.csv`, { type: "text/csv" }),
+          ];
+          for (const card of charts) {
+            const blob = await card.inst.exportBlob({ type: "image/png", scale: 2 });
+            files.push(
+              new File(
+                [blob],
+                `${safeName(current.stem)}-${safeName(card.spec.x)}-chart-${card.index + 1}.png`,
+                { type: "image/png" },
+              ),
+            );
+          }
+          return files;
+        }
         async function exportAll() {
           if (!current)
             throw new Error("data-explore: no dataset is open, so there is nothing to export");
           if (exporting) throw new Error("data-explore: an export is already running");
           exporting = true;
           try {
-            const files = [
-              new File([csvText()], `${current.stem}-filtered.csv`, { type: "text/csv" }),
-            ];
-            for (const card of charts) {
-              const blob = await card.inst.exportBlob({ type: "image/png", scale: 2 });
-              files.push(
-                new File(
-                  [blob],
-                  `${safeName(current.stem)}-${safeName(card.spec.x)}-chart-${card.index + 1}.png`,
-                  { type: "image/png" },
-                ),
-              );
-            }
+            const files = await viewFiles();
             for (const f of files) {
               await ws.attach(f);
               await ws.download(f, f.name);
             }
+            return files;
+          } finally {
+            exporting = false;
+          }
+        }
+        // What the user narrowed the data to: rows, filters, brushes, selection, sort and the Group By table.
+        function findingsOf() {
+          const st = grid.stats();
+          const g = grid.get();
+          const out = {
+            dataset: current.name,
+            rows: st.rows,
+            total: st.total,
+            filters: { ...g.filters },
+            sort: g.sort ? { id: g.sort.id, dir: g.sort.dir } : null,
+            brushes: charts
+              .filter((c) => c.brush)
+              .map((c) => ({
+                chart: c.index + 1,
+                column: c.brush.column,
+                mode: c.brush.mode,
+                ...(c.brush.mode === "filter"
+                  ? { text: c.brush.text }
+                  : { values: c.brush.values }),
+                count: c.brush.count,
+              })),
+            selected: grid.selection().length,
+            charts: charts.map((c) => ({ ...c.spec })),
+          };
+          if (pivot.by) {
+            const rows = pivotRows();
+            out.groupBy = {
+              by: pivot.by,
+              value: pivot.value || null,
+              agg: pivot.value ? pivot.agg : "count",
+              groups: rows.length,
+              top: rows.slice(0, 20).map((r) => ({ key: r.key, rows: r.n, value: r.value })),
+            };
+          }
+          return out;
+        }
+        // The chat message that goes with Send, in a few lines.
+        function findingsMessage(f, files) {
+          const filters = Object.entries(f.filters).map(([col, text]) => `${col} ${text}`);
+          const lines = [
+            `Data findings on ${f.dataset}: ${f.rows.toLocaleString()} of ${f.total.toLocaleString()} rows` +
+              (filters.length ? ` match ${filters.join(", ")}.` : " (no filter)."),
+          ];
+          if (f.selected) lines.push(`${f.selected.toLocaleString()} rows selected.`);
+          if (f.sort) lines.push(`Sorted by ${f.sort.id} ${f.sort.dir}.`);
+          if (f.groupBy && f.groupBy.top.length) {
+            const by = f.groupBy;
+            const head = by.value ? `${by.agg} ${by.value}` : "rows";
+            const top = by.top
+              .slice(0, 3)
+              .map(
+                (r) =>
+                  `${r.key || "(empty)"} ${r.value === null ? "-" : round(r.value).toLocaleString()}`,
+              );
+            lines.push(
+              `Grouped by ${by.by} (${head}): ${top.join(", ")}${by.groups > 3 ? `, ${by.groups - 3} more` : ""}.`,
+            );
+          }
+          lines.push(`Files: ${files.map((x) => x.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+        // Send (S): the summary with findings.json and the view's files, as one chat message. Called straight from the
+        // click or key press: T3 sends only during the user's gesture.
+        async function sendFindings() {
+          if (!current)
+            throw new Error("data-explore: no dataset is open, so there is nothing to send");
+          if (exporting) throw new Error("data-explore: an export is already running");
+          exporting = true;
+          try {
+            const f = findingsOf();
+            const files = [
+              new File([JSON.stringify(f, null, 2) + "\n"], "findings.json", {
+                type: "application/json",
+              }),
+              ...(await viewFiles()),
+            ];
+            await ws.send(findingsMessage(f, files), { files });
             return files;
           } finally {
             exporting = false;
@@ -1519,6 +1615,11 @@
               label: "Export CSV and Chart PNGs",
               hint: "E",
               run: () => exportAll().catch(showError),
+            },
+            {
+              label: "Send Findings to Agent",
+              hint: "S",
+              run: () => sendFindings().catch(showError),
             },
             { label: "Clear All Filters, Brushes and Selection", hint: "X", run: clearAll },
             { label: "Undo", hint: `${MOD}Z`, run: () => history.undo() },
@@ -1630,6 +1731,7 @@
         }
         const KEYS = {
           e: () => exportAll().catch(showError),
+          s: () => sendFindings().catch(showError),
           x: clearAll,
           t: () => cycleType(charts[0]),
           i: toggleInspector,
@@ -1666,6 +1768,7 @@
         $("open-cmd").addEventListener("click", openPalette);
         $("clear").addEventListener("click", clearAll);
         $("export").addEventListener("click", () => exportAll().catch(showError));
+        $("send").addEventListener("click", () => sendFindings().catch(showError));
 
         // ---- Dataset ----------------------------------------------------------------
         function fillSelects(cols) {
@@ -1766,6 +1869,7 @@
           export: () => exportAll(),
           reservedKeys: [
             "e",
+            "s",
             "x",
             "t",
             "i",

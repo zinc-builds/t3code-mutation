@@ -1,7 +1,7 @@
 {
   "id": "merge-resolve",
   "title": "Three-Way Merge Resolver",
-  "summary": "Resolves rebase and merge conflicts for agent workflows (parallel worktrees, where T3 has no conflict UI). Attach conflicted text files (diff3 or merge markers, detected by content) or three assets named *.base, *.ours and *.theirs. Ours, base and theirs sit in aligned columns per conflict with auto-merged code dimmed; the editable result follows each choice (ours, theirs, both either order, base, or edit by hand) and every choice is undoable. Send attaches each resolved file and resolution.json (choice, line range and note per conflict; unresolved counts open conflicts and marker lines left in the result). Pick it whenever a merge or rebase leaves markers.",
+  "summary": "Resolves rebase and merge conflicts for agent workflows (parallel worktrees, where T3 has no conflict UI). Attach conflicted text files (diff3 or merge markers, detected by content) or three assets named *.base, *.ours and *.theirs. Ours, base and theirs sit in aligned columns per conflict with auto-merged code dimmed; the editable result follows each choice (ours, theirs, both either order, base, or edit by hand) and every choice is undoable. Pass your own pick per conflict as suggestions: they show as Suggested (not applied) with your note, and the user accepts one (A), all (Shift+A) or picks something else. Send to Agent (Cmd+Enter) posts a short summary of the user's resolution with each resolved file and resolution.json (choice, line range, note and fromSuggestion per conflict; unresolved counts open conflicts and marker lines left in the result). Pick it whenever a merge or rebase leaves markers.",
   "kit": ["textdiff", "history", "links", "template-runtime"],
   "chrome": false,
   "options": {
@@ -37,6 +37,11 @@
       "default": null,
       "description": "Name of the attached file to open first (for three assets, the name without .base, .ours or .theirs). null opens the first file."
     },
+    "suggestions": {
+      "type": "object",
+      "default": {},
+      "description": "Your suggested pick per conflict, for the user to check: { fileName: [{ conflict: 1-based index in that file, choice: 'ours'|'theirs'|'both'|'both-theirs' (or 'theirs-first')|'base'|'edited', text?: the merged lines (edited only), note: why }] }. Shown as Suggested, never applied until the user accepts (A, Shift+A for all) or overrides it; the note shows in the inspector and resolution.json records fromSuggestion per conflict. Use this, not a customScript."
+    },
     "customScript": {
       "type": "string",
       "default": "",
@@ -59,6 +64,31 @@
       "defaultChoice": "ours"
     },
     {
+      "title": "Agent Suggestions",
+      "file": "conflict-parser.txt",
+      "suggestions": {
+        "conflict-parser.txt": [
+          {
+            "conflict": 1,
+            "choice": "edited",
+            "text": "// Look ahead one token without consuming it.\nexport function peek(src: string, pos: number): Token {\n  return nextToken(src, skipSpace(src, pos));\n}\n\nexport function nextToken(src: string, pos: number): Token {\n",
+            "note": "Keep our rename to nextToken and add their peek(), calling nextToken."
+          },
+          {
+            "conflict": 2,
+            "choice": "theirs",
+            "note": "Their check also stops on an empty source."
+          },
+          {
+            "conflict": 3,
+            "choice": "edited",
+            "text": "    fail(src, index, \"nextToken: input ended before a token was read\");\n",
+            "note": "Their clearer message, under our function name."
+          }
+        ]
+      }
+    },
+    {
       "title": "Two Pane Wrapped",
       "layout": "2-pane",
       "wrap": true,
@@ -66,13 +96,13 @@
     }
   ],
   "boltOn": {
-    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the files have loaded and the merge view exists. Read the state with t3template.getValues(): { file, files: [{ name, unresolved, conflicts: ['c1', ...] }], decisions, controls }. Change it with setValues (strict, one undo step per call). Conflicts are addressed by id (c1 = first conflict, in file order; a1.. are auto-merged regions, which take only 'edited'). Errors log '[t3template] customScript error: ...' and show in a dismissible banner. This is a data template: addImageStage, addShaderStage, EDL hooks and addAudioFilter throw; bolt on through controls, panels, toolbar buttons and presets.",
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the files have loaded and the merge view exists. Read the state with t3template.getValues(): { file, files: [{ name, unresolved, conflicts: ['c1', ...] }], decisions, suggestions, controls }. To pre-fill your own picks for the user to check, pass options.suggestions instead of a customScript. Change it with setValues (strict, one undo step per call). Conflicts are addressed by id (c1 = first conflict, in file order; a1.. are auto-merged regions, which take only 'edited'). Errors log '[t3template] customScript error: ...' and show in a dismissible banner. This is a data template: addImageStage, addShaderStage, EDL hooks and addAudioFilter throw; bolt on through controls, panels, toolbar buttons and presets.",
     "api": [
       "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. No panel = 'Extras'. User edits run every hook; onChange runs on user edits only. Every control edit is one undo step.",
       "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element. 'top' = before History (below the Conflict and Conflicts panels); 'bottom' = after History, above the composer slot.",
       "addToolbarButton(label, onClick(t3template), { shortcut?: 'shift+o' (any key not in reservedShortcuts), title? }) -> button (also in the command bar of T3's toolbar).   refresh() re-renders the readouts after state a hook changes without setValues.",
-      "export() -> Promise<{ files: [{ name, type, size }] }>: downloads each resolved file under its original name plus resolution.json. Send (to the chat) attaches the same files; export does not.",
-      "getValues() -> { file, files: [{ name, unresolved, conflicts: ['c1', ...] }], decisions: { [fileName]: { [chunkId]: { choice?, text?, note? } } }, controls }. unresolved = open conflicts plus marker lines left in the result.",
+      "export() -> Promise<{ files: [{ name, type, size }] }>: downloads each resolved file under its original name plus resolution.json { summary: { conflicts, resolved, unresolved, suggested, fromSuggestion, overridden }, files: [{ name, unresolved, conflicts: [{ id, lines, choice, fromSuggestion, suggested?: { choice, text?, note }, note? }] }] }. Send to Agent posts the same files with a short summary message during the user's click or key press; export does not send.",
+      "getValues() -> { file, files: [{ name, unresolved, conflicts: ['c1', ...] }], decisions: { [fileName]: { [chunkId]: { choice?, text?, note? } } }, suggestions: { [fileName]: { [chunkId]: { choice, text?, note } } } (read-only, from options.suggestions), controls }. unresolved = open conflicts plus marker lines left in the result. Accepting a suggestion is an ordinary decision: setValues({ decisions }) with its choice (and text) does the same.",
       "setValues({ file?, decisions? }, label?) -> Promise<values>: decisions merge per file per chunk; { choice: null } reopens a conflict; { choice: 'edited', text } replaces the chunk text; { note } saves a note; a key not in the list throws; files is read-only. One undo step named label. file switches the open file.",
       "addPreset(name, { decisions }) / applyPreset(name): a preset is a full set of decisions (a resolution strategy you can reuse across files). Undo, redo and history jumps restore the decisions and the bolt-on controls.   on('change', cb(values)) -> off.",
       "instances: { textdiff (t3kit.textdiff merge view: get().chunks, focus(id); change decisions through setValues so history and the result stay in sync), history (t3kit.history) }."
@@ -85,8 +115,10 @@
       "3",
       "4",
       "e",
+      "a",
       "shift+3",
       "shift+e",
+      "shift+a",
       "mod+enter",
       "mod+z",
       "mod+shift+z"

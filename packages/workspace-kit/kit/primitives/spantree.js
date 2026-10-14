@@ -23,9 +23,11 @@
  *   line is 1-based (cpuprofile, speedscope); samples = self samples (sampled profiles only).
  * collapsed(id?) -> Brendan Gregg collapsed stacks, weight = self time in whole microseconds
  * traces() -> [{traceId, start, dur, spans, error}] · exportPng({scale=2}) -> Promise<Blob>
+ * contentHeight() -> px the current view needs to show every row unzoomed (ruler included), for sizing the host.
  * on(event, cb) -> unsubscribe · destroy()
  * Events: 'change' get() on user zoom/pan, view, metric, colour, search · 'select' selection() ·
- *   'zoom' {id, from, to}. Ids in merged views are name paths, so selection differs per view kind.
+ *   'zoom' {id, from, to} · 'content' contentHeight() when it changes (view, range, trace, load, width).
+ *   Ids in merged views are name paths, so selection differs per view kind.
  * Keys (canvas focused): arrows parent/child/sibling (visual direction), Enter zoom, Backspace/Esc
  *   zoom out, / search, f fit, v cycle views. Mouse: click select, dblclick zoom, drag pan,
  *   wheel scroll rows, Ctrl/Cmd/Shift+wheel zoom time at pointer. Error spans get a red edge.
@@ -813,6 +815,8 @@
     let deltaByName = null;
     const listeners = new Map();
     const observers = [];
+    let content = 0; // contentHeight() as of the last layout
+    let mergedDepth = { tree: null, w: 0, minPx: 0, rows: 0 }; // unzoomed merged rows, cached per tree and width
 
     const isTime = () => st.view === "waterfall" || st.view === "flamechart";
     const keyKind = (v) =>
@@ -935,6 +939,49 @@
           for (const n of curTree.nodes.values()) if (n.name.toLowerCase().includes(q)) matches++;
       }
       if (q) for (const it of items) it.match = it.name.toLowerCase().includes(q);
+      const next = measureContent();
+      if (next !== content) {
+        content = next;
+        emit("content", content);
+      }
+    }
+
+    // Rows of the merged tree with nothing zoomed, culled like layoutMerged at the current width.
+    function mergedRows(tree) {
+      const c = mergedDepth;
+      if (c.tree === tree && c.w === cssW && c.minPx === st.minPx) return c.rows;
+      let total = 0;
+      for (const k of tree.roots) total += tree.nodes.get(k).total;
+      let rows = 0;
+      if (total > 0) {
+        const scale = cssW / total;
+        const stack = tree.roots.map((k) => [k, 0]);
+        while (stack.length) {
+          const [k, d] = stack.pop();
+          const n = tree.nodes.get(k);
+          if (n.total * scale < st.minPx) continue;
+          if (d + 1 > rows) rows = d + 1;
+          for (const ck of n.kids) stack.push([ck, d + 1]);
+        }
+      }
+      mergedDepth = { tree, w: cssW, minPx: st.minPx, rows };
+      return rows;
+    }
+
+    // Height every row of the current view needs, zoom aside (a zoom never resizes the host).
+    function measureContent() {
+      const f = filtered();
+      if (!f) return 0;
+      if (isTime()) {
+        const { rows, depth } = f.struct;
+        return RULER + (st.view === "waterfall" ? rows.length : depth) * st.rowHeight;
+      }
+      return mergedRows(curTree) * st.rowHeight;
+    }
+
+    function contentHeight() {
+      if (layoutDirty && cssW > 0) layout();
+      return content;
     }
 
     function colorFor(it, th) {
@@ -1749,7 +1796,7 @@
     }
 
     function on(event, cb) {
-      if (!["change", "select", "zoom"].includes(event))
+      if (!["change", "select", "zoom", "content"].includes(event))
         throw new Error(`spantree: unknown event ${event}`);
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event).add(cb);
@@ -1780,6 +1827,7 @@
       zoomTo,
       locate,
       density,
+      contentHeight,
       on,
       destroy,
     };
