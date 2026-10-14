@@ -1,7 +1,7 @@
 {
   "id": "component-playground",
   "title": "Component Props Playground",
-  "summary": "Design-side companion to design-review: the user sets exact prop values on one component instead of describing changes. Input: a JS asset that sets window.t3component = { name, props, css?, mount(el, props) -> { update, destroy }, usage?(props) } (bundle React or Vue plus an adapter to an IIFE with esbuild first); optional CSS, font and image assets; an image named ref-*, reference.*, overlay.* or mock.* becomes the onion skin. Props form generated from the schema (changed dots, per-field reset, arrow keys step numbers); Single cell with width presets, canvas/card/checker backgrounds and forced states; Matrix of two prop axes plus an optional state axis, a Pin on every cell; Compare two pins side by side; usage snippet; measure readouts; history. Send attaches props.json, usage.jsx or usage.html and matrix.png to the chat; Export downloads them.",
+  "summary": "Design-side companion to design-review: the user sets exact prop values on one component instead of describing changes. Input: a JS asset that sets window.t3component = { name, props, css?, mount(el, props) -> { update, destroy }, usage?(props) } (bundle React or Vue plus an adapter to an IIFE with esbuild first); optional CSS, font and image assets; an image named ref-*, reference.*, overlay.* or mock.* becomes the onion skin. Props form generated from the schema (changed dots, per-field reset, arrow keys step numbers); Single cell with width presets, canvas/card/checker backgrounds and forced states; Matrix of two prop axes plus an optional state axis, a Pin on every cell; Compare two pins side by side; usage snippet; measure readouts; history. Send to Agent posts the props the user settled on: a short summary message with props.json, usage.jsx or usage.html and matrix.png; Export downloads them.",
   "kit": ["stage", "propsform", "history", "links", "template-runtime"],
   "chrome": false,
   "verifyAssets": "button.component.js",
@@ -47,7 +47,7 @@
       "type": "string",
       "enum": ["jsx", "html"],
       "default": "jsx",
-      "description": "Usage snippet format; Send and Export attach usage.jsx or usage.html to match."
+      "description": "Usage snippet format; Send and Export include usage.jsx or usage.html to match."
     },
     "mode": {
       "type": "string",
@@ -110,7 +110,7 @@
       "getValues() -> { props, width, state, controls }.   setValues({ props?, width?, state? }, label?) -> values: strict (an unknown prop name, width or state throws); one undo step.",
       "instances: { propsform (t3kit.propsform: get, set, reset, validate), stage (t3kit.stage: get, set, setCells, measure, usage, exportPng), history (t3kit.history), pins: { list(), add({ label?, props?, state?, width? }) -> pin, remove(id) } }. propsform and stage set() are silent: call t3template.refresh() after them.",
       "refresh() re-renders the stage and saves the state after silent changes to instances.*.",
-      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: props.json ({ component, props, state, width, pinned: [{ props, state, width }] } for the selected cell), usage.jsx or usage.html, and matrix.png (every cell in the current view) when stage.exportPng succeeds, else a visible note says why it was skipped. Downloads them, same as the Export button (Send to Chat attaches the same files); it throws on failure."
+      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: props.json ({ component, props, state, width, pinned: [{ props, state, width }] } for the selected cell), usage.jsx or usage.html, and matrix.png (every cell in the current view) when stage.exportPng succeeds, else a visible note says why it was skipped. Downloads them, same as the Export button (Send to Agent posts the same files with a summary message); it throws on failure."
     ],
     "reservedShortcuts": [
       "m",

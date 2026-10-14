@@ -618,7 +618,14 @@
         </button>
         <div class="grow"></div>
         <div id="extra-tools" class="tools"></div>
-        <button type="button" class="btn" id="send">Send to Chat</button>
+        <button
+          type="button"
+          class="btn"
+          id="send"
+          title="Send the palette to the agent: a short summary with the token files and contrast-report.json"
+        >
+          Send to Agent
+        </button>
         <button type="button" class="btn primary" id="export">Export</button>
       </header>
 
@@ -1636,18 +1643,57 @@
           );
           return files;
         }
-        async function runExport(download) {
+        async function runExport() {
           if (busy) throw new Error("token-studio: an export is already running");
           busy = true;
           try {
             const files = buildFiles();
             for (const f of files) {
               await ws.attach(f);
-              if (download) await ws.download(f, f.name);
+              await ws.download(f, f.name);
             }
-            flash(
-              download ? `Exported ${files.length} files.` : `Sent ${files.length} files to chat.`,
+            flash(`Exported ${files.length} files.`);
+            return files;
+          } finally {
+            busy = false;
+          }
+        }
+        // The chat message that goes with Send: the palette's contrast state and the roles the user moved.
+        function paletteMessage(files) {
+          const v = pal.get();
+          const rows = reportRows();
+          const method = ui.method === "apca" ? "APCA" : "WCAG 2.x";
+          const lines = [
+            `Tokens: ${v.families.length} famil${v.families.length === 1 ? "y" : "ies"} (${v.families.map((f) => f.name).join(", ")}).`,
+          ];
+          const per = ["light", "dark"]
+            .map((theme) => {
+              const of = rows.filter((r) => r.theme === theme);
+              return of.length
+                ? `${of.filter((r) => r.pass).length} of ${of.length} in ${theme}`
+                : "";
+            })
+            .filter(Boolean);
+          if (per.length) lines.push(`Contrast ${ui.target} (${method}): ${per.join(", ")} pass.`);
+          const moved = rows.filter((r) => r.fixedTo);
+          if (moved.length) {
+            const shown = moved.slice(0, 4).map((r) => `${r.fg} (${r.theme}) to ${r.fixedTo}`);
+            lines.push(
+              `Moved ${moved.length} role${moved.length === 1 ? "" : "s"}: ${shown.join(", ")}${moved.length > 4 ? ", and more" : ""}.`,
             );
+          }
+          lines.push(`Files: ${files.map((f) => f.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+        // Send to Agent: the summary and the token files as one chat message. Called straight from the click (T3 sends
+        // only during the user's gesture).
+        async function sendToAgent() {
+          if (busy) throw new Error("token-studio: an export is already running");
+          busy = true;
+          try {
+            const files = buildFiles();
+            await ws.send(paletteMessage(files), { files });
+            flash(`Sent the palette to the agent with ${files.length} files.`);
             return files;
           } finally {
             busy = false;
@@ -1692,7 +1738,7 @@
           setValues: (partial, label) => applyPartial(partial, label),
           addPreset: (name, values) => history.savePreset(name, mergeState(getState(), values)),
           applyPreset: (name) => history.applyPreset(name),
-          export: () => runExport(true),
+          export: () => runExport(),
           reservedKeys: ["1", "2", "3", "l", "f", "mod+z", "mod+shift+z"],
           onBoltOnChange() {
             renderAll();
@@ -1776,8 +1822,8 @@
             "click",
             guard(() => fixPair(undefined)),
           );
-          $("send").addEventListener("click", () => runExport(false).catch(reportError));
-          $("export").addEventListener("click", () => runExport(true).catch(reportError));
+          $("send").addEventListener("click", () => sendToAgent().catch(reportError));
+          $("export").addEventListener("click", () => runExport().catch(reportError));
           $("add-form").addEventListener("submit", guard(addColor));
           $("sample").addEventListener("click", () => sampleImage().catch(reportError));
           $("samples").addEventListener(

@@ -682,7 +682,7 @@
           class="btn btn-primary"
           id="send"
           type="button"
-          title="Attach the resolved files and resolution.json to the chat (Cmd+Enter)"
+          title="Send the resolution to the agent: a short summary with the resolved files and resolution.json (Cmd+Enter)"
         >
           <span id="send-label">Send to Agent</span> <kbd>⌘↵</kbd>
         </button>
@@ -1696,7 +1696,47 @@
           }
         }
 
-        // Send attaches the same files to the chat. With unresolved changes it asks once more (click twice).
+        // The chat message that goes with Send: what the user decided, per file, in a few lines.
+        function resolutionMessage(out) {
+          const sum = summaryOf();
+          const perFile = files.map((f) => {
+            const c = compose(f);
+            const done = c.conflictTotal - c.open;
+            return `${f.name} ${done}/${c.conflictTotal}${c.unresolved ? ` (${c.unresolved} unresolved)` : ""}`;
+          });
+          const lines = [
+            sum.unresolved
+              ? `Merge partly resolved, ${sum.unresolved} unresolved: ${perFile.join(", ")}.`
+              : `Merge resolved: ${perFile.join(", ")}.`,
+          ];
+          if (sum.suggested) {
+            const changed = [];
+            for (const f of files)
+              for (const [id, sg] of f.suggest) {
+                const d = f.decisions[id];
+                if (d && d.choice && !tookSuggestion(f, id))
+                  changed.push(
+                    `${f.name} ${id} ${CHOICE_LABEL[d.choice].toLowerCase()} instead of ${CHOICE_LABEL[sg.choice].toLowerCase()}`,
+                  );
+              }
+            lines.push(
+              `${sum.fromSuggestion} of ${sum.suggested} suggested picks taken` +
+                (changed.length ? `; changed ${changed.join(", ")}.` : "."),
+            );
+          }
+          const notes = files.flatMap((f) =>
+            f.segs
+              .filter((seg) => f.decisions[seg.id]?.note)
+              .map((seg) => `${f.name} ${seg.id}: ${f.decisions[seg.id].note}`),
+          );
+          if (notes.length) lines.push(`Notes: ${notes.join("; ")}`);
+          lines.push(`Files: ${out.map((f) => f.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+
+        // Send posts the summary with the resolved files and resolution.json as one chat message. With unresolved
+        // changes it asks once more (click twice). Called straight from the click or key press: T3 sends only during
+        // the user's gesture.
         async function sendToAgent() {
           if (!files.length) throw new Error("merge-resolve: no conflicted files are attached");
           const n = files.reduce((sum, f) => sum + compose(f).unresolved, 0);
@@ -1704,14 +1744,14 @@
             armedUntil = Date.now() + 5000;
             renderSend();
             setTimeout(renderSend, 5100);
-            return say(`${n} unresolved. Click Send again within 5 seconds to attach them anyway`);
+            return say(`${n} unresolved. Click Send again within 5 seconds to send them anyway`);
           }
           armedUntil = 0;
           const out = outputFiles();
-          for (const f of out) await ws.attach(f);
+          await ws.send(resolutionMessage(out), { files: out });
           renderSend();
           say(
-            `Attached ${files.length} file(s) and resolution.json${n ? ` with ${n} unresolved` : ""}`,
+            `Sent ${files.length} file(s) and resolution.json to the agent${n ? ` with ${n} unresolved` : ""}`,
           );
         }
 

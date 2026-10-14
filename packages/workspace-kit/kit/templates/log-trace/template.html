@@ -636,7 +636,15 @@
         </span>
         <div class="tools">
           <div id="extra-tools" class="tools"></div>
-          <button class="btn" id="send" type="button" disabled>Send <kbd>s</kbd></button>
+          <button
+            class="btn"
+            id="send"
+            type="button"
+            title="Send the findings to the agent: a short summary with findings.json and window.jsonl (S)"
+            disabled
+          >
+            Send <kbd>s</kbd>
+          </button>
           <button class="btn btn-primary" id="export" type="button" disabled>
             Export <kbd>e</kbd>
           </button>
@@ -1870,13 +1878,46 @@
           setStatus(`Exported ${files.map((f) => f.name).join(", ")}`);
           return files;
         }
-        // Send: the findings and the window's raw lines, attached to the chat.
+        // The chat message that goes with Send: what the user narrowed the logs to, in a few lines.
+        function findingsMessage() {
+          const filters = [];
+          if (S.query.trim()) filters.push(`\`${S.query.trim()}\``);
+          for (const [field, values] of Object.entries(S.include))
+            if (values.length) filters.push(`${field} ${values.join(" or ")}`);
+          for (const [field, values] of Object.entries(S.exclude))
+            if (values.length) filters.push(`${field} not ${values.join(" or ")}`);
+          if (Object.keys(S.columnFilters).length) filters.push("column filters");
+          if (S.brush) filters.push(`${hms(S.brush.from)} to ${hms(S.brush.to)}`);
+          const lines = [
+            `Log findings: ${fmt(S.scope.length)} of ${fmt(S.events.length)} events` +
+              (filters.length ? ` match ${filters.join(", ")}.` : " (no filter)."),
+          ];
+          const top = patternGroups(S.scope).slice(0, 3);
+          if (top.length)
+            lines.push(
+              `Top patterns: ${top.map((g) => `"${g.key}" (${fmt(g.count)})`).join(", ")}.`,
+            );
+          if (S.pins.length)
+            lines.push(`${S.pins.length} pinned event${S.pins.length === 1 ? "" : "s"}.`);
+          if (S.trace) {
+            const path = S.trace.criticalPath.map((p) => p.service || p.name).join(" > ");
+            lines.push(
+              `Trace ${S.trace.traceId.slice(0, 8)}: ${fmtMs(S.trace.durationMs)}${path ? `, critical path ${path}` : ""}.`,
+            );
+          }
+          lines.push("Details in findings.json; the raw lines in window.jsonl.");
+          return lines.join("\n");
+        }
+        // Send (s): posts a short summary with findings.json and the window's raw lines to the agent. Called straight
+        // from the click or key press: T3 sends only during the user's gesture.
         async function sendFindings() {
           if (!S.events.length) throw new Error("No events loaded to send.");
           const built = buildFiles();
           const files = [built.findings, built.window];
-          for (const f of files) await ws.attach(f);
-          setStatus(`Sent ${files.map((f) => f.name).join(", ")} to the chat`);
+          await ws.send(findingsMessage(), { files });
+          setStatus(
+            `Sent the findings to the agent with ${files.map((f) => f.name).join(" and ")}`,
+          );
           return files;
         }
 

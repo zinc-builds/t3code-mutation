@@ -427,9 +427,9 @@
           id="send"
           type="button"
           disabled
-          title="Attach hotpath.json and collapsed.txt for the agent"
+          title="Send the hot path to the agent: a short summary with hotpath.json and collapsed.txt (S)"
         >
-          Send to Chat <kbd>S</kbd>
+          Send to Agent <kbd>S</kbd>
         </button>
         <button class="btn btn-primary" id="export" type="button" disabled>
           Export PNG <kbd>E</kbd>
@@ -491,7 +491,7 @@
           <span><kbd>Backspace</kbd> out</span>
           <span><kbd>Arrows</kbd> move</span>
           <span><kbd>E</kbd> export</span>
-          <span><kbd>S</kbd> send</span>
+          <span><kbd>S</kbd> send to agent</span>
         </span>
       </footer>
     </div>
@@ -1048,8 +1048,39 @@
             exporting = false;
           }
         }
-        // Send: hotpath.json (the selected frame, the top functions, the compare) and collapsed.txt
-        // (folded stacks of the selected subtree) go to the chat for the agent to read and grep.
+        // The chat message that goes with Send: the hot path the user picked, in a few lines.
+        function hotPathMessage(hot, sel) {
+          const lines = [];
+          const scope = hot.range
+            ? ` (window ${fmtMs(hot.range[0])} to ${fmtMs(hot.range[1])})`
+            : "";
+          if (sel) {
+            const leaf = hot.selectedPath[hot.selectedPath.length - 1];
+            lines.push(
+              `Hot path in ${hot.profile}${scope}: ${leaf} takes ${fmtMs(hot.totalMs)} total, ${fmtMs(hot.selfMs)} self.`,
+            );
+            if (hot.selectedPath.length > 1) lines.push(`Stack: ${hot.selectedPath.join(" > ")}.`);
+          } else
+            lines.push(
+              `CPU profile ${hot.profile}${scope}: ${fmtMs(hot.totalMs)} of self time, no frame selected.`,
+            );
+          const top = hot.topSelf.slice(0, 3);
+          if (top.length)
+            lines.push(
+              `Top self time: ${top.map((r) => `${r.name} ${fmtMs(r.selfMs)}`).join(", ")}.`,
+            );
+          if (hot.compare && hot.compare.length) {
+            const d = hot.compare[0];
+            lines.push(
+              `Biggest change vs ${profiles[bIndex].name}: ${d.name} ${d.deltaMs >= 0 ? "+" : "-"}${fmtMs(Math.abs(d.deltaMs))}.`,
+            );
+          }
+          lines.push("Details in hotpath.json; folded stacks in collapsed.txt.");
+          return lines.join("\n");
+        }
+        // Send (S): hotpath.json (the selected frame, the top functions, the compare) and collapsed.txt (folded stacks
+        // of the selected subtree) go to the agent with a short summary. Called straight from the click or key press:
+        // T3 sends only during the user's gesture.
         async function sendToChat() {
           if (!hasProfile())
             throw new Error("profile-flame: no profile is open, so there is nothing to send");
@@ -1086,8 +1117,8 @@
           const collFile = new File([tree.collapsed(sel ? sel.id : null)], "collapsed.txt", {
             type: "text/plain",
           });
-          await ws.attach(hotFile);
-          await ws.attach(collFile);
+          await ws.send(hotPathMessage(hot, sel), { files: [hotFile, collFile] });
+          setStatus(`Sent the hot path to the agent with hotpath.json and collapsed.txt`);
           return [hotFile, collFile];
         }
 
