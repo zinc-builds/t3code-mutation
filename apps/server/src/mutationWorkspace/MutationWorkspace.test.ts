@@ -1362,14 +1362,22 @@ describe("MutationWorkspace validation in a browser", () => {
             [
               "Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(([{ assets }, controls]) => {",
               "  const [a] = assets;",
-              '  if (a.name !== "clip.mp4" || a.source !== "file" || a.file.size !== 10 || a.mimeType !== "video/mp4") throw new Error("asset " + JSON.stringify(a));',
+              '  if (a.name !== "clip.mp4" || a.source !== "file" || a.size !== 10 || a.file !== undefined || typeof a.url !== "string" || a.url === "" || a.mimeType !== "video/mp4") throw new Error("asset " + JSON.stringify(a));',
               '  if (controls.exposure !== -4) throw new Error("controls " + JSON.stringify(controls));',
               "  console.log('booted');",
               "});",
             ].join("\n"),
             [clip],
           );
-          expect(healthy.validation).toEqual({ level: "boot", ok: true, errors: [] });
+          // The ten-byte clip plays nowhere: the page boots on a stand-in, and the result says so.
+          expect(healthy.validation).toEqual({
+            level: "boot",
+            ok: true,
+            errors: [],
+            notValidated: [
+              expect.stringContaining("playback not validated: unknown video codec (clip.mp4)"),
+            ],
+          });
 
           const placeholder = yield* publish(
             [
@@ -1400,6 +1408,9 @@ describe("MutationWorkspace validation in a browser", () => {
                 source: "exception",
                 message: expect.stringMatching(/^TypeError: Cannot read properties of null/),
               },
+            ],
+            notValidated: [
+              expect.stringContaining("playback not validated: unknown video codec (clip.mp4)"),
             ],
           });
           // Settles a quiet second after boot, well inside the page budget.
@@ -1494,11 +1505,14 @@ Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (read
           }),
         ).pipe(
           Layer.provide(
-            ffmpegWith((input) =>
-              Effect.sync(() => {
-                dryRuns.push(input);
-                return Option.some([{ command: 1, status: "ok" as const }]);
-              }),
+            ffmpegWith(
+              (input) =>
+                Effect.sync(() => {
+                  dryRuns.push(input);
+                  return Option.some([{ command: 1, status: "ok" as const }]);
+                }),
+              // The test clip is four bytes, which no browser plays: validation names the codec instead.
+              (paths) => Effect.succeed(new Map(paths.map((p) => [p, "pcm_s16le"]))),
             ),
           ),
           Layer.provide(HtmlRender.layer),
@@ -1537,6 +1551,7 @@ Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (read
             level: "full",
             ok: false,
             errors: [{ source: "chrome", message: expect.stringContaining("chrome.toolbar") }],
+            notValidated: [expect.stringContaining("playback not validated: pcm_s16le")],
             export: {
               files: [
                 {

@@ -35,7 +35,11 @@ export const WORKSPACE_KIT_DOCS_TOOL_NAME = "workspace_kit_docs";
 export const WORKSPACE_OUTPUT_KEY = "mutationWorkspace";
 
 export const WORKSPACE_MAX_TITLE_LENGTH = 120;
-export const WORKSPACE_MAX_ASSETS = 16;
+/**
+ * Room for a shoot: media streams from where it is stored and costs the page nothing until played, so a folder of
+ * clips plus one transcript each fits (84 iPhone clips and their transcripts need 168).
+ */
+export const WORKSPACE_MAX_ASSETS = 256;
 // The RPC contract's state error names the limit, so the contract owns it.
 export { WORKSPACE_MAX_STATE_BYTES } from "@t3tools/contracts";
 
