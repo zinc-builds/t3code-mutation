@@ -627,7 +627,7 @@
           id="fix-all"
           title="Fix every failing pair (nearest passing unlocked step)"
         >
-          Fix All Failing
+          <span id="fix-all-label">Fix All Failing</span>
         </button>
         <div class="grow"></div>
         <div id="extra-tools" class="tools"></div>
@@ -1217,20 +1217,25 @@
                 ? `All ${rows.length} pairs pass ${ui.target} (${method}) in ${themeName}.`
                 : `${fails} of ${rows.length} pairs fail ${ui.target} (${method}) in ${themeName}.`;
           const v = pal.get();
-          const famLocked = (token) => {
-            const fam = v.families.find((f) => f.id === String(token ?? "").split(".")[0]);
-            return Boolean(fam) && STEPS.every((s) => fam.steps[String(s)]?.locked);
-          };
           const stuck = rows.filter((r) => !r.pass && !r.fix);
-          const lockedStuck = stuck.filter((r) => famLocked(v.roles[ui.theme]?.[r.fg])).length;
+          const lockedStuck = stuck.filter((r) => lockedFamilyOf(v, r) !== null).length;
+          const blockers = lockedBlockers();
           const hint =
             stuck.length === 0
               ? ""
               : lockedStuck > 0
-                ? ` ${lockedStuck} ${lockedStuck === 1 ? "needs" : "need"} a step from a locked family: unlock it to fix.`
+                ? ` ${lockedStuck} ${lockedStuck === 1 ? "needs" : "need"} a step from a locked family: Unlock and Fix All unlocks it.`
                 : ` ${stuck.length} ${stuck.length === 1 ? "has" : "have"} no passing step in its family: reshape the lightness curve.`;
           $("status").textContent = (flashText ? `${flashText} ` : "") + summary + hint;
-          $("fix-all").disabled = !all.some((r) => !r.pass && r.fix);
+          // Imported families load locked; when a fix needs one, Fix All offers to unlock it in the same step.
+          const fixAll = $("fix-all");
+          fixAll.disabled = !all.some((r) => !r.pass && r.fix) && blockers.length === 0;
+          $("fix-all-label").textContent = blockers.length
+            ? "Unlock and Fix All"
+            : "Fix All Failing";
+          fixAll.title = blockers.length
+            ? `Unlock ${blockers.map((f) => f.name).join(", ")} (locked on import, so their exact colors stay until you rework them), then fix every failing pair. One undo step.`
+            : "Fix every failing pair (nearest passing unlocked step)";
           $("harmonize").disabled = !selectedFamily();
           $("sample").disabled = !imageAsset;
           const fam = selectedFamily();
@@ -1266,6 +1271,57 @@
           pal.set({ families, roles: v.roles, pairs: v.pairs, unknown: v.unknown });
           commitNow(`${lock ? "Lock" : "Unlock"} ${fam.name}`);
           syncAll();
+        }
+        // The fully locked family of a failing pair's fg role, or null.
+        function lockedFamilyOf(v, r) {
+          const id = String(v.roles[r.theme]?.[r.fg] ?? "").split(".")[0];
+          const fam = v.families.find((f) => f.id === id);
+          return fam && STEPS.every((s) => fam.steps[String(s)]?.locked) ? fam : null;
+        }
+        // Fully locked families that hold the fg of a failing pair with no passing unlocked step, in either theme.
+        function lockedBlockers() {
+          const v = pal.get();
+          const out = new Map();
+          for (const r of pal.report()) {
+            if (r.pass || r.fix) continue;
+            const fam = lockedFamilyOf(v, r);
+            if (fam) out.set(fam.id, fam);
+          }
+          return [...out.values()];
+        }
+        // Fix All: unlocks the locked families its fixes need (their steps then follow the curve, hue and chroma), then
+        // repoints every failing fg role to its nearest passing step. One undo step for both.
+        function fixAll() {
+          if (pal.get().pairs.length === 0) return flash("No contrast pairs to fix.");
+          const unlock = lockedBlockers();
+          if (unlock.length) {
+            const v = pal.get();
+            const ids = new Set(unlock.map((f) => f.id));
+            const families = v.families.map((f) =>
+              !ids.has(f.id)
+                ? f
+                : {
+                    ...f,
+                    steps: Object.fromEntries(
+                      STEPS.map((s) => [String(s), { hex: f.steps[String(s)].hex, locked: false }]),
+                    ),
+                  },
+            );
+            pal.set({ families, roles: v.roles, pairs: v.pairs, unknown: v.unknown });
+          }
+          const applied = pal.fix();
+          const names = unlock.map((f) => f.name).join(", ");
+          if (applied.length || unlock.length)
+            commitNow(unlock.length ? `Unlock ${names} and Fix All` : "Fix All Failing");
+          syncAll();
+          const fixed = `Fixed ${applied.length} ${applied.length === 1 ? "pair" : "pairs"}`;
+          return flash(
+            unlock.length
+              ? `Unlocked ${names}. ${fixed}.`
+              : applied.length
+                ? `${fixed}.`
+                : "Nothing to fix here.",
+          );
         }
         function fixPair(index) {
           if (pal.get().pairs.length === 0) return flash("No contrast pairs to fix.");
@@ -1843,7 +1899,7 @@
           }
           $("fix-all").addEventListener(
             "click",
-            guard(() => fixPair(undefined)),
+            guard(() => fixAll()),
           );
           $("send").addEventListener("click", () => sendToAgent().catch(reportError));
           $("export").addEventListener("click", () => runExport().catch(reportError));

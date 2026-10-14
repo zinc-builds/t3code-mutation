@@ -1,7 +1,7 @@
 {
   "id": "token-studio",
   "title": "Design Token Studio",
-  "summary": "Design-token workspace for color systems: OKLCH ramps per family with editable anchors and per-step locks, semantic roles for light and dark, a WCAG 2.x or APCA contrast matrix with pass and fail badges and one-click nearest-passing fixes fed by a lightness curve, hue and chroma wheel, and a type and space form with a live specimen. Takes tokens.json (W3C or flat), globals.css or a tailwind.config.js colors block, plus an optional image to sample. Exports tokens.json, tokens.css and contrast-report.json; Send to Agent posts them with a short summary. Pick it for any palette, theme or accessibility-contrast token job.",
+  "summary": "Design-token workspace for color systems: OKLCH ramps per family with editable anchors and per-step locks, semantic roles for light and dark, a WCAG 2.x or APCA contrast matrix with pass and fail badges and one-click nearest-passing fixes (imported families load locked so their exact colors stay; when a fix needs a step from one, Unlock and Fix All unlocks those families and fixes in one undo step) fed by a lightness curve, hue and chroma wheel, and a type and space form with a live specimen. Takes tokens.json (W3C or flat), globals.css or a tailwind.config.js colors block, plus an optional image to sample. Exports tokens.json, tokens.css and contrast-report.json; Send to Agent posts them with a short summary. Pick it for any palette, theme or accessibility-contrast token job.",
   "kit": ["palette", "curves", "colorwheels", "propsform", "history", "links", "template-runtime"],
   "chrome": false,
   "verifyAssets": "tokens.json,sonoma.jpg",
