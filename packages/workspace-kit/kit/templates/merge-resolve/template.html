@@ -630,7 +630,12 @@
               <summary>Conflict</summary>
               <div class="panel-body">
                 <p class="cinfo" id="cinfo"></p>
-                <div class="choices" role="group" aria-label="Choices for the selected conflict">
+                <div
+                  class="choices"
+                  id="choices"
+                  role="group"
+                  aria-label="Choices for the selected conflict"
+                >
                   <button class="chip" type="button" data-choice="ours">Ours <kbd>1</kbd></button>
                   <button class="chip" type="button" data-choice="theirs">
                     Theirs <kbd>2</kbd>
@@ -1576,7 +1581,8 @@
             const state = d.choice ? `resolved: ${CHOICE_LABEL[d.choice]}` : "open";
             info.textContent = `${seg.id} · lines ${seg.startLine}–${seg.endLine} · ${state}`;
           }
-          for (const b of document.querySelectorAll("[data-choice]")) {
+          // Only the inspector's chips: the merge view's rows carry data-choice too and show their own choice.
+          for (const b of $("choices").querySelectorAll("[data-choice]")) {
             const c = b.dataset.choice;
             b.setAttribute("aria-pressed", String(Boolean(d.choice) && d.choice === c));
             b.disabled = !seg || seg.kind !== "conflict" || (c === "base" && !seg.hasBase);
@@ -1797,7 +1803,7 @@
         $("note").addEventListener("input", onNoteInput);
         $("result").addEventListener("input", onResultInput);
         $("edit-btn").addEventListener("click", editSelected);
-        for (const b of document.querySelectorAll("[data-choice]"))
+        for (const b of $("choices").querySelectorAll("[data-choice]"))
           b.addEventListener("click", () => choose(b.dataset.choice));
         window.addEventListener("keydown", onKey, true);
         const mod = MAC ? "⌘" : "Ctrl+";
