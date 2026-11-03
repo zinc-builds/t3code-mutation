@@ -1,0 +1,1530 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Poster</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 40px minmax(0, 1fr);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .sep {
+        width: 1px;
+        height: 18px;
+        background: var(--border);
+        margin: 0 2px;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover {
+        background: var(--muted);
+        border-color: var(--input);
+      }
+      .btn[aria-pressed="true"] {
+        border-color: var(--primary);
+      }
+      .btn-primary,
+      .btn-primary:hover {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .sel {
+        height: 26px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        padding: 0 6px;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .field {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr) 46px;
+        align-items: center;
+        gap: 8px;
+        min-height: 26px;
+      }
+      .field > span:first-child {
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .field > output {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        text-align: right;
+        color: var(--muted-foreground);
+      }
+      .field input[type="range"] {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .field input[type="color"] {
+        width: 100%;
+        height: 22px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--card);
+      }
+      .field-wide {
+        display: grid;
+        gap: 4px;
+        margin: 6px 0;
+      }
+      .field-wide > span {
+        color: var(--muted-foreground);
+      }
+      .field-wide textarea {
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+
+      .seg {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+      }
+      .seg button {
+        height: 22px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: calc(var(--radius) - 6px);
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .seg button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .hint {
+        margin: 4px 0 0;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .group-note {
+        color: var(--muted-foreground);
+        font-size: 11px;
+        margin: 4px 0 6px;
+      }
+      .btn-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 6px 0;
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: 236px minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      .rail {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        border-right: 1px solid var(--border);
+      }
+      #history {
+        position: absolute;
+        inset: 0;
+      }
+      .stage {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) 24px;
+        min-width: 0;
+        min-height: 0;
+      }
+      .view {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+      #layers {
+        position: absolute;
+        inset: 0;
+      }
+      #proof-wrap {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: var(--muted);
+      }
+      #proof {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-left: 1px solid var(--border);
+      }
+      .panels {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 10px;
+        cursor: pointer;
+        font-weight: 600;
+        user-select: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "+";
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+      }
+      .panel[open] > summary::after {
+        content: "\2212";
+      }
+      .panel-body {
+        padding: 4px 10px 10px;
+        min-width: 0;
+      }
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+        gap: 6px;
+        margin: 6px 0;
+      }
+      .swatch-cell {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+      }
+      .swatch {
+        position: relative;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        cursor: pointer;
+        padding: 0;
+      }
+      .swatch:hover {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .swatch kbd {
+        position: absolute;
+        left: 3px;
+        bottom: 3px;
+        background: var(--background);
+      }
+      .swatch-hex {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .keys {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 4px 12px;
+        margin: 4px 0 0;
+      }
+      .keys dt {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--foreground);
+        white-space: nowrap;
+      }
+      .keys dd {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+      /* History owns undo: the layers' own Undo/Redo (and the separator before them) would bypass it. */
+      #layers [data-cmd="undo"],
+      #layers [data-cmd="redo"],
+      #layers .t3k-layers-toolbar > .t3k-layers-sep:nth-last-child(3) {
+        display: none;
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-width: 320px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .composer:empty {
+        padding: 0;
+        border-top: 0;
+      }
+
+      .rail-empty {
+        padding: 10px;
+        color: var(--muted-foreground);
+      }
+
+      @media (max-width: 1100px) {
+        .work {
+          grid-template-columns: 200px minmax(0, 1fr) 330px;
+        }
+        .hide-md {
+          display: none;
+        }
+      }
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          grid-template-rows: auto auto;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 10px;
+        }
+        .meta {
+          flex-basis: 100%;
+          order: 9;
+        }
+        .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .stage {
+          height: 70vh;
+          order: 1;
+        }
+        .inspector {
+          order: 2;
+          border-left: 0;
+        }
+        .panels {
+          overflow: visible;
+        }
+        .rail {
+          order: 3;
+          height: 320px;
+          border-right: 0;
+          border-top: 1px solid var(--border);
+        }
+        .composer {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">Poster</h1>
+        <span class="meta" id="meta">Opening poster</span>
+        <div class="tools">
+          <div class="seg" role="group" aria-label="Mode" style="grid-auto-columns: auto">
+            <button id="mode-edit" type="button" aria-pressed="true">Edit</button>
+            <button id="mode-proof" type="button" aria-pressed="false">
+              Proof <kbd class="hide-md">P</kbd>
+            </button>
+          </div>
+          <div class="tools" id="extra-tools"></div>
+          <button class="btn btn-primary" id="export" type="button">
+            Export <kbd class="hide-md">E</kbd>
+          </button>
+        </div>
+      </header>
+      <div class="work" id="work">
+        <aside class="rail" id="rail" aria-label="History and presets">
+          <div id="history"></div>
+        </aside>
+        <section class="stage" aria-label="Poster artboard">
+          <div class="view">
+            <div id="layers"></div>
+            <div id="proof-wrap" hidden>
+              <canvas id="proof" aria-label="Proof of the poster with bolt-on effects"></canvas>
+            </div>
+          </div>
+          <div class="status" id="status" role="status"></div>
+        </section>
+        <aside class="inspector" aria-label="Poster inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="artboard" open>
+              <summary>Artboard</summary>
+              <div class="panel-body">
+                <label class="field"
+                  ><span>Size</span
+                  ><select class="sel" id="artboard" aria-label="Artboard size"></select
+                  ><span></span
+                ></label>
+                <div class="group-note" id="size-readout"></div>
+                <label class="field"
+                  ><span>Background</span
+                  ><input type="color" id="bg-color" aria-label="Background colour" /><span></span
+                ></label>
+                <label class="field" style="margin-top: 6px"
+                  ><span>Photo</span
+                  ><select class="sel" id="bg-photo" aria-label="Background photo"></select
+                  ><span></span
+                ></label>
+              </div>
+            </details>
+            <details class="panel" data-panel="type" open>
+              <summary>Type</summary>
+              <div class="panel-body">
+                <div class="group-note" id="type-target">Editing Headline</div>
+                <label class="field-wide"
+                  ><span>Headline</span
+                  ><textarea id="headline" rows="2" aria-label="Headline text"></textarea>
+                </label>
+                <label class="field" style="margin-top: 6px"
+                  ><span>Font</span
+                  ><select class="sel" id="stack" aria-label="Font stack"></select
+                  ><span></span
+                ></label>
+                <label class="field" style="margin-top: 6px"
+                  ><span>Weight</span
+                  ><select class="sel" id="weight" aria-label="Font weight"></select
+                  ><span></span
+                ></label>
+                <label class="field" style="margin-top: 6px"
+                  ><span>Size</span
+                  ><input
+                    type="range"
+                    id="size"
+                    min="12"
+                    max="400"
+                    step="1"
+                    aria-label="Font size" /><output id="size-out"></output
+                ></label>
+                <label class="field" style="margin-top: 6px"
+                  ><span>Tracking</span
+                  ><input
+                    type="range"
+                    id="tracking"
+                    min="-100"
+                    max="400"
+                    step="5"
+                    aria-label="Letter spacing" /><output id="tracking-out"></output
+                ></label>
+                <div
+                  class="seg"
+                  id="align"
+                  role="group"
+                  aria-label="Text alignment"
+                  style="margin-top: 8px"
+                >
+                  <button type="button" data-align="left">Left</button>
+                  <button type="button" data-align="center">Centre</button>
+                  <button type="button" data-align="right">Right</button>
+                </div>
+              </div>
+            </details>
+            <details class="panel" data-panel="brand" open>
+              <summary>Brand Colours</summary>
+              <div class="panel-body">
+                <div class="swatches" id="swatches"></div>
+                <p class="hint">
+                  Click a swatch (or Alt+1-8) to colour the selected text or shape. With nothing
+                  selected, or a photo, it sets the background.
+                </p>
+              </div>
+            </details>
+            <details class="panel" data-panel="align" open>
+              <summary>Align</summary>
+              <div class="panel-body">
+                <div class="btn-row">
+                  <button class="btn" type="button" data-align-to="x" disabled>
+                    Centre Horizontally <kbd>Alt H</kbd>
+                  </button>
+                  <button class="btn" type="button" data-align-to="y" disabled>
+                    Centre Vertically <kbd>Alt V</kbd>
+                  </button>
+                  <button class="btn" type="button" data-align-to="xy" disabled>
+                    Centre Both <kbd>Alt C</kbd>
+                  </button>
+                </div>
+                <p class="hint">
+                  The artboard shows centre guides while you drag a layer, and layers snap to them.
+                </p>
+              </div>
+            </details>
+            <details class="panel" data-panel="keys">
+              <summary>Keys</summary>
+              <div class="panel-body">
+                <dl class="keys">
+                  <dt>T R O</dt>
+                  <dd>Add text, rectangle, ellipse in brand colours</dd>
+                  <dt>Alt H V C</dt>
+                  <dd>Centre the selection horizontally, vertically, both</dd>
+                  <dt>Alt 1-8</dt>
+                  <dd>Brand colour on the selection, or the background</dd>
+                  <dt>P</dt>
+                  <dd>Toggle Proof (bolt-on effects)</dd>
+                  <dt>E</dt>
+                  <dd>Export at full resolution</dd>
+                  <dt>Mod Z</dt>
+                  <dd>Undo; Shift+Mod Z or Mod Y redo</dd>
+                  <dt>Arrows</dt>
+                  <dd>Nudge 1 px, Shift 10 px</dd>
+                  <dt>Mod D, Mod [ ]</dt>
+                  <dd>Duplicate, lower, raise</dd>
+                  <dt>Delete, Esc</dt>
+                  <dd>Remove the layer, deselect</dd>
+                </dl>
+              </div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const $ = (id) => document.getElementById(id);
+        const ws = window.t3.workspace;
+        const STATE_KEY = "poster-design";
+        const BG = "Background";
+        const PREVIEW_MAX = 1080;
+        const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+        const ARTBOARDS = {
+          a4: { label: "A4 Print", w: 2480, h: 3508 },
+          "1080x1350": { label: "Instagram Portrait", w: 1080, h: 1350 },
+          "1920x1080": { label: "HD Landscape", w: 1920, h: 1080 },
+        };
+        const STACKS = {
+          "system-sans": {
+            label: "System Sans",
+            css: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif',
+          },
+          "system-serif": {
+            label: "System Serif",
+            css: 'ui-serif, "New York", Georgia, "Times New Roman", serif',
+          },
+          "system-mono": {
+            label: "System Mono",
+            css: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+          },
+          condensed: {
+            label: "Condensed",
+            css: 'Impact, "Arial Narrow", "Helvetica Neue", sans-serif',
+          },
+          rounded: {
+            label: "Rounded",
+            css: 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", system-ui, sans-serif',
+          },
+        };
+        const WEIGHTS = [300, 400, 500, 600, 700, 800, 900];
+        const RESERVED_KEYS = [
+          "t",
+          "r",
+          "o",
+          "p",
+          "e",
+          "alt+h",
+          "alt+v",
+          "alt+c",
+          "alt+1",
+          "alt+2",
+          "alt+3",
+          "alt+4",
+          "alt+5",
+          "alt+6",
+          "alt+7",
+          "alt+8",
+          "mod+z",
+          "mod+shift+z",
+          "mod+y",
+          "mod+d",
+          "mod+[",
+          "mod+]",
+          "delete",
+          "backspace",
+          "escape",
+        ];
+        const DEFAULTS = {
+          title: "Poster",
+          artboard: "1080x1350",
+          headline: "Summer Sale",
+          palette: ["#1d3557", "#f1faee", "#e63946", "#a8dadc", "#457b9d"],
+          backgroundImage: "",
+          fontStack: "system-sans",
+          exportFormat: "png",
+          customScript: "",
+          controls: {},
+        };
+
+        const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const slug = (s) =>
+          String(s)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "") || "poster";
+        const role = (palette, i) => palette[i % palette.length];
+        const paletteOk = (v) =>
+          Array.isArray(v) &&
+          v.length >= 1 &&
+          v.length <= 8 &&
+          v.every((c) => typeof c === "string" && HEX.test(c));
+
+        // ---- Options (lenient: bad values fall back to the default with a warning) -------------------
+        const raw = JSON.parse(document.getElementById("t3-template-options")?.textContent || "{}");
+        if (!isPlain(raw))
+          throw new Error("poster-design: the template options must be a JSON object");
+        function pick(key, ok, fallback) {
+          if (!hasOwn(raw, key)) return fallback;
+          if (ok(raw[key])) return raw[key];
+          console.warn(
+            `poster-design: option "${key}" is not valid (${JSON.stringify(raw[key])}); using ${JSON.stringify(fallback)}.`,
+          );
+          return fallback;
+        }
+        const OPTS = {
+          title: pick("title", (v) => typeof v === "string" && v.trim() !== "", DEFAULTS.title),
+          artboard: pick("artboard", (v) => hasOwn(ARTBOARDS, v), DEFAULTS.artboard),
+          headline: pick(
+            "headline",
+            (v) => typeof v === "string" && v.trim() !== "",
+            DEFAULTS.headline,
+          ),
+          palette: pick("palette", paletteOk, DEFAULTS.palette),
+          backgroundImage: pick(
+            "backgroundImage",
+            (v) => typeof v === "string",
+            DEFAULTS.backgroundImage,
+          ),
+          fontStack: pick("fontStack", (v) => hasOwn(STACKS, v), DEFAULTS.fontStack),
+          exportFormat: pick(
+            "exportFormat",
+            (v) => v === "png" || v === "jpeg",
+            DEFAULTS.exportFormat,
+          ),
+          customScript: pick("customScript", (v) => typeof v === "string", DEFAULTS.customScript),
+          controls: pick("controls", isPlain, DEFAULTS.controls),
+        };
+
+        // ---- State -----------------------------------------------------------------------------------
+        let doc = null; // t3kit.layers instance
+        let rt = null; // template runtime
+        let api = null; // window.t3template
+        let historyObj = null;
+        let historyLink = null;
+        let artboard = OPTS.artboard;
+        let palette = OPTS.palette.slice();
+        let imageAssets = []; // image assets from the workspace
+        let bgAsset = null; // the background photo { name, file } or null
+        let proofOn = false;
+        let booted = false;
+        let pendingApply = Promise.resolve();
+        let applySeq = 0,
+          proofSeq = 0;
+        let proofTimer = 0,
+          persistTimer = 0,
+          headlineTimer = 0;
+        const dimsCache = new Map(); // asset name -> natural { w, h }
+
+        const size = () => ARTBOARDS[artboard];
+        const previewWidth = (w) => Math.min(w, PREVIEW_MAX);
+        const isBg = (l) => l.type === "image" && l.name === BG;
+        const propsOf = (l) => {
+          const { id, type, src, ...rest } = l;
+          return rest;
+        };
+        const selectedLayer = () => {
+          const id = doc ? doc.selected() : null;
+          return id ? (doc.get().layers.find((l) => l.id === id) ?? null) : null;
+        };
+        const headlineLayer = () =>
+          doc.get().layers.find((l) => l.type === "text" && l.name === "Headline") ?? null;
+        const typeTarget = () => {
+          const sel = selectedLayer();
+          return sel && sel.type === "text" ? sel : headlineLayer();
+        };
+
+        async function dimsOf(asset) {
+          if (!dimsCache.has(asset.name)) {
+            const bitmap = await createImageBitmap(asset.file);
+            dimsCache.set(asset.name, { w: bitmap.width, h: bitmap.height });
+            bitmap.close();
+          }
+          return dimsCache.get(asset.name);
+        }
+        // Cover the artboard with the photo, centred: w and h are unscaled artboard px.
+        function coverFor(dims, w, h) {
+          const s = Math.max(w / dims.w, h / dims.h);
+          return { x: w / 2, y: h / 2, w: Math.round(dims.w * s), h: Math.round(dims.h * s) };
+        }
+        function resolveBgAsset(value) {
+          if (value === "none") return null;
+          if (value === "") return imageAssets[0] ?? null;
+          const hit = imageAssets.find((a) => a.name === value);
+          if (hit) return hit;
+          console.warn(`poster-design: no attached photo named "${value}"; using the first photo.`);
+          return imageAssets[0] ?? null;
+        }
+
+        // ---- Snapshot: the whole poster as plain JSON (the background photo is stored by name and rebuilt) ----
+        function snapshot() {
+          const sc = doc.get();
+          const bgLayer = sc.layers.find(isBg) ?? null;
+          return {
+            artboard,
+            palette: palette.slice(),
+            bgName: bgAsset ? bgAsset.name : null,
+            bg: bgLayer ? propsOf(bgLayer) : null,
+            scene: {
+              width: sc.width,
+              height: sc.height,
+              background: sc.background,
+              layers: sc.layers.filter((l) => !isBg(l)),
+            },
+          };
+        }
+        async function applySnapshot(s) {
+          const seq = ++applySeq;
+          const asset = s.bgName ? (imageAssets.find((a) => a.name === s.bgName) ?? null) : null;
+          if (s.bgName && !asset)
+            console.warn(
+              `poster-design: the background photo "${s.bgName}" is not attached; the background is dropped.`,
+            );
+          if (asset) await dimsOf(asset);
+          if (seq !== applySeq) return;
+          artboard = hasOwn(ARTBOARDS, s.artboard) ? s.artboard : artboard;
+          palette = paletteOk(s.palette) ? s.palette.slice() : palette;
+          doc.set({
+            width: s.scene.width,
+            height: s.scene.height,
+            background: s.scene.background,
+            layers: s.scene.layers,
+          });
+          bgAsset = asset;
+          if (asset && s.bg) {
+            const id = await doc.addImage(asset.file, s.bg);
+            if (seq !== applySeq) return;
+            doc.reorder(id, 0);
+          }
+          doc.select(null);
+          renderSwatches();
+          onEdit();
+        }
+
+        // ---- Build the default poster ----------------------------------------------------------------
+        async function buildDefault() {
+          const { w, h } = size();
+          const stack = STACKS[OPTS.fontStack].css;
+          if (bgAsset) {
+            const id = await doc.addImage(bgAsset.file, {
+              name: BG,
+              ...coverFor(await dimsOf(bgAsset), w, h),
+              opacity: 0.55,
+            });
+            doc.reorder(id, 0);
+          }
+          doc.addShape("rect", {
+            name: "Accent",
+            x: w / 2,
+            y: h * 0.6,
+            w: w * 0.16,
+            h: Math.max(6, Math.round(h * 0.006)),
+            fill: role(palette, 2),
+          });
+          doc.addText(OPTS.headline, {
+            name: "Headline",
+            x: w / 2,
+            y: h * 0.42,
+            size: Math.round(w * 0.1),
+            weight: 800,
+            color: role(palette, 1),
+            align: "center",
+            family: stack,
+            lineHeight: 1.05,
+            tracking: -15,
+          });
+          doc.addText(OPTS.title.toUpperCase(), {
+            name: "Eyebrow",
+            x: w / 2,
+            y: h * 0.12,
+            size: Math.round(w * 0.03),
+            weight: 600,
+            color: role(palette, 3),
+            align: "center",
+            family: stack,
+            lineHeight: 1.2,
+            tracking: 180,
+          });
+          doc.select(null);
+          doc.set({});
+        }
+
+        // ---- Artboard presets: rescale every layer (background photo covers again) -------------------
+        function applyArtboard(key) {
+          const old = doc.get();
+          const next = ARTBOARDS[key];
+          const sx = next.w / old.width;
+          const sy = next.h / old.height;
+          const s = Math.min(sx, sy);
+          const dims = bgAsset ? dimsCache.get(bgAsset.name) : null;
+          const layers = old.layers.map((l) => {
+            if (isBg(l))
+              return dims
+                ? { ...l, ...coverFor(dims, next.w, next.h) }
+                : { ...l, x: l.x * sx, y: l.y * sy, w: l.w * sx, h: l.h * sy };
+            const out = { ...l, x: l.x * sx, y: l.y * sy };
+            if (l.type === "text") out.size = Math.max(4, Math.round(l.size * s));
+            if (l.type === "shape") {
+              out.w = l.w * sx;
+              out.h = l.h * sy;
+              out.radius = (l.radius || 0) * s;
+            }
+            return out;
+          });
+          artboard = key;
+          doc.set({ width: next.w, height: next.h, layers });
+        }
+
+        // ---- Edits -----------------------------------------------------------------------------------
+        // Layers' own drags, typing and inspector edits arrive as 'change' and become history steps through linkHistory.
+        // Programmatic edits do not emit, so each action below commits its own step.
+        function onEdit() {
+          if (!doc) return;
+          refreshUI();
+          queueProof();
+          persist();
+          if (booted) rt.emitChange();
+        }
+        function edited(label) {
+          onEdit();
+          if (historyLink) historyLink.commit(label);
+        }
+        function setHeadline(text) {
+          const l = headlineLayer();
+          if (l) doc.update(l.id, { text });
+        }
+        function patchTarget(patch) {
+          const t = typeTarget();
+          if (t) doc.update(t.id, patch);
+        }
+        function applyColor(hex) {
+          const sel = selectedLayer();
+          if (sel && sel.type === "text") doc.update(sel.id, { color: hex });
+          else if (sel && sel.type === "shape") doc.update(sel.id, { fill: hex });
+          else doc.set({ background: hex });
+          edited("Brand Colour");
+        }
+        function alignSelected(axis) {
+          const sel = selectedLayer();
+          if (!sel) return;
+          const { w, h } = size();
+          const patch = {};
+          if (axis === "x" || axis === "xy") patch.x = w / 2;
+          if (axis === "y" || axis === "xy") patch.y = h / 2;
+          doc.update(sel.id, patch);
+          edited(
+            axis === "x"
+              ? "Centre Horizontally"
+              : axis === "y"
+                ? "Centre Vertically"
+                : "Centre Both",
+          );
+        }
+        function addLayer(kind) {
+          const { w, h } = size();
+          if (kind === "text") {
+            doc.addText("Text", {
+              name: "Text",
+              x: w / 2,
+              y: h / 2,
+              size: Math.round(w * 0.06),
+              weight: 700,
+              color: role(palette, 1),
+              align: "center",
+              family: STACKS[OPTS.fontStack].css,
+              lineHeight: 1.1,
+            });
+            edited("Add Text");
+          } else if (kind === "rect") {
+            doc.addShape("rect", {
+              name: "Rectangle",
+              x: w / 2,
+              y: h / 2,
+              w: Math.round(w * 0.3),
+              h: Math.round(h * 0.05),
+              fill: role(palette, 2),
+            });
+            edited("Add Rectangle");
+          } else {
+            doc.addShape("ellipse", {
+              name: "Ellipse",
+              x: w / 2,
+              y: h / 2,
+              w: Math.round(w * 0.2),
+              h: Math.round(w * 0.2),
+              fill: role(palette, 4),
+            });
+            edited("Add Ellipse");
+          }
+        }
+        async function setBackgroundPhoto(name) {
+          const asset = name ? (imageAssets.find((a) => a.name === name) ?? null) : null;
+          for (const l of doc.get().layers.filter(isBg)) doc.remove(l.id);
+          bgAsset = asset;
+          if (asset) {
+            const id = await doc.addImage(asset.file, {
+              name: BG,
+              ...coverFor(await dimsOf(asset), size().w, size().h),
+              opacity: 0.55,
+            });
+            doc.reorder(id, 0);
+            doc.select(null);
+          }
+          edited("Background Photo");
+        }
+
+        // ---- Proof: the flattened poster with bolt-on stages (preview), and the export ------------------
+        async function flatten(scale) {
+          const blob = await doc.exportBlob({ type: "image/png", scale });
+          return createImageBitmap(blob);
+        }
+        function queueProof() {
+          if (!proofOn || !booted) return;
+          clearTimeout(proofTimer);
+          proofTimer = setTimeout(() => renderProof().catch(showError), 150);
+        }
+        async function renderProof() {
+          const seq = ++proofSeq;
+          const { w, h } = size();
+          const ref = previewWidth(w);
+          const canvas = $("proof");
+          canvas.width = ref;
+          canvas.height = Math.round((h * ref) / w);
+          const bitmap = await flatten(ref / w);
+          if (seq !== proofSeq) {
+            bitmap.close();
+            return;
+          }
+          canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          rt.runImageStages(canvas, { scale: 1, phase: "preview" });
+        }
+        async function exportPoster() {
+          if (!doc) throw new Error("poster-design: the poster is not ready yet");
+          const { w, h } = size();
+          const bitmap = await flatten(1);
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+          bitmap.close();
+          rt.runImageStages(canvas, { scale: w / previewWidth(w), phase: "export" });
+          const png = OPTS.exportFormat === "png";
+          const type = png ? "image/png" : "image/jpeg";
+          const blob = await new Promise((resolve, reject) =>
+            canvas.toBlob(
+              (b) =>
+                b
+                  ? resolve(b)
+                  : reject(new Error("poster-design: the export could not be encoded")),
+              type,
+              0.92,
+            ),
+          );
+          const file = new File([blob], `${slug(OPTS.title)}-${w}x${h}.${png ? "png" : "jpg"}`, {
+            type,
+          });
+          await ws.attach(file);
+          await ws.download(file, file.name);
+          return file;
+        }
+        function setProof(on) {
+          proofOn = on;
+          $("layers").style.visibility = on ? "hidden" : "";
+          $("proof-wrap").hidden = !on;
+          $("mode-edit").setAttribute("aria-pressed", String(!on));
+          $("mode-proof").setAttribute("aria-pressed", String(on));
+          if (on) renderProof().catch(showError);
+          refreshUI();
+          persist();
+        }
+
+        // ---- Inspector sync -----------------------------------------------------------------------------
+        function normalizeHex(v) {
+          if (typeof v !== "string") return "#ffffff";
+          if (/^#[0-9a-f]{6}$/i.test(v)) return v;
+          if (/^#[0-9a-f]{3}$/i.test(v)) return "#" + [...v.slice(1)].map((c) => c + c).join("");
+          return "#ffffff";
+        }
+        function setStackSelect(family) {
+          const sel = $("stack");
+          const key = Object.keys(STACKS).find((k) => STACKS[k].css === family);
+          sel.value = key ?? "custom";
+          sel.querySelector('option[value="custom"]').hidden = Boolean(key);
+        }
+        function refreshUI() {
+          if (!doc) return;
+          const { w, h, label } = size();
+          const sc = doc.get();
+          const sel = selectedLayer();
+          const t = typeTarget();
+          $("artboard").value = artboard;
+          $("meta").textContent = `${label} · ${w} × ${h} px`;
+          $("size-readout").textContent = `${w} × ${h} px`;
+          $("bg-color").value = normalizeHex(sc.background);
+          $("bg-photo").value = bgAsset ? bgAsset.name : "";
+          if (document.activeElement !== $("headline"))
+            $("headline").value = headlineLayer()?.text ?? "";
+          $("status").textContent =
+            `${proofOn ? "Proof" : "Edit"} · ${sc.layers.length} layers · ${sel ? sel.name || sel.type : "Nothing selected"}`;
+
+          for (const el of document.querySelectorAll(
+            "#stack, #weight, #size, #tracking, #align [data-align]",
+          ))
+            el.disabled = !t;
+          $("type-target").textContent = t ? `Editing ${t.name || "Text"}` : "No text layer";
+          if (t) {
+            setStackSelect(t.family);
+            const nearest = WEIGHTS.reduce((a, b) =>
+              Math.abs(b - t.weight) < Math.abs(a - t.weight) ? b : a,
+            );
+            $("weight").value = String(nearest);
+            const slider = $("size");
+            slider.max = String(Math.max(12, Math.round(w * 0.5)));
+            slider.value = String(Math.round(t.size));
+            $("size-out").textContent = `${Math.round(t.size)} px`;
+            const tracking = t.tracking ?? 0;
+            $("tracking").value = String(tracking);
+            $("tracking-out").textContent = String(Math.round(tracking));
+            for (const b of document.querySelectorAll("#align [data-align]"))
+              b.setAttribute("aria-pressed", String(b.dataset.align === t.align));
+          }
+          for (const b of document.querySelectorAll("[data-align-to]")) b.disabled = !sel;
+        }
+        function renderSwatches() {
+          const box = $("swatches");
+          box.replaceChildren(
+            ...palette.map((hex, i) => {
+              const cell = document.createElement("div");
+              cell.className = "swatch-cell";
+              const b = document.createElement("button");
+              b.type = "button";
+              b.className = "swatch";
+              b.style.background = hex;
+              b.title = `Brand ${i + 1}: ${hex} (Alt+${i + 1})`;
+              b.setAttribute("aria-label", `Apply brand colour ${i + 1}, ${hex}`);
+              b.setAttribute("aria-keyshortcuts", `Alt+${i + 1}`);
+              const badge = document.createElement("kbd");
+              badge.textContent = String(i + 1);
+              b.append(badge);
+              b.addEventListener(
+                "click",
+                run(() => applyColor(hex)),
+              );
+              const caption = document.createElement("span");
+              caption.className = "swatch-hex";
+              caption.textContent = hex;
+              cell.append(b, caption);
+              return cell;
+            }),
+          );
+        }
+        function populateSelects() {
+          $("artboard").replaceChildren(
+            ...Object.entries(ARTBOARDS).map(([k, v]) => new Option(v.label, k)),
+          );
+          $("stack").replaceChildren(
+            ...Object.entries(STACKS).map(([k, v]) => new Option(v.label, k)),
+            new Option("Custom", "custom"),
+          );
+          $("weight").replaceChildren(...WEIGHTS.map((w) => new Option(String(w), String(w))));
+          $("bg-photo").replaceChildren(
+            new Option("None", ""),
+            ...imageAssets.map((a) => new Option(a.name, a.name)),
+          );
+        }
+
+        // ---- Persistence (per workspace, through the bridge) ----------------------------------------------
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => {
+            Promise.resolve()
+              .then(() =>
+                ws.setState({
+                  v: 1,
+                  key: STATE_KEY,
+                  values: snapshot(),
+                  history: historyObj.get(),
+                  proof: proofOn,
+                  controls: rt.state(),
+                }),
+              )
+              .catch(showError);
+          }, 300);
+        }
+
+        // ---- Guarded handlers and errors ---------------------------------------------------------------
+        function run(fn) {
+          return (e) => {
+            if (!booted) return;
+            Promise.resolve()
+              .then(() => fn(e))
+              .catch(showError);
+          };
+        }
+        function showError(err) {
+          rt.reportError(err, "poster-design");
+        }
+
+        // ---- Runtime (bolt-on API) -------------------------------------------------------------------
+        function getValues() {
+          return { ...snapshot(), headline: headlineLayer()?.text ?? "" };
+        }
+        function setValues(partial, label) {
+          if (!isPlain(partial))
+            throw new TypeError("t3template.setValues(partial, label?) needs an object");
+          const { artboard: a, palette: p, headline, backgroundImage, ...rest } = partial;
+          const unknown = Object.keys(rest).filter((k) => k !== "controls");
+          if (unknown.length)
+            throw new Error(
+              `setValues: unknown key "${unknown[0]}" (use artboard, palette, headline, backgroundImage)`,
+            );
+          if (a !== undefined && !hasOwn(ARTBOARDS, a))
+            throw new Error(
+              `setValues: artboard must be one of ${Object.keys(ARTBOARDS).join(", ")}`,
+            );
+          if (p !== undefined && !paletteOk(p))
+            throw new Error("setValues: palette must be 1 to 8 #rrggbb or #rgb colours");
+          if (headline !== undefined && typeof headline !== "string")
+            throw new Error("setValues: headline must be a string");
+          if (
+            backgroundImage !== undefined &&
+            backgroundImage !== null &&
+            typeof backgroundImage !== "string"
+          )
+            throw new Error("setValues: backgroundImage must be a photo name or null");
+          const text = label === undefined ? "Script Edit" : String(label);
+          return (async () => {
+            if (a !== undefined) applyArtboard(a);
+            if (p !== undefined) {
+              palette = p.slice();
+              renderSwatches();
+            }
+            if (headline !== undefined) setHeadline(headline);
+            if (backgroundImage !== undefined) await setBackgroundPhoto(backgroundImage);
+            edited(text);
+            return getValues();
+          })();
+        }
+
+        rt = t3kit.templateRuntime.create({
+          id: "poster-design",
+          pipeline: "image",
+          // 'top': first in the inspector (above Artboard); 'bottom': after Keys, the last built-in panel.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            const panels = $("panels");
+            if (position === "top") panels.insertBefore(section, panels.firstElementChild);
+            else panels.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues,
+          export: () => exportPoster(),
+          setValues,
+          reservedKeys: RESERVED_KEYS,
+          onBoltOnChange() {
+            refreshUI();
+            queueProof();
+            persist();
+          },
+        });
+
+        // ---- Wiring ------------------------------------------------------------------------------------
+        $("artboard").addEventListener(
+          "change",
+          run((e) => {
+            applyArtboard(e.target.value);
+            edited(`Artboard ${ARTBOARDS[artboard].label}`);
+          }),
+        );
+        $("bg-color").addEventListener(
+          "input",
+          run((e) => {
+            doc.set({ background: e.target.value });
+            onEdit();
+          }),
+        );
+        $("bg-color").addEventListener(
+          "change",
+          run(() => edited("Background Colour")),
+        );
+        $("bg-photo").addEventListener(
+          "change",
+          run((e) => setBackgroundPhoto(e.target.value || null)),
+        );
+        $("headline").addEventListener(
+          "input",
+          run((e) => {
+            setHeadline(e.target.value);
+            onEdit();
+            clearTimeout(headlineTimer);
+            headlineTimer = setTimeout(() => {
+              if (historyLink) historyLink.commit("Headline");
+            }, 700);
+          }),
+        );
+        $("stack").addEventListener(
+          "change",
+          run((e) => {
+            if (e.target.value === "custom") return;
+            patchTarget({ family: STACKS[e.target.value].css });
+            edited("Font");
+          }),
+        );
+        $("weight").addEventListener(
+          "change",
+          run((e) => {
+            patchTarget({ weight: Number(e.target.value) });
+            edited("Weight");
+          }),
+        );
+        $("size").addEventListener(
+          "input",
+          run((e) => {
+            patchTarget({ size: Number(e.target.value) });
+            onEdit();
+          }),
+        );
+        $("size").addEventListener(
+          "change",
+          run(() => edited("Type Size")),
+        );
+        $("tracking").addEventListener(
+          "input",
+          run((e) => {
+            patchTarget({ tracking: Number(e.target.value) });
+            onEdit();
+          }),
+        );
+        $("tracking").addEventListener(
+          "change",
+          run(() => edited("Tracking")),
+        );
+        for (const b of document.querySelectorAll("#align [data-align]")) {
+          b.addEventListener(
+            "click",
+            run(() => {
+              patchTarget({ align: b.dataset.align });
+              edited("Alignment");
+            }),
+          );
+        }
+        for (const b of document.querySelectorAll("[data-align-to]")) {
+          b.addEventListener(
+            "click",
+            run(() => alignSelected(b.dataset.alignTo)),
+          );
+        }
+        $("mode-edit").addEventListener(
+          "click",
+          run(() => setProof(false)),
+        );
+        $("mode-proof").addEventListener(
+          "click",
+          run(() => setProof(true)),
+        );
+        $("export").addEventListener(
+          "click",
+          run(() => api.export()),
+        );
+        const isTyping = (t) =>
+          t instanceof HTMLElement &&
+          (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+        // Layout keys use e.code so Alt combinations work on every keyboard layout.
+        const keyOf = (e) => {
+          if (/^Key[A-Z]$/.test(e.code || "")) return e.code.slice(3).toLowerCase();
+          if (/^Digit\d$/.test(e.code || "")) return e.code.slice(5);
+          return e.key.toLowerCase();
+        };
+        function undoStep() {
+          if (historyObj && historyObj.canUndo()) historyObj.undo();
+        }
+        function redoStep() {
+          if (historyObj && historyObj.canRedo()) historyObj.redo();
+        }
+        // Capture phase: undo and redo belong to the template's history, so the layers' own stack never sees them.
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (!booted || !(e.metaKey || e.ctrlKey) || e.altKey || isTyping(e.target)) return;
+            const k = keyOf(e);
+            if (k !== "z" && k !== "y") return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (k === "y" || e.shiftKey) redoStep();
+            else undoStep();
+          },
+          true,
+        );
+        document.addEventListener("keydown", (e) => {
+          if (
+            !booted ||
+            e.defaultPrevented ||
+            e.repeat ||
+            e.metaKey ||
+            e.ctrlKey ||
+            e.shiftKey ||
+            isTyping(e.target)
+          )
+            return;
+          const k = keyOf(e);
+          let action = null;
+          if (e.altKey) {
+            if (k === "h") action = () => alignSelected("x");
+            else if (k === "v") action = () => alignSelected("y");
+            else if (k === "c") action = () => alignSelected("xy");
+            else if (/^[1-8]$/.test(k) && Number(k) <= palette.length)
+              action = () => applyColor(palette[Number(k) - 1]);
+          } else if (k === "p") action = () => setProof(!proofOn);
+          else if (k === "t") action = () => addLayer("text");
+          else if (k === "r") action = () => addLayer("rect");
+          else if (k === "o") action = () => addLayer("ellipse");
+          else if (k === "e") action = () => api.export();
+          if (!action) return;
+          e.preventDefault();
+          run(action)();
+        });
+        // The layers toolbar's Text, Rectangle and Ellipse insert in the brand colours and font stack, like T, R and O.
+        const TOOLBAR_ADD = { addText: "text", addRect: "rect", addEllipse: "ellipse" };
+        $("layers").addEventListener(
+          "click",
+          (e) => {
+            const b = e.target instanceof Element ? e.target.closest("button[data-cmd]") : null;
+            if (!b || !hasOwn(TOOLBAR_ADD, b.dataset.cmd)) return;
+            e.stopPropagation();
+            run(() => addLayer(TOOLBAR_ADD[b.dataset.cmd]))();
+          },
+          true,
+        );
+
+        // ---- Boot --------------------------------------------------------------------------------------
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) &&
+            saved.v === 1 &&
+            saved.key === STATE_KEY &&
+            isPlain(saved.values) &&
+            isPlain(saved.history)
+              ? saved
+              : null;
+          imageAssets = (ready.assets ?? []).filter(
+            (a) =>
+              (a.mimeType || "").startsWith("image/") ||
+              /\.(jpe?g|png|webp|avif|gif)$/i.test(a.name || ""),
+          );
+          populateSelects();
+          if (restored && hasOwn(ARTBOARDS, restored.values.artboard))
+            artboard = restored.values.artboard;
+          if (restored && paletteOk(restored.values.palette))
+            palette = restored.values.palette.slice();
+
+          const { w, h } = size();
+          doc = t3kit.layers.create($("layers"), {
+            width: w,
+            height: h,
+            background: role(palette, 0),
+            layers: [],
+          });
+          doc.on("change", () => onEdit());
+          doc.on("select", () => refreshUI());
+          renderSwatches();
+
+          if (restored) {
+            await applySnapshot(restored.values);
+          } else {
+            bgAsset = resolveBgAsset(OPTS.backgroundImage);
+            await buildDefault();
+          }
+
+          historyObj = t3kit.history.create($("history"), { title: "History", keys: false });
+          if (restored) historyObj.set(restored.history);
+          historyLink = rt.linkHistory(
+            historyObj,
+            snapshot,
+            (s) => {
+              pendingApply = applySnapshot(s).catch(showError);
+            },
+            { sources: { Layers: doc } },
+          );
+          historyObj.on("change", () => {
+            persist();
+            rt.emitChange();
+          });
+          await pendingApply;
+
+          api = rt.publish({
+            instances: { layers: doc, history: historyObj },
+            saved: restored ? restored.controls : undefined,
+          });
+          booted = true;
+          setProof(restored ? restored.proof === true : false);
+          refreshUI();
+          persist();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        $("export").firstChild.textContent = `Export ${OPTS.exportFormat.toUpperCase()} `;
+        boot().catch((err) => {
+          console.error(err);
+          const note = document.createElement("div");
+          note.textContent = `Poster failed to open: ${err && err.message ? err.message : err}`;
+          $("status").replaceChildren(note);
+        });
+      })();
+    </script>
+  </body>
+</html>

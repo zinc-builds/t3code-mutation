@@ -1,0 +1,2529 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audio Edit</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.35 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+
+      .ae-app {
+        position: relative;
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+      }
+
+      /* Header bar */
+      .ae-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+      .ae-title {
+        min-width: 0;
+        max-width: 220px;
+      }
+      .ae-title-main {
+        display: block;
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ae-title-sub {
+        display: block;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ae-tools,
+      .ae-custom {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .ae-sep {
+        width: 1px;
+        height: 18px;
+        background: var(--border);
+        margin: 0 4px;
+      }
+      .ae-spacer {
+        flex: 1 1 auto;
+      }
+      .ae-time {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+        padding: 0 6px;
+        white-space: nowrap;
+      }
+      .ae-source {
+        height: 24px;
+        max-width: 180px;
+        padding: 0 6px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--background);
+      }
+
+      .ae-btn {
+        height: 24px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--background);
+        color: var(--foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .ae-btn:hover:not(:disabled) {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .ae-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .ae-btn[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+        border-color: var(--ring);
+      }
+      .ae-btn.primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .ae-btn.primary:hover:not(:disabled) {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        opacity: 0.9;
+      }
+      .ae-btn.small {
+        height: 22px;
+        padding: 0 7px;
+        font-size: 11px;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 14px;
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 0 3px;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+
+      /* Main three-column layout */
+      .ae-main {
+        display: grid;
+        grid-template-columns: 284px minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+
+      .ae-left {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-right: 1px solid var(--border);
+        background: var(--card);
+      }
+      .ae-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        border-bottom: 1px solid var(--border);
+      }
+      .ae-head .ae-mono {
+        text-transform: none;
+        letter-spacing: 0;
+        font-weight: 400;
+      }
+      .ae-regions {
+        flex: 0 1 auto;
+        max-height: 44%;
+        min-height: 60px;
+        overflow: auto;
+      }
+      .ae-row {
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 50px;
+        gap: 4px;
+        width: 100%;
+        padding: 5px 10px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .ae-row:hover {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .ae-row[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+        box-shadow: inset 2px 0 0 var(--primary);
+      }
+      .ae-row-head {
+        cursor: default;
+        color: var(--muted-foreground);
+        font-family: var(--font-sans);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .ae-row-head:hover {
+        background: transparent;
+        color: var(--muted-foreground);
+      }
+      .ae-row .ae-num {
+        text-align: right;
+      }
+      .ae-history {
+        position: relative;
+        flex: 1 1 0;
+        min-height: 220px;
+      }
+
+      /* Centre column: waveform, region strip, status */
+      .ae-center {
+        display: grid;
+        grid-template-rows: minmax(240px, 1fr) auto auto;
+        min-width: 0;
+        min-height: 0;
+      }
+      .ae-wave {
+        min-height: 0;
+        height: 100%;
+        padding: 8px;
+        background: var(--background);
+      }
+      .ae-strip-wrap {
+        position: relative;
+        border-top: 1px solid var(--border);
+        background: var(--card);
+      }
+      .ae-ruler {
+        display: block;
+        width: 100%;
+        height: 24px;
+        cursor: pointer;
+        touch-action: none;
+      }
+      .ae-strip {
+        display: block;
+        width: 100%;
+        height: 76px;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      .ae-playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        margin-left: -1px;
+        background: var(--foreground);
+        pointer-events: none;
+      }
+      .ae-status {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 4px 10px;
+        border-top: 1px solid var(--border);
+        background: var(--card);
+        color: var(--muted-foreground);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        min-width: 0;
+      }
+      .ae-status > span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+
+      /* Inspector */
+      .ae-inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 320px;
+        border-left: 1px solid var(--border);
+        background: var(--card);
+      }
+      .ae-sections {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+      }
+      .ae-sec {
+        border-bottom: 1px solid var(--border);
+      }
+      .ae-sec > summary {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        list-style: none;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .ae-sec > summary::-webkit-details-marker {
+        display: none;
+      }
+      .ae-sec > summary::after {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-right: 1.5px solid var(--muted-foreground);
+        border-bottom: 1.5px solid var(--muted-foreground);
+        transform: rotate(-45deg);
+        margin-right: 2px;
+      }
+      .ae-sec[open] > summary::after {
+        transform: rotate(45deg);
+      }
+      .ae-sum-extra {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .ae-body {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 10px 10px;
+      }
+      .ae-form {
+        display: grid;
+        grid-template-columns: 70px minmax(0, 1fr);
+        gap: 6px 8px;
+        align-items: center;
+      }
+      .ae-form:disabled,
+      .ae-form[aria-disabled="true"] {
+        opacity: 0.45;
+      }
+      .ae-label {
+        color: var(--muted-foreground);
+      }
+      .ae-mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .ae-in {
+        height: 24px;
+        width: 100%;
+        min-width: 0;
+        padding: 0 6px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--background);
+        color: var(--foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .ae-pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 72px;
+        gap: 6px;
+        align-items: center;
+      }
+      .ae-pair input[type="range"] {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .ae-mini {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .ae-marker-row {
+        display: grid;
+        grid-template-columns: 82px minmax(0, 1fr) 26px;
+        gap: 6px;
+        align-items: center;
+      }
+      .ae-marker-row + .ae-marker-row {
+        margin-top: 4px;
+      }
+      .ae-marker-row .ae-btn {
+        justify-content: center;
+        padding: 0 4px;
+      }
+      .ae-code {
+        width: 100%;
+        min-height: 64px;
+        resize: vertical;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .ae-muted {
+        color: var(--muted-foreground);
+      }
+      .ae-empty {
+        color: var(--muted-foreground);
+        padding: 2px 0;
+      }
+      .ae-composer {
+        min-width: 320px;
+        min-height: 56px;
+        padding: 8px 10px;
+        border-top: 1px solid var(--border);
+      }
+
+      @media (max-width: 980px) {
+        body {
+          overflow: auto;
+        }
+        .ae-app {
+          height: auto;
+          min-height: 100vh;
+        }
+        .ae-main {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .ae-center {
+          grid-template-rows: 320px auto auto;
+          order: -1;
+        }
+        .ae-left {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .ae-history {
+          min-height: 260px;
+        }
+        .ae-inspector {
+          min-width: 0;
+          border-left: 0;
+        }
+        .ae-composer {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ae-app" id="ae-app">
+      <header class="ae-bar">
+        <div class="ae-title">
+          <span class="ae-title-main" id="ae-title">Audio Edit</span>
+          <span class="ae-title-sub" id="ae-source-name"></span>
+        </div>
+        <select class="ae-source" id="ae-source" aria-label="Source file" hidden></select>
+        <div class="ae-tools" role="toolbar" aria-label="Edit tools">
+          <button
+            type="button"
+            class="ae-btn"
+            id="ae-split"
+            disabled
+            title="Split the region at the playhead (S)"
+          >
+            Split <kbd>S</kbd>
+          </button>
+          <button
+            type="button"
+            class="ae-btn"
+            id="ae-cut"
+            disabled
+            title="Cut the selection out of the edit (X or Delete)"
+          >
+            Cut <kbd>X</kbd>
+          </button>
+          <button
+            type="button"
+            class="ae-btn"
+            id="ae-trim"
+            disabled
+            title="Keep only the selected range (T)"
+          >
+            Trim to Selection <kbd>T</kbd>
+          </button>
+          <button
+            type="button"
+            class="ae-btn"
+            id="ae-remove"
+            disabled
+            title="Remove the selected region (Delete with no selection)"
+          >
+            Remove Region
+          </button>
+          <span class="ae-sep" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="ae-btn"
+            id="ae-marker"
+            disabled
+            title="Add a marker at the playhead (M)"
+          >
+            Add Marker <kbd>M</kbd>
+          </button>
+          <button
+            type="button"
+            class="ae-btn"
+            id="ae-play-edit"
+            disabled
+            aria-pressed="false"
+            title="Play the edit from the playhead, skipping cut areas (P). Preview plays the source audio with bolt-on audio filters; gain and fades apply on export."
+          >
+            Play Edit <kbd>P</kbd>
+          </button>
+        </div>
+        <div class="ae-custom" id="ae-custom"></div>
+        <span class="ae-spacer"></span>
+        <span class="ae-time" id="ae-time">0:00.000 / 0:00.000</span>
+        <button
+          type="button"
+          class="ae-btn primary"
+          id="ae-export"
+          disabled
+          title="Attach and download the edit list JSON and ffmpeg script (Ctrl/Cmd+E)"
+        >
+          Export
+        </button>
+      </header>
+
+      <div class="ae-main">
+        <aside class="ae-left" aria-label="Edit list and history">
+          <div class="ae-head">
+            <span>Edit List</span><span class="ae-mono" id="ae-count"></span>
+          </div>
+          <div class="ae-regions" id="ae-regions" role="listbox" aria-label="Regions"></div>
+          <div class="ae-history" id="ae-history"></div>
+        </aside>
+
+        <section class="ae-center" aria-label="Waveform and regions">
+          <div class="ae-wave" id="ae-wave"></div>
+          <div class="ae-strip-wrap" id="ae-strip-wrap">
+            <canvas class="ae-ruler" id="ae-ruler" aria-label="Time ruler and markers"></canvas>
+            <canvas class="ae-strip" id="ae-strip" aria-label="Edit list overview"></canvas>
+            <div class="ae-playhead" id="ae-playhead" hidden></div>
+          </div>
+          <footer class="ae-status">
+            <span id="ae-status-msg">Loading media...</span>
+            <span id="ae-status-info"></span>
+          </footer>
+        </section>
+
+        <aside class="ae-inspector" id="ae-inspector" aria-label="Inspector">
+          <div class="ae-sections" id="ae-sections">
+            <details class="ae-sec" id="ae-sec-region" open>
+              <summary>
+                <span>Region</span><span id="ae-r-name" class="ae-sum-extra"></span>
+              </summary>
+              <div class="ae-body">
+                <div class="ae-empty" id="ae-region-empty">
+                  Select a region in the edit list or on the strip.
+                </div>
+                <div class="ae-form" id="ae-region-form" hidden>
+                  <label class="ae-label" for="ae-r-start">Start</label>
+                  <input class="ae-in ae-mono" id="ae-r-start" type="number" step="0.001" min="0" />
+                  <label class="ae-label" for="ae-r-end">End</label>
+                  <input class="ae-in ae-mono" id="ae-r-end" type="number" step="0.001" min="0" />
+                  <span class="ae-label">Length</span>
+                  <span class="ae-mono" id="ae-r-len"></span>
+                  <label class="ae-label" for="ae-r-gain">Gain dB</label>
+                  <div class="ae-pair">
+                    <input
+                      id="ae-r-gain"
+                      type="range"
+                      min="-24"
+                      max="12"
+                      step="0.5"
+                      aria-label="Gain"
+                    />
+                    <input
+                      class="ae-in ae-mono"
+                      id="ae-r-gain-n"
+                      type="number"
+                      min="-24"
+                      max="12"
+                      step="0.5"
+                      aria-label="Gain in dB"
+                    />
+                  </div>
+                  <label class="ae-label" for="ae-r-fi">Fade In s</label>
+                  <div class="ae-pair">
+                    <input
+                      id="ae-r-fi"
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.01"
+                      aria-label="Fade in"
+                    />
+                    <input
+                      class="ae-in ae-mono"
+                      id="ae-r-fi-n"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      aria-label="Fade in seconds"
+                    />
+                  </div>
+                  <label class="ae-label" for="ae-r-fo">Fade Out s</label>
+                  <div class="ae-pair">
+                    <input
+                      id="ae-r-fo"
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.01"
+                      aria-label="Fade out"
+                    />
+                    <input
+                      class="ae-in ae-mono"
+                      id="ae-r-fo-n"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      aria-label="Fade out seconds"
+                    />
+                  </div>
+                </div>
+                <div class="ae-mini" id="ae-region-presets" hidden></div>
+              </div>
+            </details>
+
+            <details class="ae-sec" id="ae-sec-markers" open>
+              <summary>
+                <span>Markers</span><span id="ae-marker-count" class="ae-sum-extra"></span>
+              </summary>
+              <div class="ae-body">
+                <div id="ae-marker-list"></div>
+                <div class="ae-mini">
+                  <button type="button" class="ae-btn" id="ae-marker-add2" disabled>
+                    Add Marker at Playhead
+                  </button>
+                </div>
+              </div>
+            </details>
+
+            <details class="ae-sec" id="ae-sec-export" open>
+              <summary><span>Export Edit List</span></summary>
+              <div class="ae-body">
+                <div class="ae-muted" id="ae-export-summary"></div>
+                <span class="ae-label">ffmpeg command</span>
+                <textarea
+                  class="ae-code"
+                  id="ae-ffmpeg"
+                  readonly
+                  spellcheck="false"
+                  rows="6"
+                  aria-label="ffmpeg command"
+                ></textarea>
+                <div class="ae-mini">
+                  <button type="button" class="ae-btn" id="ae-select-cmd">Select Command</button>
+                  <button type="button" class="ae-btn" id="ae-export2" disabled>
+                    Attach and Download
+                  </button>
+                </div>
+                <span class="ae-label">Edit list JSON</span>
+                <textarea
+                  class="ae-code"
+                  id="ae-json"
+                  readonly
+                  spellcheck="false"
+                  rows="8"
+                  aria-label="Edit list JSON"
+                ></textarea>
+                <div class="ae-muted">
+                  Preview plays the source audio through the bolt-on audio filters. Gain and fades
+                  are applied when the ffmpeg command renders.
+                </div>
+              </div>
+            </details>
+          </div>
+          <div class="ae-composer" data-t3-composer></div>
+        </aside>
+      </div>
+
+      <span id="ae-probe" hidden></span>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const kit = window.t3kit;
+        if (!kit || !kit.waveform || !kit.history || !kit.links) {
+          throw new Error("Audio Edit needs the waveform, history and links primitives");
+        }
+
+        // ---- Constants and options ----------------------------------------------------------
+        const MIN_LEN = 0.01; // shortest region or selection, seconds
+        const GAIN_MIN = -24;
+        const GAIN_MAX = 12;
+        const FADE_MAX = 60;
+        const BINS = 2048; // overview peak resolution
+        const PEAK_RATE = 8000; // the overview decode only needs a coarse sample rate
+        const SNAP_PX = 6; // pointer distance that grabs an edge or marker
+        const STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+        const MEDIA_EXT = /\.(mp4|mov|m4v|webm|mkv|m4a|mp3|wav|aac|ogg|flac|opus)$/i;
+        const REGION_PRESET_KEYS = ["gainDb", "fadeIn", "fadeOut"];
+        const EDIT_PRESET_KEYS = ["regions", "markers"];
+        const BUILTIN_REGION_PRESETS = [
+          ["Quick Fades", { fadeIn: 0.5, fadeOut: 0.5 }],
+          ["Duck -6 dB", { gainDb: -6 }],
+          ["Clear Fades", { fadeIn: 0, fadeOut: 0 }],
+        ];
+
+        const isObj = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+        const DEFAULTS = {
+          title: "Audio Edit",
+          selectionStart: 0,
+          selectionEnd: 0,
+          fadeIn: 0,
+          fadeOut: 0,
+          regions: [],
+          markers: [],
+          customScript: "",
+          controls: {},
+        };
+        const CHECKS = {
+          title: (v) => typeof v === "string" && v.trim() !== "" && v.length <= 80,
+          selectionStart: (v) => Number.isFinite(v) && v >= 0,
+          selectionEnd: (v) => Number.isFinite(v) && v >= 0,
+          fadeIn: (v) => Number.isFinite(v) && v >= 0 && v <= FADE_MAX,
+          fadeOut: (v) => Number.isFinite(v) && v >= 0 && v <= FADE_MAX,
+          regions: (v) =>
+            Array.isArray(v) &&
+            v.every((r) => isObj(r) && Number.isFinite(r.start) && Number.isFinite(r.end)),
+          markers: (v) =>
+            Array.isArray(v) &&
+            v.every(
+              (m) =>
+                isObj(m) &&
+                Number.isFinite(m.time) &&
+                (m.label === undefined || typeof m.label === "string"),
+            ),
+          customScript: (v) => typeof v === "string",
+          controls: isObj,
+        };
+
+        function warn(message) {
+          console.warn(`[audio-edit] ${message}`);
+        }
+
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            warn(`options are not valid JSON (${err.message}); using defaults`);
+            raw = {};
+          }
+          if (!isObj(raw)) {
+            warn("options must be an object; using defaults");
+            raw = {};
+          }
+          const out = {};
+          for (const key of Object.keys(DEFAULTS)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = DEFAULTS[key];
+            else if (CHECKS[key](v)) out[key] = v;
+            else {
+              warn(
+                `option "${key}" is invalid (${JSON.stringify(v)}); using ${JSON.stringify(DEFAULTS[key])}`,
+              );
+              out[key] = DEFAULTS[key];
+            }
+          }
+          if (out.selectionEnd > 0 && out.selectionEnd - out.selectionStart < MIN_LEN) {
+            warn('option "selectionEnd" must come after "selectionStart"; ignoring the selection');
+            out.selectionStart = 0;
+            out.selectionEnd = 0;
+          }
+          return out;
+        }
+
+        // ---- Small helpers ------------------------------------------------------------------
+        const $ = (id) => document.getElementById(id);
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        const r3 = (v) => Math.round(v * 1000) / 1000;
+        const r1 = (v) => Math.round(v * 10) / 10;
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const fmt = (t) => {
+          const s = Math.max(0, t);
+          const m = Math.floor(s / 60);
+          return `${m}:${(s - m * 60).toFixed(3).padStart(6, "0")}`;
+        };
+        const fmtSec = (t) => `${t.toFixed(3)} s`;
+        const gainText = (g) => (g === 0 ? "0 dB" : `${g > 0 ? "+" : ""}${g.toFixed(1)} dB`);
+
+        function el(tag, props = {}, ...children) {
+          const node = document.createElement(tag);
+          for (const [key, value] of Object.entries(props)) {
+            if (value === undefined || value === null || value === false) continue;
+            if (key === "class") node.className = value;
+            else if (key === "text") node.textContent = String(value);
+            else if (key === "on")
+              for (const [type, fn] of Object.entries(value)) node.addEventListener(type, fn);
+            else if (key === "value" || key === "disabled" || key === "hidden" || key === "open")
+              node[key] = value;
+            else node.setAttribute(key, value === true ? "" : String(value));
+          }
+          node.append(...children.filter((c) => c !== null && c !== undefined));
+          return node;
+        }
+
+        function setStatus(message) {
+          $("ae-status-msg").textContent = String(message);
+        }
+
+        // Errors and notices share the bolt-on runtime's banner (created in boot, before anything can fail).
+        let rt = null;
+        const showBanner = (message) => rt.showBanner(message);
+        const reportError = (err, context) => rt.reportError(err, context);
+
+        // Runs a UI action; sync and async throws both land in the banner.
+        const run = (fn) => (event) => {
+          Promise.resolve()
+            .then(() => fn(event))
+            .catch((err) => reportError(err, "Action failed"));
+        };
+
+        // ---- Model ----------------------------------------------------------------------------
+        // The edit (what history records): { source, regions, markers }.
+        // regions: kept spans of the source, sorted by start, never overlapping. markers: { id, time, label }.
+        const state = { source: "", duration: 0, regions: [], markers: [] };
+        const ui = {
+          selectedId: null,
+          playEdit: false,
+          drag: null,
+          drawQueued: false,
+          persistTimer: 0,
+          loadToken: 0,
+        };
+        const regionPresets = new Map();
+        const media = { list: [], loaded: "", durations: new Map(), peaks: new Map() };
+        const boot$ = { opts: null, wf: null, hist: null, link: null, ready: false };
+
+        const sortRegions = (list) => list.sort((a, b) => a.start - b.start);
+        const sortMarkers = (list) => list.sort((a, b) => a.time - b.time);
+
+        function nextId(prefix, ...lists) {
+          let max = 0;
+          for (const list of lists) {
+            for (const item of list) {
+              const id = String(item.id);
+              if (!id.startsWith(prefix)) continue;
+              const n = Number(id.slice(prefix.length));
+              if (Number.isInteger(n) && n > max) max = n;
+            }
+          }
+          return `${prefix}${max + 1}`;
+        }
+
+        // Fades never overlap: fade-out gets what is left after the fade-in.
+        function clampFades(r) {
+          const len = r.end - r.start;
+          r.fadeIn = r3(clamp(r.fadeIn, 0, Math.min(FADE_MAX, len)));
+          r.fadeOut = r3(clamp(r.fadeOut, 0, Math.min(FADE_MAX, len - r.fadeIn)));
+          return r;
+        }
+
+        // A piece of region r spanning [a, b]: keeps an outer fade only where it still touches the original edge.
+        function pieceOf(r, id, a, b) {
+          return clampFades({
+            id,
+            start: r3(a),
+            end: r3(b),
+            gainDb: r.gainDb,
+            fadeIn: a <= r.start + 1e-9 ? r.fadeIn : 0,
+            fadeOut: b >= r.end - 1e-9 ? r.fadeOut : 0,
+          });
+        }
+
+        function splitRegions(regions, t) {
+          const idx = regions.findIndex((r) => t > r.start + MIN_LEN && t < r.end - MIN_LEN);
+          if (idx < 0) return null;
+          const r = regions[idx];
+          const left = pieceOf(r, r.id, r.start, t);
+          const right = pieceOf(r, nextId("r", regions), t, r.end);
+          return sortRegions([...regions.slice(0, idx), left, right, ...regions.slice(idx + 1)]);
+        }
+
+        function cutRegions(regions, s, e) {
+          const out = [];
+          for (const r of regions) {
+            if (e <= r.start || s >= r.end) {
+              out.push(r);
+              continue;
+            }
+            const spans = [];
+            if (s - r.start >= MIN_LEN) spans.push([r.start, s]);
+            if (r.end - e >= MIN_LEN) spans.push([e, r.end]);
+            spans.forEach(([a, b], i) =>
+              out.push(pieceOf(r, i === 0 ? r.id : nextId("r", regions, out), a, b)),
+            );
+          }
+          return sortRegions(out);
+        }
+
+        function trimRegions(regions, s, e) {
+          const out = [];
+          for (const r of regions) {
+            const a = Math.max(r.start, s);
+            const b = Math.min(r.end, e);
+            if (b - a >= MIN_LEN) out.push(pieceOf(r, r.id, a, b));
+          }
+          return sortRegions(out);
+        }
+
+        // Neighbour limits so an edge can never cross another region or the file bounds.
+        function bounds(idx) {
+          const regions = state.regions;
+          return {
+            lo: idx > 0 ? regions[idx - 1].end : 0,
+            hi: idx < regions.length - 1 ? regions[idx + 1].start : state.duration,
+          };
+        }
+
+        // Mutates region idx in place; returns false when the value is not a number.
+        function patchRegion(idx, key, raw) {
+          const r = state.regions[idx];
+          const len = r.end - r.start;
+          const { lo, hi } = bounds(idx);
+          let v;
+          switch (key) {
+            case "start":
+              v = clamp(raw, lo, r.end - MIN_LEN);
+              break;
+            case "end":
+              v = clamp(raw, r.start + MIN_LEN, hi);
+              break;
+            case "gainDb":
+              v = r1(clamp(raw, GAIN_MIN, GAIN_MAX));
+              break;
+            case "fadeIn":
+            case "fadeOut":
+              v = clamp(raw, 0, len);
+              break;
+            default:
+              throw new TypeError(`unknown region field "${key}"`);
+          }
+          if (!Number.isFinite(v)) return false;
+          r[key] = key === "gainDb" ? v : r3(v);
+          clampFades(r);
+          return true;
+        }
+
+        // Strict checks for scripted edits, options and restored steps; they throw so nothing partial applies.
+        function checkRegions(list, duration, fadeIn = 0, fadeOut = 0) {
+          if (!Array.isArray(list)) throw new TypeError("regions must be an array");
+          const out = [];
+          list.forEach((raw, i) => {
+            if (!isObj(raw)) throw new TypeError(`regions[${i}] must be an object`);
+            const start = r3(Number(raw.start));
+            const end = r3(Number(raw.end));
+            if (!Number.isFinite(start) || !Number.isFinite(end))
+              throw new TypeError(`regions[${i}] needs numeric start and end`);
+            if (start < 0 || end > r3(duration) + 1e-6 || end - start < MIN_LEN) {
+              throw new RangeError(
+                `regions[${i}] must sit inside 0 to ${r3(duration)} s and be at least ${MIN_LEN} s long`,
+              );
+            }
+            const gainDb = raw.gainDb ?? 0;
+            if (!Number.isFinite(gainDb) || gainDb < GAIN_MIN || gainDb > GAIN_MAX)
+              throw new RangeError(`regions[${i}].gainDb must be ${GAIN_MIN} to ${GAIN_MAX}`);
+            const fi = raw.fadeIn ?? fadeIn;
+            const fo = raw.fadeOut ?? fadeOut;
+            if (![fi, fo].every((f) => Number.isFinite(f) && f >= 0 && f <= FADE_MAX))
+              throw new RangeError(`regions[${i}] fades must be 0 to ${FADE_MAX} s`);
+            out.push({
+              id: typeof raw.id === "string" && raw.id ? raw.id : "",
+              start,
+              end,
+              gainDb: r1(gainDb),
+              fadeIn: fi,
+              fadeOut: fo,
+            });
+          });
+          sortRegions(out);
+          for (let i = 1; i < out.length; i++) {
+            if (out[i].start < out[i - 1].end - 1e-9)
+              throw new RangeError("regions must not overlap");
+          }
+          const ids = new Set();
+          for (const r of out) {
+            if (!r.id || ids.has(r.id)) r.id = nextId("r", out);
+            ids.add(r.id);
+            clampFades(r);
+          }
+          return out;
+        }
+
+        function checkMarkers(list, duration) {
+          if (!Array.isArray(list)) throw new TypeError("markers must be an array");
+          const out = list.map((raw, i) => {
+            if (
+              !isObj(raw) ||
+              !Number.isFinite(raw.time) ||
+              raw.time < 0 ||
+              raw.time > duration + 1e-6
+            ) {
+              throw new RangeError(`markers[${i}].time must be 0 to ${r3(duration)} s`);
+            }
+            return {
+              id: typeof raw.id === "string" && raw.id ? raw.id : "",
+              time: r3(raw.time),
+              label: String(raw.label ?? "").slice(0, 60),
+            };
+          });
+          const ids = new Set();
+          for (const m of out) {
+            if (!m.id || ids.has(m.id)) m.id = nextId("m", out);
+            ids.add(m.id);
+          }
+          return sortMarkers(out);
+        }
+
+        function checkSelection(sel, duration) {
+          if (sel === null) return null;
+          if (!isObj(sel) || !Number.isFinite(sel.start) || !Number.isFinite(sel.end))
+            throw new TypeError("selection must be { start, end } or null");
+          const start = r3(clamp(sel.start, 0, duration));
+          const end = r3(clamp(sel.end, 0, duration));
+          return end - start >= MIN_LEN ? { start, end } : null;
+        }
+
+        function outputDuration() {
+          return state.regions.reduce((sum, r) => sum + (r.end - r.start), 0);
+        }
+
+        const regionAt = (t) => state.regions.find((r) => t >= r.start && t < r.end) ?? null;
+        const selectedIndex = () => state.regions.findIndex((r) => r.id === ui.selectedId);
+        const selectedRegion = () => state.regions[selectedIndex()] ?? null;
+        const playheadTime = () => (boot$.wf ? boot$.wf.getPlayhead() : 0);
+
+        function selectionRange() {
+          const sel = boot$.wf.get().selection;
+          return sel.end - sel.start >= MIN_LEN ? { start: sel.start, end: sel.end } : null;
+        }
+
+        function editState() {
+          return clone({ source: state.source, regions: state.regions, markers: state.markers });
+        }
+
+        function getValues() {
+          return {
+            ...editState(),
+            duration: r3(state.duration),
+            selection: boot$.wf ? selectionRange() : null,
+          };
+        }
+
+        // ---- Commands -------------------------------------------------------------------------
+        function commit(label) {
+          boot$.link.commit(label);
+          afterChange();
+        }
+
+        function afterChange() {
+          if (ui.selectedId && !state.regions.some((r) => r.id === ui.selectedId))
+            ui.selectedId = null;
+          renderAll();
+          persistSoon();
+          emitChange();
+        }
+
+        function emitChange() {
+          if (boot$.ready) rt.emitChange();
+        }
+
+        function doSplit(at) {
+          const t = at === undefined ? playheadTime() : Number(at);
+          const next = splitRegions(state.regions, t);
+          if (!next) {
+            setStatus("Split needs the playhead inside a region, away from its edges.");
+            return false;
+          }
+          state.regions = next;
+          ui.selectedId = regionAt(t)?.id ?? null;
+          commit(`Split at ${fmt(t)}`);
+          return true;
+        }
+
+        function doCut() {
+          const sel = selectionRange();
+          if (!sel) {
+            setStatus("Select a range on the waveform to cut.");
+            return false;
+          }
+          state.regions = cutRegions(state.regions, sel.start, sel.end);
+          ui.selectedId = null;
+          boot$.wf.set({ selection: null });
+          commit(`Cut ${fmt(sel.start)} to ${fmt(sel.end)}`);
+          return true;
+        }
+
+        function doTrim() {
+          const sel = selectionRange();
+          if (!sel) {
+            setStatus("Select a range on the waveform to trim to.");
+            return false;
+          }
+          state.regions = trimRegions(state.regions, sel.start, sel.end);
+          ui.selectedId = regionAt(sel.start)?.id ?? null;
+          boot$.wf.set({ selection: null });
+          commit(`Trim to ${fmt(sel.start)} to ${fmt(sel.end)}`);
+          return true;
+        }
+
+        function doRemoveRegion() {
+          const idx = selectedIndex();
+          if (idx < 0) {
+            setStatus("Select a region to remove it.");
+            return false;
+          }
+          state.regions.splice(idx, 1);
+          ui.selectedId = (state.regions[idx] ?? state.regions[idx - 1])?.id ?? null;
+          boot$.wf.set({ selection: null });
+          commit(`Remove R${idx + 1}`);
+          return true;
+        }
+
+        function doMarker(at, label) {
+          if (!state.duration) return null;
+          const t = r3(clamp(at === undefined ? playheadTime() : Number(at), 0, state.duration));
+          if (!Number.isFinite(t)) throw new TypeError("addMarker(time) needs a number");
+          const marker = {
+            id: nextId("m", state.markers),
+            time: t,
+            label:
+              label === undefined
+                ? `Marker ${state.markers.length + 1}`
+                : String(label).slice(0, 60),
+          };
+          state.markers = sortMarkers([...state.markers, marker]);
+          commit(`Add Marker at ${fmt(t)}`);
+          return marker.id;
+        }
+
+        function selectRegion(id, { seek = false } = {}) {
+          const r = state.regions.find((x) => x.id === id);
+          ui.selectedId = r ? r.id : null;
+          if (r) {
+            boot$.wf.set({ selection: { start: r.start, end: r.end } });
+            boot$.wf.scrollTo((r.start + r.end) / 2);
+            if (seek) boot$.wf.seek(r.start);
+          }
+          renderAll();
+        }
+
+        function stepRegion(delta) {
+          if (!state.regions.length) return;
+          const idx = selectedIndex();
+          const next =
+            idx < 0
+              ? delta > 0
+                ? 0
+                : state.regions.length - 1
+              : clamp(idx + delta, 0, state.regions.length - 1);
+          selectRegion(state.regions[next].id, { seek: true });
+        }
+
+        function selectCommand() {
+          const area = $("ae-ffmpeg");
+          area.focus();
+          area.select();
+          setStatus("Command selected. Copy it with Ctrl/Cmd+C.");
+        }
+
+        function editRegion(key, value, label) {
+          const idx = selectedIndex();
+          if (idx < 0) return;
+          // Compare with the committed step, not the live value: slider 'input' previews already changed it.
+          const committed = JSON.stringify(boot$.hist.get().state.regions);
+          if (!patchRegion(idx, key, value) || JSON.stringify(state.regions) === committed) {
+            renderRegionForm();
+            scheduleDraw();
+            return;
+          }
+          commit(`${label} R${idx + 1}`);
+        }
+
+        // Live slider preview: changes the region and redraws; the slider's 'change' commits one step.
+        function previewRegion(key, value) {
+          const idx = selectedIndex();
+          if (idx < 0) return;
+          patchRegion(idx, key, value);
+          renderLive();
+          scheduleDraw();
+        }
+
+        function applyRegionPreset(name) {
+          const values = regionPresets.get(name);
+          if (!values) throw new Error(`Unknown region preset "${name}"`);
+          const idx = selectedIndex();
+          if (idx < 0) {
+            setStatus("Select a region to apply a preset to it.");
+            return false;
+          }
+          for (const key of REGION_PRESET_KEYS)
+            if (values[key] !== undefined) patchRegion(idx, key, values[key]);
+          commit(`Preset: ${name} R${idx + 1}`);
+          return true;
+        }
+
+        // Play Edit: play from the playhead and jump over cut areas.
+        function nextPlayable(t) {
+          if (regionAt(t)) return t;
+          let best = null;
+          for (const r of state.regions) {
+            if (r.start > t && (best === null || r.start < best)) best = r.start;
+          }
+          return best;
+        }
+
+        function togglePlayEdit() {
+          const wf = boot$.wf;
+          if (ui.playEdit) {
+            ui.playEdit = false;
+            wf.pause();
+            renderButtons();
+            return;
+          }
+          if (state.regions.length === 0) {
+            setStatus("The edit list is empty.");
+            return;
+          }
+          let t = nextPlayable(playheadTime());
+          if (t === null) t = state.regions[0].start;
+          if (Math.abs(t - playheadTime()) > 1e-6) wf.seek(t);
+          ui.playEdit = true;
+          wf.play();
+          renderButtons();
+        }
+
+        // ---- Waveform events ------------------------------------------------------------------
+        function onWaveChange() {
+          // A selection inside one region makes that region the one the inspector edits.
+          const sel = selectionRange();
+          if (sel) {
+            const r = state.regions.find(
+              (x) => x.start <= sel.start + 1e-6 && sel.end <= x.end + 1e-6,
+            );
+            if (r) ui.selectedId = r.id;
+          }
+          renderRegionList();
+          renderRegionForm();
+          renderStatus();
+          renderButtons();
+          scheduleDraw();
+          persistSoon();
+          emitChange();
+        }
+
+        function onPlayhead(t) {
+          updatePlayheadUi(t);
+          if (!ui.playEdit) return;
+          const next = nextPlayable(t);
+          if (next === null) {
+            ui.playEdit = false;
+            boot$.wf.pause();
+            renderButtons();
+            setStatus("Edit playback reached the end of the edit list.");
+            return;
+          }
+          if (next > t + 1e-6) boot$.wf.seek(next);
+        }
+
+        // Seeks restart playback without a 'playing: false' event, so a stop here is a real pause or the end.
+        function onPlaybackChange(event) {
+          if (!event.playing) ui.playEdit = false;
+          renderButtons();
+        }
+
+        // ---- Media ----------------------------------------------------------------------------
+        async function computePeaks(file) {
+          const data = await file.arrayBuffer();
+          const audio = await new OfflineAudioContext(1, 1, PEAK_RATE).decodeAudioData(data);
+          const out = new Float32Array(BINS);
+          const perBin = audio.length / BINS;
+          let max = 0;
+          for (let b = 0; b < BINS; b++) {
+            const from = Math.floor(b * perBin);
+            const to = Math.min(audio.length, Math.floor((b + 1) * perBin));
+            let m = 0;
+            for (let c = 0; c < audio.numberOfChannels; c++) {
+              const samples = audio.getChannelData(c);
+              for (let i = from; i < to; i++) {
+                const v = Math.abs(samples[i]);
+                if (v > m) m = v;
+              }
+            }
+            out[b] = m;
+            if (m > max) max = m;
+          }
+          if (max > 0) for (let b = 0; b < BINS; b++) out[b] /= max;
+          return out;
+        }
+
+        // Decodes a source into the waveform (and the strip's overview peaks). Returns its duration.
+        async function loadSource(name) {
+          const src = media.list.find((a) => a.name === name);
+          if (!src) throw new Error(`Source "${name}" is not attached`);
+          if (media.loaded === name) return state.duration;
+          ui.playEdit = false;
+          // The waveform draws and plays every decoded sample, so it needs the whole file whatever its source:
+          // assetFile reads it once (a 40 MB file is a 40 MB download) and the overview peaks reuse those bytes.
+          const file = await window.t3.workspace.assetFile(name);
+          const { duration } = await boot$.wf.setMedia(file);
+          if (!(duration > 0)) throw new Error(`"${name}" has no decodable audio.`);
+          media.loaded = name;
+          media.durations.set(name, duration);
+          $("ae-source-name").textContent = name;
+          if (media.list.length > 1) $("ae-source").value = name;
+          if (!media.peaks.has(name)) {
+            computePeaks(file)
+              .then((peaks) => {
+                media.peaks.set(name, peaks);
+                scheduleDraw();
+              })
+              .catch((err) => reportError(err, "Overview"));
+          }
+          return duration;
+        }
+
+        function freshEdit(name, duration) {
+          const opts = boot$.opts;
+          let regions;
+          try {
+            regions = opts.regions.length
+              ? checkRegions(opts.regions, duration, opts.fadeIn, opts.fadeOut)
+              : null;
+          } catch (err) {
+            warn(`option "regions" does not fit ${name} (${err.message}); keeping the whole file`);
+            regions = null;
+          }
+          if (!regions)
+            regions = [
+              clampFades({
+                id: "r1",
+                start: 0,
+                end: r3(duration),
+                gainDb: 0,
+                fadeIn: opts.fadeIn,
+                fadeOut: opts.fadeOut,
+              }),
+            ];
+          const kept = opts.markers.filter((m) => {
+            if (m.time <= duration) return true;
+            warn(
+              `marker at ${m.time} s is past the end of ${name} (${r3(duration)} s); skipping it`,
+            );
+            return false;
+          });
+          return { source: name, regions, markers: checkMarkers(kept, duration) };
+        }
+
+        async function switchSource(name) {
+          if (name === state.source) return;
+          const token = ++ui.loadToken;
+          const duration = await loadSource(name);
+          if (token !== ui.loadToken) return;
+          const edit = freshEdit(name, duration);
+          adoptEdit(edit, duration);
+          commit(`Open ${name}`);
+          ui.selectedId = state.regions[0]?.id ?? null;
+          renderAll();
+        }
+
+        function adoptEdit(edit, duration) {
+          state.source = edit.source;
+          state.duration = duration;
+          state.regions = clone(edit.regions);
+          state.markers = clone(edit.markers);
+          if (!state.regions.some((r) => r.id === ui.selectedId))
+            ui.selectedId = state.regions[0]?.id ?? null;
+        }
+
+        // History link target: undo, redo, jump and presets land here. A step for another source loads it first.
+        function applyEdit(s) {
+          if (
+            !isObj(s) ||
+            typeof s.source !== "string" ||
+            !Array.isArray(s.regions) ||
+            !Array.isArray(s.markers)
+          ) {
+            throw new TypeError("audio-edit: history step has an unknown shape");
+          }
+          if (s.source === media.loaded) {
+            adoptEdit(s, state.duration);
+            if (boot$.ready) afterChange();
+            return;
+          }
+          const token = ++ui.loadToken;
+          loadSource(s.source)
+            .then((duration) => {
+              if (token !== ui.loadToken) return;
+              adoptEdit(s, duration);
+              afterChange();
+            })
+            .catch((err) => reportError(err, "Could not load the source"));
+        }
+
+        // ---- Persistence ----------------------------------------------------------------------
+        function persistSoon() {
+          if (!boot$.ready) return;
+          clearTimeout(ui.persistTimer);
+          ui.persistTimer = setTimeout(persistNow, 200);
+        }
+
+        function persistNow() {
+          window.t3.workspace.setState({
+            v: 1,
+            source: state.source,
+            selection: selectionRange(),
+            history: boot$.hist.get(),
+            controls: rt.state(),
+          });
+        }
+
+        // A saved step is usable when its source is attached and every region still fits that file.
+        function restoredStep(saved, duration, name) {
+          if (
+            !isObj(saved) ||
+            saved.v !== 1 ||
+            !isObj(saved.history) ||
+            !Array.isArray(saved.history.entries)
+          )
+            return null;
+          const h = saved.history;
+          const idx = Number.isInteger(h.index) ? h.index : h.entries.length - 1;
+          const step = h.entries[idx]?.state;
+          if (!isObj(step) || step.source !== name) return null;
+          try {
+            checkRegions(step.regions, duration);
+            checkMarkers(step.markers, duration);
+          } catch (err) {
+            warn(`saved edit does not fit ${name} (${err.message}); starting from the options`);
+            return null;
+          }
+          return h;
+        }
+
+        // ---- Edit list, markers and inspector rendering ---------------------------------------
+        function renderRegionList() {
+          const list = $("ae-regions");
+          list.replaceChildren(
+            el(
+              "div",
+              { class: "ae-row ae-row-head", role: "presentation" },
+              el("span", { text: "#" }),
+              el("span", { text: "Start" }),
+              el("span", { text: "End" }),
+              el("span", { text: "Length" }),
+              el("span", { class: "ae-num", text: "Gain" }),
+            ),
+          );
+          state.regions.forEach((r, i) => {
+            list.append(
+              el(
+                "button",
+                {
+                  type: "button",
+                  class: "ae-row",
+                  role: "option",
+                  title: `Fade in ${r.fadeIn.toFixed(2)} s, fade out ${r.fadeOut.toFixed(2)} s`,
+                  "aria-selected": r.id === ui.selectedId ? "true" : "false",
+                  on: { click: run(() => selectRegion(r.id)) },
+                },
+                el("span", { text: `R${i + 1}` }),
+                el("span", { text: fmt(r.start) }),
+                el("span", { text: fmt(r.end) }),
+                el("span", { text: `${(r.end - r.start).toFixed(3)}s` }),
+                el("span", { class: "ae-num", text: gainText(r.gainDb).replace(" dB", "") }),
+              ),
+            );
+          });
+          if (state.regions.length === 0) {
+            list.append(
+              el("div", {
+                class: "ae-empty",
+                style: "padding: 8px 10px",
+                text: "The edit list is empty. Undo in History to restore it.",
+              }),
+            );
+          }
+          $("ae-count").textContent = `${state.regions.length} · ${fmtSec(outputDuration())}`;
+        }
+
+        function setField(id, value) {
+          const node = $(id);
+          if (document.activeElement !== node) node.value = value;
+        }
+
+        function renderRegionForm() {
+          const idx = selectedIndex();
+          const r = state.regions[idx];
+          $("ae-region-empty").hidden = Boolean(r);
+          $("ae-region-form").hidden = !r;
+          $("ae-region-presets").hidden = !r || regionPresets.size === 0;
+          $("ae-r-name").textContent = r ? `R${idx + 1} of ${state.regions.length}` : "";
+          if (!r) return;
+          const len = r.end - r.start;
+          const fadeMax = Math.min(FADE_MAX, len).toFixed(3);
+          setField("ae-r-start", r.start.toFixed(3));
+          setField("ae-r-end", r.end.toFixed(3));
+          $("ae-r-len").textContent = fmtSec(len);
+          setField("ae-r-gain", String(r.gainDb));
+          setField("ae-r-gain-n", String(r.gainDb));
+          for (const [id, v] of [
+            ["ae-r-fi", r.fadeIn],
+            ["ae-r-fo", r.fadeOut],
+          ]) {
+            $(id).max = fadeMax;
+            $(`${id}-n`).max = fadeMax;
+            setField(id, String(v));
+            setField(`${id}-n`, v.toFixed(2));
+          }
+        }
+
+        function renderRegionPresets() {
+          const body = $("ae-region-presets");
+          body.replaceChildren(
+            ...[...regionPresets.keys()].map((name) =>
+              el("button", {
+                type: "button",
+                class: "ae-btn small",
+                text: name,
+                title: `Apply ${name} to the selected region`,
+                on: { click: run(() => applyRegionPreset(name)) },
+              }),
+            ),
+          );
+          renderRegionForm();
+        }
+
+        function renderMarkers() {
+          const list = $("ae-marker-list");
+          list.replaceChildren();
+          $("ae-marker-count").textContent = state.markers.length
+            ? String(state.markers.length)
+            : "";
+          if (state.markers.length === 0) {
+            list.append(
+              el("div", {
+                class: "ae-empty",
+                text: "No markers. Press M to add one at the playhead.",
+              }),
+            );
+            return;
+          }
+          for (const m of state.markers) {
+            const label = el("input", {
+              class: "ae-in",
+              type: "text",
+              value: m.label,
+              maxlength: "60",
+              placeholder: "Marker",
+              "aria-label": "Marker label",
+              on: {
+                change: run((e) => {
+                  const next = e.currentTarget.value.trim().slice(0, 60);
+                  const target = state.markers.find((x) => x.id === m.id);
+                  if (!target || next === target.label) return;
+                  target.label = next;
+                  commit("Rename Marker");
+                }),
+              },
+            });
+            list.append(
+              el(
+                "div",
+                { class: "ae-marker-row" },
+                el("button", {
+                  type: "button",
+                  class: "ae-btn ae-mono",
+                  title: "Move the playhead to this marker",
+                  on: { click: run(() => boot$.wf.seek(m.time)) },
+                  text: fmt(m.time),
+                }),
+                label,
+                el("button", {
+                  type: "button",
+                  class: "ae-btn",
+                  title: "Delete marker",
+                  "aria-label": "Delete marker",
+                  on: {
+                    click: run(() => {
+                      state.markers = state.markers.filter((x) => x.id !== m.id);
+                      commit("Delete Marker");
+                    }),
+                  },
+                  text: "×",
+                }),
+              ),
+            );
+          }
+        }
+
+        function renderStatus() {
+          if (!boot$.wf) return;
+          const sel = selectionRange();
+          const parts = [];
+          if (sel)
+            parts.push(
+              `Selection ${fmt(sel.start)} to ${fmt(sel.end)} (${fmtSec(sel.end - sel.start)})`,
+            );
+          parts.push(`Output ${fmtSec(outputDuration())} of ${fmtSec(state.duration)}`);
+          $("ae-status-info").textContent = parts.join("  ·  ");
+        }
+
+        function renderButtons() {
+          if (!boot$.wf) return;
+          const sel = selectionRange();
+          const hasRegions = state.regions.length > 0;
+          $("ae-split").disabled = splitRegions(state.regions, playheadTime()) === null;
+          $("ae-cut").disabled = !sel;
+          $("ae-trim").disabled = !sel;
+          $("ae-remove").disabled = selectedIndex() < 0;
+          $("ae-marker").disabled = !state.duration;
+          $("ae-marker-add2").disabled = !state.duration;
+          $("ae-play-edit").disabled = !hasRegions;
+          $("ae-play-edit").setAttribute("aria-pressed", ui.playEdit ? "true" : "false");
+          $("ae-export").disabled = !hasRegions;
+          $("ae-export2").disabled = !hasRegions;
+        }
+
+        function renderExport() {
+          let model;
+          try {
+            model = buildEdl({ phase: "preview" });
+          } catch (err) {
+            $("ae-ffmpeg").value = `Export blocked: ${err.message}`;
+            reportError(err, "Export preview");
+            return;
+          }
+          $("ae-export-summary").textContent =
+            `${state.regions.length} region${state.regions.length === 1 ? "" : "s"}, ${fmtSec(model.outputDurationSec)} output from ${fmtSec(state.duration)} of ${state.source || "source"}.`;
+          $("ae-json").value = JSON.stringify(model, null, 2);
+          $("ae-ffmpeg").value =
+            model.render.ffmpeg || "Nothing to export: the edit list is empty.";
+        }
+
+        function renderAll() {
+          renderRegionList();
+          renderRegionForm();
+          renderMarkers();
+          renderStatus();
+          renderButtons();
+          renderExport();
+          updatePlayheadUi(playheadTime());
+          scheduleDraw();
+        }
+
+        // Cheap refresh while a drag or slider is live (no marker list rebuild).
+        function renderLive() {
+          renderRegionList();
+          renderRegionForm();
+          renderStatus();
+          renderExport();
+        }
+
+        function updatePlayheadUi(t) {
+          const head = $("ae-playhead");
+          head.hidden = !state.duration;
+          head.style.left = `${state.duration ? (t / state.duration) * 100 : 0}%`;
+          $("ae-time").textContent = `${fmt(t)} / ${fmt(state.duration)}`;
+          renderButtons();
+        }
+
+        // ---- Export ---------------------------------------------------------------------------
+        function fileStem() {
+          const slug = boot$.opts.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+          return slug || "audio-edit";
+        }
+
+        function shq(text) {
+          return `'${String(text).replace(/'/g, "'\\''")}'`;
+        }
+
+        // audioFilters: bolt-on ffmpeg fragments (t3template.addExportNote), chained onto the joined regions.
+        function ffmpegCommand(regions, source, stem, audioFilters) {
+          if (regions.length === 0) return "";
+          const chains = regions.map((r, i) => {
+            const len = r3(r.endSec - r.startSec);
+            const filters = [`atrim=start=${r.startSec}:end=${r.endSec}`, "asetpts=PTS-STARTPTS"];
+            if (r.fadeInSec > 0) filters.push(`afade=t=in:st=0:d=${r.fadeInSec}`);
+            if (r.fadeOutSec > 0)
+              filters.push(`afade=t=out:st=${r3(len - r.fadeOutSec)}:d=${r.fadeOutSec}`);
+            if (r.gainDb !== 0) filters.push(`volume=${r.gainDb}dB`);
+            return `[0:a]${filters.join(",")}[a${i}]`;
+          });
+          const joins = regions.map((_, i) => `[a${i}]`).join("");
+          const fx = audioFilters.length ? `;[cat]${audioFilters.join(",")}[out]` : "";
+          const graph = `${chains.join(";")};${joins}concat=n=${regions.length}:v=0:a=1${fx ? "[cat]" : "[out]"}${fx}`;
+          return `ffmpeg -y -i ${shq(source)} -filter_complex ${shq(graph)} -map ${shq("[out]")} -vn -c:a aac -b:a 192k ${shq(`${stem}.m4a`)}`;
+        }
+
+        // Third argument of every EDL hook: the waveform selection (null when none) and the playhead, in source seconds.
+        function hookInfo() {
+          const sel = boot$.wf.get().selection;
+          return {
+            selection: sel && sel.end > sel.start ? { start: sel.start, end: sel.end } : null,
+            playhead: playheadTime(),
+          };
+        }
+
+        // The edit list goes through the bolt-on transforms first; the ffmpeg command is built from the transformed list,
+        // so whatever a bolt-on changes is what renders. phase 'preview' (the inspector) reports a failing bolt-on and
+        // skips it; the real export throws instead.
+        function buildEdl({ phase = "export" } = {}) {
+          const stem = fileStem();
+          const regions = state.regions.map((r, i) => ({
+            index: i + 1,
+            startSec: r.start,
+            endSec: r.end,
+            durationSec: r3(r.end - r.start),
+            gainDb: r.gainDb,
+            fadeInSec: r.fadeIn,
+            fadeOutSec: r.fadeOut,
+          }));
+          const model = rt.transformEdl(
+            {
+              format: "audio-edit-list",
+              version: 1,
+              title: boot$.opts.title,
+              source: { name: state.source, durationSec: r3(state.duration) },
+              outputDurationSec: 0,
+              regions,
+              markers: state.markers.map((m) => ({ timeSec: m.time, label: m.label })),
+            },
+            { phase, info: hookInfo() },
+          );
+          if (!Array.isArray(model.regions))
+            throw new Error("a bolt-on EDL transform removed regions");
+          for (const r of model.regions) r.durationSec = r3(r.endSec - r.startSec);
+          model.outputDurationSec = r3(model.regions.reduce((sum, r) => sum + r.durationSec, 0));
+          const fx = rt.exportFilters(model, { phase, info: hookInfo() });
+          if (fx.video.length)
+            throw new Error(
+              "audio-edit renders sound only: return { audioFilter } from addExportNote, not videoFilter",
+            );
+          model.render = {
+            output: `${stem}.m4a`,
+            ffmpeg: ffmpegCommand(model.regions, model.source.name, stem, fx.audio),
+            notes:
+              "Run in the folder that holds the source file. Regions play in order; audio between them is left out. Gain in dB, fades in seconds at each region edge.",
+            boltOn: { controls: rt.state(), audioFilter: fx.audio.join(","), notes: fx.notes },
+          };
+          return model;
+        }
+
+        function shellScript(model) {
+          const lines = [
+            "#!/bin/sh",
+            `# ${model.title}: ${model.regions.length} region(s) from ${model.source.name}, ${model.outputDurationSec} s output`,
+          ];
+          for (const m of model.markers)
+            lines.push(`# marker ${m.timeSec.toFixed(3)} s ${m.label.replace(/\s+/g, " ")}`);
+          for (const n of model.render.boltOn.notes)
+            lines.push(`# ${String(n).replace(/\s+/g, " ")}`);
+          lines.push(model.render.ffmpeg);
+          return `${lines.join("\n")}\n`;
+        }
+
+        async function exportEditList() {
+          const done = await exportFiles();
+          return done ? done.model : null;
+        }
+
+        // { model, files, ffmpeg } once attached and downloaded; null when the edit list is empty.
+        async function exportFiles() {
+          if (state.regions.length === 0) {
+            setStatus("Nothing to export: the edit list is empty.");
+            return null;
+          }
+          const model = buildEdl();
+          const stem = fileStem();
+          const files = [
+            new File([`${JSON.stringify(model, null, 2)}\n`], `${stem}.edl.json`, {
+              type: "application/json",
+            }),
+            new File([shellScript(model)], `${stem}.ffmpeg.sh`, { type: "text/plain" }),
+          ];
+          for (const file of files) {
+            await window.t3.workspace.attach(file);
+            await window.t3.workspace.download(file, file.name);
+          }
+          setStatus(
+            `Exported ${stem}.edl.json and ${stem}.ffmpeg.sh (${model.outputDurationSec} s output).`,
+          );
+          return { model, files, ffmpeg: [model.render.ffmpeg] };
+        }
+
+        // ---- Strip and ruler drawing ----------------------------------------------------------
+        const timeToX = (t, w) => (state.duration ? (t / state.duration) * w : 0);
+        const xToTime = (x, w) => clamp((x / w) * state.duration, 0, state.duration);
+
+        function palette() {
+          const probe = $("ae-probe");
+          const read = (name) => {
+            probe.style.color = `var(${name})`;
+            return getComputedStyle(probe).color;
+          };
+          return {
+            bg: read("--background"),
+            card: read("--card"),
+            muted: read("--muted"),
+            mutedFg: read("--muted-foreground"),
+            fg: read("--foreground"),
+            primary: read("--primary"),
+            ring: read("--ring"),
+            warning: read("--warning"),
+            border: read("--border"),
+            font: `10px ${getComputedStyle(document.body).fontFamily}`,
+          };
+        }
+
+        function prepCanvas(cv) {
+          const dpr = window.devicePixelRatio || 1;
+          const w = cv.clientWidth;
+          const h = cv.clientHeight;
+          const pw = Math.max(1, Math.round(w * dpr));
+          const ph = Math.max(1, Math.round(h * dpr));
+          if (cv.width !== pw || cv.height !== ph) {
+            cv.width = pw;
+            cv.height = ph;
+          }
+          const ctx = cv.getContext("2d");
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, w, h);
+          return { ctx, w, h };
+        }
+
+        function pickStep(dur, w) {
+          return STEPS.find((s) => (s / dur) * w >= 70) ?? STEPS[STEPS.length - 1];
+        }
+
+        function tickLabel(t, step) {
+          if (t >= 60) return fmt(t).replace(/\.\d+$/, "");
+          const decimals = step >= 1 ? 0 : step >= 0.5 ? 1 : 2;
+          return `${t.toFixed(decimals)}s`;
+        }
+
+        function drawRuler(c) {
+          const { ctx, w, h } = prepCanvas($("ae-ruler"));
+          ctx.fillStyle = c.card;
+          ctx.fillRect(0, 0, w, h);
+          if (!state.duration) return;
+          const step = pickStep(state.duration, w);
+          const count = Math.floor(state.duration / step + 1e-9);
+          ctx.strokeStyle = c.border;
+          ctx.fillStyle = c.mutedFg;
+          ctx.font = c.font;
+          ctx.textBaseline = "top";
+          ctx.beginPath();
+          for (let i = 0; i <= count; i++) {
+            const x = Math.round(timeToX(i * step, w)) + 0.5;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, 5);
+          }
+          ctx.stroke();
+          for (let i = 0; i <= count; i++) {
+            const t = i * step;
+            ctx.fillText(tickLabel(t, step), timeToX(t, w) + 3, 5);
+          }
+          // Marker flags with their labels; drag a flag to move the marker.
+          for (const m of state.markers) {
+            const x = timeToX(m.time, w);
+            ctx.fillStyle = c.warning;
+            ctx.beginPath();
+            ctx.moveTo(x - 4, h);
+            ctx.lineTo(x + 4, h);
+            ctx.lineTo(x, h - 7);
+            ctx.closePath();
+            ctx.fill();
+            if (m.label) {
+              ctx.fillStyle = c.fg;
+              ctx.fillText(m.label, Math.min(x + 6, w - ctx.measureText(m.label).width - 2), 14);
+            }
+          }
+        }
+
+        function drawPeaks(ctx, peaks, xa, xb, w, h, color, alpha) {
+          const mid = h / 2;
+          const amp = mid - 6;
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = alpha;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          const from = Math.max(0, Math.floor(xa));
+          const to = Math.min(w, Math.ceil(xb));
+          for (let x = from; x < to; x++) {
+            const bin = Math.min(BINS - 1, Math.floor(((x + 0.5) / w) * BINS));
+            const a = Math.max(0.02, peaks[bin]) * amp;
+            ctx.moveTo(x + 0.5, mid - a);
+            ctx.lineTo(x + 0.5, mid + a);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        function drawStrip(c) {
+          const { ctx, w, h } = prepCanvas($("ae-strip"));
+          ctx.fillStyle = c.muted;
+          ctx.fillRect(0, 0, w, h);
+          if (!state.duration) return;
+          const peaks = media.peaks.get(media.loaded) ?? null;
+          if (peaks) drawPeaks(ctx, peaks, 0, w, w, h, c.mutedFg, 0.35);
+
+          ctx.font = c.font;
+          ctx.textBaseline = "top";
+          state.regions.forEach((r, i) => {
+            const x0 = timeToX(r.start, w);
+            const x1 = timeToX(r.end, w);
+            const selected = r.id === ui.selectedId;
+            ctx.fillStyle = c.card;
+            ctx.fillRect(x0, 0, x1 - x0, h);
+            if (peaks) drawPeaks(ctx, peaks, x0, x1, w, h, c.primary, selected ? 0.95 : 0.7);
+
+            // Shade the attenuated part of each fade: the wedge above the fade ramp.
+            const fadeInPx = timeToX(r.start + r.fadeIn, w) - x0;
+            const fadeOutPx = x1 - timeToX(r.end - r.fadeOut, w);
+            ctx.fillStyle = c.bg;
+            ctx.globalAlpha = 0.6;
+            if (fadeInPx > 0.5) {
+              ctx.beginPath();
+              ctx.moveTo(x0, 0);
+              ctx.lineTo(x0 + fadeInPx, 0);
+              ctx.lineTo(x0, h);
+              ctx.closePath();
+              ctx.fill();
+            }
+            if (fadeOutPx > 0.5) {
+              ctx.beginPath();
+              ctx.moveTo(x1, 0);
+              ctx.lineTo(x1 - fadeOutPx, 0);
+              ctx.lineTo(x1, h);
+              ctx.closePath();
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            ctx.strokeStyle = selected ? c.ring : c.primary;
+            ctx.lineWidth = selected ? 2 : 1;
+            ctx.strokeRect(x0 + 0.5, 0.5, Math.max(1, x1 - x0 - 1), h - 1);
+            ctx.lineWidth = 1;
+
+            const label = r.gainDb !== 0 ? `R${i + 1}  ${gainText(r.gainDb)}` : `R${i + 1}`;
+            if (x1 - x0 > 28) {
+              ctx.fillStyle = c.fg;
+              ctx.fillText(label, x0 + 5, 5);
+            }
+          });
+
+          const sel = selectionRange();
+          if (sel) {
+            const x0 = timeToX(sel.start, w);
+            const x1 = timeToX(sel.end, w);
+            ctx.fillStyle = c.ring;
+            ctx.globalAlpha = 0.16;
+            ctx.fillRect(x0, 0, x1 - x0, h);
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = c.ring;
+            ctx.beginPath();
+            ctx.moveTo(x0 + 0.5, 0);
+            ctx.lineTo(x0 + 0.5, h);
+            ctx.moveTo(x1 - 0.5, 0);
+            ctx.lineTo(x1 - 0.5, h);
+            ctx.stroke();
+          }
+
+          ctx.strokeStyle = c.warning;
+          ctx.setLineDash([3, 3]);
+          for (const m of state.markers) {
+            const x = Math.round(timeToX(m.time, w)) + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, h);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        }
+
+        // One frame per request, never a loop. Pointer moves only queue a frame.
+        function scheduleDraw() {
+          if (ui.drawQueued) return;
+          ui.drawQueued = true;
+          requestAnimationFrame(flushFrame);
+        }
+
+        function flushFrame() {
+          ui.drawQueued = false;
+          if (!boot$.wf) return;
+          const c = palette();
+          drawRuler(c);
+          drawStrip(c);
+          if (ui.drag && ui.drag.kind !== "scrub") renderLive();
+        }
+
+        // ---- Pointer interaction on the strip and ruler ---------------------------------------
+        function localX(e) {
+          return e.clientX - e.currentTarget.getBoundingClientRect().left;
+        }
+
+        function regionEdgeAt(x, w) {
+          let best = null;
+          state.regions.forEach((r, idx) => {
+            for (const [edge, t] of [
+              ["start", r.start],
+              ["end", r.end],
+            ]) {
+              const d = Math.abs(timeToX(t, w) - x);
+              if (d <= SNAP_PX && (best === null || d < best.d)) best = { idx, edge, d };
+            }
+          });
+          return best;
+        }
+
+        function markerNear(x, w) {
+          let best = null;
+          for (const m of state.markers) {
+            const d = Math.abs(timeToX(m.time, w) - x);
+            if (d <= SNAP_PX && (best === null || d < best.d)) best = { marker: m, d };
+          }
+          return best ? best.marker : null;
+        }
+
+        function queueSeek(drag) {
+          if (drag.queued) return;
+          drag.queued = true;
+          requestAnimationFrame(() => {
+            drag.queued = false;
+            if (ui.drag === drag) boot$.wf.seek(drag.t);
+          });
+        }
+
+        function onCanvasDown(e) {
+          if (!state.duration || e.button !== 0) return;
+          const cv = e.currentTarget;
+          const x = localX(e);
+          const w = cv.clientWidth;
+          const t = xToTime(x, w);
+          cv.setPointerCapture(e.pointerId);
+
+          if (cv.id === "ae-ruler") {
+            const marker = markerNear(x, w);
+            if (marker) {
+              ui.drag = { kind: "marker", id: marker.id, moved: false };
+              return;
+            }
+            ui.drag = { kind: "scrub", t, queued: false };
+            boot$.wf.seek(t);
+            return;
+          }
+
+          const edge = regionEdgeAt(x, w);
+          if (edge) {
+            ui.selectedId = state.regions[edge.idx].id;
+            ui.drag = { kind: "edge", idx: edge.idx, edge: edge.edge, moved: false };
+            renderAll();
+            return;
+          }
+          const region = regionAt(t);
+          if (region) {
+            selectRegion(region.id);
+          } else {
+            ui.selectedId = null;
+            boot$.wf.set({ selection: null });
+            renderAll();
+          }
+          ui.drag = { kind: "scrub", t, queued: false };
+          boot$.wf.seek(t);
+        }
+
+        function onCanvasMove(e) {
+          const cv = e.currentTarget;
+          const x = localX(e);
+          const w = cv.clientWidth;
+          const drag = ui.drag;
+          if (!drag) {
+            if (cv.id === "ae-strip")
+              cv.style.cursor = regionEdgeAt(x, w) ? "ew-resize" : "crosshair";
+            else cv.style.cursor = markerNear(x, w) ? "ew-resize" : "pointer";
+            return;
+          }
+          const t = xToTime(x, w);
+          if (drag.kind === "edge") {
+            const before = state.regions[drag.idx][drag.edge];
+            patchRegion(drag.idx, drag.edge, t);
+            if (state.regions[drag.idx][drag.edge] !== before) drag.moved = true;
+          } else if (drag.kind === "marker") {
+            const marker = state.markers.find((m) => m.id === drag.id);
+            if (marker) {
+              const next = r3(t);
+              if (next !== marker.time) drag.moved = true;
+              marker.time = next;
+            }
+          } else {
+            drag.t = t;
+            queueSeek(drag);
+          }
+          scheduleDraw();
+        }
+
+        function onCanvasUp(e) {
+          const cv = e.currentTarget;
+          const drag = ui.drag;
+          ui.drag = null;
+          if (cv.hasPointerCapture(e.pointerId)) cv.releasePointerCapture(e.pointerId);
+          if (!drag) return;
+          if (drag.kind === "scrub") {
+            boot$.wf.seek(drag.t);
+            return;
+          }
+          if (drag.kind === "edge") {
+            const r = state.regions[drag.idx];
+            if (r) boot$.wf.set({ selection: { start: r.start, end: r.end } });
+            if (drag.moved)
+              commit(`Trim ${drag.edge === "start" ? "Start" : "End"} of R${drag.idx + 1}`);
+            else renderAll();
+            return;
+          }
+          if (drag.moved) {
+            sortMarkers(state.markers);
+            commit("Move Marker");
+          }
+        }
+
+        // ---- Bindings -------------------------------------------------------------------------
+        function bindUi() {
+          $("ae-split").addEventListener(
+            "click",
+            run(() => doSplit()),
+          );
+          $("ae-cut").addEventListener("click", run(doCut));
+          $("ae-trim").addEventListener("click", run(doTrim));
+          $("ae-remove").addEventListener("click", run(doRemoveRegion));
+          $("ae-marker").addEventListener(
+            "click",
+            run(() => doMarker()),
+          );
+          $("ae-marker-add2").addEventListener(
+            "click",
+            run(() => doMarker()),
+          );
+          $("ae-play-edit").addEventListener("click", run(togglePlayEdit));
+          $("ae-export").addEventListener("click", run(exportEditList));
+          $("ae-export2").addEventListener("click", run(exportEditList));
+          $("ae-select-cmd").addEventListener("click", run(selectCommand));
+          $("ae-source").addEventListener(
+            "change",
+            run((e) => switchSource(e.currentTarget.value)),
+          );
+
+          $("ae-r-start").addEventListener(
+            "change",
+            run((e) => editRegion("start", Number(e.currentTarget.value), "Set Start")),
+          );
+          $("ae-r-end").addEventListener(
+            "change",
+            run((e) => editRegion("end", Number(e.currentTarget.value), "Set End")),
+          );
+          const pairs = [
+            ["ae-r-gain", "gainDb", "Gain"],
+            ["ae-r-fi", "fadeIn", "Fade In"],
+            ["ae-r-fo", "fadeOut", "Fade Out"],
+          ];
+          for (const [id, key, label] of pairs) {
+            $(id).addEventListener(
+              "input",
+              run((e) => previewRegion(key, Number(e.currentTarget.value))),
+            );
+            $(id).addEventListener(
+              "change",
+              run((e) => editRegion(key, Number(e.currentTarget.value), label)),
+            );
+            $(`${id}-n`).addEventListener(
+              "change",
+              run((e) => editRegion(key, Number(e.currentTarget.value), label)),
+            );
+          }
+
+          for (const id of ["ae-strip", "ae-ruler"]) {
+            const cv = $(id);
+            cv.addEventListener("pointerdown", onCanvasDown);
+            cv.addEventListener("pointermove", onCanvasMove);
+            cv.addEventListener("pointerup", onCanvasUp);
+            cv.addEventListener("pointercancel", onCanvasUp);
+          }
+        }
+
+        function bindKeys() {
+          document.addEventListener("keydown", (e) => {
+            if (e.defaultPrevented || e.altKey) return;
+            const target = e.target;
+            if (
+              target &&
+              (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+            )
+              return;
+            if (e.ctrlKey || e.metaKey) {
+              if (e.key.toLowerCase() === "e" && !e.shiftKey) {
+                e.preventDefault();
+                run(exportEditList)();
+              }
+              return;
+            }
+            const act = {
+              s: () => doSplit(),
+              t: doTrim,
+              x: doCut,
+              m: () => doMarker(),
+              p: togglePlayEdit,
+              j: () => stepRegion(-1),
+              k: () => stepRegion(1),
+              delete: () => (selectionRange() ? doCut() : doRemoveRegion()),
+              backspace: () => (selectionRange() ? doCut() : doRemoveRegion()),
+            }[e.key.toLowerCase()];
+            if (!act) return;
+            e.preventDefault();
+            run(act)();
+          });
+        }
+
+        function observeTheme() {
+          new MutationObserver(scheduleDraw).observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ["style", "class", "data-theme"],
+          });
+          const themeTag = document.getElementById("t3-theme");
+          if (themeTag) {
+            new MutationObserver(scheduleDraw).observe(themeTag, {
+              childList: true,
+              characterData: true,
+              subtree: true,
+            });
+          }
+          window
+            .matchMedia("(prefers-color-scheme: dark)")
+            .addEventListener("change", scheduleDraw);
+          new ResizeObserver(scheduleDraw).observe($("ae-strip-wrap"));
+        }
+
+        // ---- Template API (window.t3template) -------------------------------------------------
+        // 'top': first in the inspector, above Region (in creation order); 'bottom': above Export, so a panel is never
+        // pushed below the long code boxes.
+        function addPanel(title, { open = true, position = "top" } = {}) {
+          if (typeof title !== "string" || title.trim() === "")
+            throw new TypeError("addPanel(title) needs a non-empty string");
+          const body = el("div", { class: "ae-body" });
+          $("ae-sections").insertBefore(
+            el(
+              "details",
+              { class: "ae-sec", open: Boolean(open) },
+              el("summary", {}, el("span", { text: title })),
+              body,
+            ),
+            $(position === "top" ? "ae-sec-region" : "ae-sec-export"),
+          );
+          return body;
+        }
+
+        // Region presets ({ gainDb?, fadeIn?, fadeOut? }) become buttons in the Region panel and apply to the
+        // selected region. Edit presets ({ regions?, markers? }) are history presets over the current edit.
+        function addPreset(name, values) {
+          if (typeof name !== "string" || name.trim() === "")
+            throw new TypeError("addPreset(name, values) needs a non-empty name");
+          if (!isObj(values) || Object.keys(values).length === 0)
+            throw new TypeError("addPreset(name, values) needs a values object");
+          const keys = Object.keys(values);
+          const key = name.trim();
+          if (keys.every((k) => REGION_PRESET_KEYS.includes(k))) {
+            for (const k of keys)
+              if (!Number.isFinite(values[k]))
+                throw new TypeError(`addPreset: "${k}" must be a number`);
+            regionPresets.set(key, { ...values });
+            renderRegionPresets();
+            return key;
+          }
+          if (keys.every((k) => EDIT_PRESET_KEYS.includes(k))) {
+            const next = editState();
+            if (values.regions !== undefined)
+              next.regions = checkRegions(values.regions, state.duration);
+            if (values.markers !== undefined)
+              next.markers = checkMarkers(values.markers, state.duration);
+            boot$.hist.savePreset(key, next);
+            return key;
+          }
+          throw new TypeError(
+            `addPreset: use region keys (${REGION_PRESET_KEYS.join(", ")}) or edit keys (${EDIT_PRESET_KEYS.join(", ")}), not both`,
+          );
+        }
+
+        function applyPreset(name) {
+          if (regionPresets.has(name)) return applyRegionPreset(name);
+          boot$.hist.applyPreset(name);
+          return true;
+        }
+
+        // Scripted edit: { regions?, markers?, selection? }. Strict: throws without applying anything.
+        // regions and markers become one undoable step named label; selection alone is view state.
+        function setValues(partial, label = "Script Edit") {
+          if (!isObj(partial)) throw new TypeError("setValues(partial) needs an object");
+          for (const k of Object.keys(partial)) {
+            if (!["regions", "markers", "selection"].includes(k))
+              throw new TypeError(
+                `setValues: unknown key "${k}" (use regions, markers, selection)`,
+              );
+          }
+          const regions =
+            partial.regions !== undefined ? checkRegions(partial.regions, state.duration) : null;
+          const markers =
+            partial.markers !== undefined ? checkMarkers(partial.markers, state.duration) : null;
+          const selection =
+            partial.selection !== undefined
+              ? checkSelection(partial.selection, state.duration)
+              : undefined;
+          if (regions) state.regions = regions;
+          if (markers) state.markers = markers;
+          if (selection !== undefined) boot$.wf.set({ selection });
+          if (regions || markers) commit(String(label));
+          else onWaveChange();
+          return getValues();
+        }
+
+        function createRuntime() {
+          return kit.templateRuntime.create({
+            id: "audio-edit",
+            pipeline: "edl",
+            addPanel,
+            async export() {
+              const done = await exportFiles();
+              if (!done) throw new Error("audio-edit: nothing to export, the edit list is empty");
+              return done;
+            },
+            // Bolt-on audio filters (addAudioFilter) play live through the waveform's Web Audio output, as ffmpeg renders them.
+            audioPreview: () => (boot$.wf ? [boot$.wf] : []),
+            toolbar: $("ae-custom"),
+            buttonClass: "ae-btn",
+            getValues: () => getValues(),
+            setValues: (partial, label) => setValues(partial, label),
+            addPreset,
+            applyPreset,
+            reservedKeys: [
+              "s",
+              "t",
+              "x",
+              "m",
+              "p",
+              "j",
+              "k",
+              "delete",
+              "backspace",
+              "mod+e",
+              "mod+z",
+              "mod+shift+z",
+              "space",
+            ],
+            onBoltOnChange() {
+              if (!boot$.ready) return;
+              renderExport();
+              persistSoon();
+            },
+          });
+        }
+
+        function publishTemplateApi(saved) {
+          rt.publish({
+            instances: { waveform: boot$.wf, history: boot$.hist },
+            saved,
+            extras: {
+              links: { history: boot$.link },
+              actions: {
+                split: (time) => doSplit(time),
+                cut: doCut,
+                trim: doTrim,
+                removeRegion: doRemoveRegion,
+                addMarker: (time, label) => doMarker(time, label),
+                selectRegion: (index) => {
+                  const r = state.regions[index];
+                  if (!r) throw new RangeError(`selectRegion: no region at index ${index}`);
+                  selectRegion(r.id);
+                },
+                playEdit: togglePlayEdit,
+              },
+              exportEditList,
+              buildEditList: buildEdl,
+            },
+          });
+        }
+
+        // ---- Boot -----------------------------------------------------------------------------
+        async function boot() {
+          const opts = readOptions();
+          boot$.opts = opts;
+          $("ae-title").textContent = opts.title;
+          document.title = opts.title;
+          setStatus("Loading media...");
+
+          const workspace = window.t3.workspace;
+          const info = await workspace.ready();
+          media.list = (info.assets ?? []).filter(
+            (a) => /^(audio|video)\//.test(a.mimeType || "") || MEDIA_EXT.test(a.name || ""),
+          );
+          if (media.list.length === 0) {
+            showBanner("Attach an audio or video file to edit its sound.");
+            setStatus("No media to edit.");
+            return;
+          }
+          if (media.list.length > 1) {
+            const select = $("ae-source");
+            select.replaceChildren(...media.list.map((a) => new Option(a.name, a.name)));
+            select.hidden = false;
+          }
+
+          const saved = info.state ?? (await workspace.initialState()) ?? null;
+          const savedSource =
+            isObj(saved) && media.list.some((a) => a.name === saved.source)
+              ? saved.source
+              : media.list[0].name;
+
+          boot$.wf = kit.waveform.create($("ae-wave"), {
+            height: 200,
+            controls: true,
+            overview: true,
+            follow: true,
+            normalize: true,
+          });
+          boot$.wf.on("change", onWaveChange);
+          boot$.wf.on("playhead", onPlayhead);
+          boot$.wf.on("playback", onPlaybackChange);
+          boot$.wf.on("error", (err) => reportError(err, "Waveform"));
+
+          const duration = await loadSource(savedSource);
+          state.duration = duration;
+          const savedHistory = restoredStep(saved, duration, savedSource);
+          const initial = freshEdit(savedSource, duration);
+          adoptEdit(initial, duration);
+
+          boot$.hist = kit.history.create($("ae-history"), {
+            state: initial,
+            label: "Original",
+            title: "History",
+            limit: 200,
+          });
+          if (savedHistory) boot$.hist.set(savedHistory);
+          // The link applies the active step through applyEdit, so a restored history wins over the options.
+          // Bolt-on control edits are steps too: the runtime adds their values to every step and restores them on undo.
+          boot$.link = rt.linkHistory(boot$.hist, editState, applyEdit);
+          boot$.hist.on("change", persistSoon);
+
+          const initialSel =
+            savedHistory && saved.selection
+              ? checkSelection(saved.selection, duration)
+              : checkSelection({ start: opts.selectionStart, end: opts.selectionEnd }, duration);
+          if (initialSel) boot$.wf.set({ selection: initialSel });
+          const inSel =
+            initialSel &&
+            state.regions.find((r) => r.start <= initialSel.start && initialSel.end <= r.end);
+          ui.selectedId = (inSel ?? state.regions[0])?.id ?? null;
+
+          for (const [name, values] of BUILTIN_REGION_PRESETS) regionPresets.set(name, values);
+          publishTemplateApi(isObj(saved) ? saved.controls : undefined);
+          bindUi();
+          bindKeys();
+          observeTheme();
+          renderRegionPresets();
+          boot$.ready = true;
+          renderAll();
+          setStatus(
+            "Drag on the waveform to select. S split, T trim, X cut, M marker, P play edit, J/K regions.",
+          );
+
+          rt.runCustomScript(opts.customScript, opts);
+        }
+
+        rt = createRuntime();
+        boot().catch((err) => reportError(err, "Could not start the editor"));
+      })();
+    </script>
+  </body>
+</html>

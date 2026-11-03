@@ -1,0 +1,4166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Transcript Cut</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.45 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      kbd {
+        display: inline-block;
+        min-width: 16px;
+        padding: 0 4px;
+        border: 1px solid var(--border);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        font: 10px/14px var(--font-mono);
+        text-align: center;
+        color: var(--muted-foreground);
+        background: var(--background);
+      }
+      .app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        min-height: 0;
+      }
+      .top {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 44px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+      }
+      .top h1 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 32vw;
+      }
+      .tc {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .status {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        max-width: 36vw;
+      }
+      .toolbar {
+        display: flex;
+        gap: 6px;
+      }
+      .toolbar:empty {
+        display: none;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--card);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) {
+        background: var(--muted);
+      }
+      .btn:focus-visible,
+      .iconbtn:focus-visible,
+      .seg button:focus-visible,
+      .tab:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .btn.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .btn.primary:hover:not(:disabled) {
+        background: var(--primary);
+        opacity: 0.9;
+      }
+      .btn.primary kbd {
+        color: var(--primary-foreground);
+        border-color: color-mix(in srgb, var(--primary-foreground) 45%, transparent);
+        background: transparent;
+      }
+      .btn.suggest {
+        border-style: dashed;
+        border-color: var(--info);
+        color: var(--info);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .btn.sm {
+        height: 22px;
+        padding: 0 7px;
+        font-size: 11px;
+      }
+      .btn[hidden] {
+        display: none;
+      }
+      .iconbtn {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 0;
+        border-radius: calc(var(--radius) - 3px);
+        background: transparent;
+        cursor: pointer;
+        color: var(--foreground);
+      }
+      .iconbtn:hover:not(:disabled) {
+        background: var(--muted);
+      }
+      .iconbtn:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .iconbtn svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+      .iconbtn.play {
+        width: 30px;
+        height: 30px;
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .iconbtn.play:hover:not(:disabled) {
+        background: var(--primary);
+        opacity: 0.9;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 3px);
+        overflow: hidden;
+      }
+      .seg button {
+        height: 22px;
+        padding: 0 8px;
+        border: 0;
+        background: var(--card);
+        font-size: 11px;
+        cursor: pointer;
+        color: var(--muted-foreground);
+      }
+      .seg button + button {
+        border-left: 1px solid var(--border);
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .stage {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr) 408px;
+      }
+      .pane-head {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .pane-head b,
+      .label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .muted {
+        color: var(--muted-foreground);
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---- Library: search and clips ---- */
+      .lib {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+        background: var(--card);
+      }
+      .search {
+        flex: none;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .search-box {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 8px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--background);
+      }
+      .search-box:focus-within {
+        border-color: var(--ring);
+      }
+      .search-box svg {
+        width: 13px;
+        height: 13px;
+        fill: var(--muted-foreground);
+        flex: none;
+      }
+      .search-box input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+      }
+      .search-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .lib-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 4px 0;
+      }
+      .clip-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 8px;
+        width: 100%;
+        padding: 6px 10px 7px;
+        border: 0;
+        border-left: 2px solid transparent;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+      .clip-row:hover {
+        background: var(--muted);
+      }
+      .clip-row[aria-current="true"] {
+        border-left-color: var(--primary);
+        background: color-mix(in srgb, var(--primary) 8%, transparent);
+      }
+      .clip-row:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: -2px;
+      }
+      .clip-name {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .clip-dur {
+        font: 11px var(--font-mono);
+        color: var(--muted-foreground);
+        text-align: right;
+      }
+      .clip-sub {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        grid-column: 1 / -1;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        height: 16px;
+        padding: 0 5px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font: 10px/1 var(--font-mono);
+        white-space: nowrap;
+      }
+      .chip.pick {
+        border-color: color-mix(in srgb, var(--primary) 50%, transparent);
+        color: var(--foreground);
+        background: color-mix(in srgb, var(--primary) 14%, transparent);
+      }
+      .chip.sugg {
+        border-style: dashed;
+        border-color: var(--info);
+        color: var(--info);
+      }
+      .chip.warn {
+        border-color: var(--warning);
+        color: var(--warning);
+      }
+      .cover {
+        position: relative;
+        grid-column: 1 / -1;
+        height: 3px;
+        margin-top: 3px;
+        border-radius: 2px;
+        background: var(--muted);
+        overflow: hidden;
+      }
+      .cover i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: var(--primary);
+      }
+      .cover i.g {
+        background: var(--info);
+        opacity: 0.6;
+      }
+      .result {
+        display: block;
+        width: 100%;
+        padding: 6px 10px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+      .result:hover,
+      .result[aria-selected="true"] {
+        background: var(--muted);
+      }
+      .result-head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .result mark {
+        background: color-mix(in srgb, var(--warning) 35%, transparent);
+        color: inherit;
+        border-radius: 2px;
+      }
+      .lib-foot {
+        flex: none;
+        padding: 6px 10px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .empty {
+        padding: 10px;
+        color: var(--muted-foreground);
+      }
+
+      /* ---- Transcript ---- */
+      .doc {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--background);
+      }
+      .doc-head .sel-info {
+        font: 11px var(--font-mono);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .doc-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        outline: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .doc-scroll:focus-visible {
+        box-shadow: inset 0 0 0 2px var(--ring);
+      }
+      .tclip {
+        padding: 0 0 14px;
+      }
+      .tclip-head {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--border);
+        background: var(--background);
+      }
+      .tclip-head .clip-name {
+        font-size: 12px;
+      }
+      .tclip-head .src {
+        font: 11px var(--font-mono);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .para {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr);
+        gap: 10px;
+        padding: 5px 18px 5px 8px;
+        font-size: 14.5px;
+        line-height: 1.75;
+        max-width: 860px;
+      }
+      .para .ts {
+        padding-top: 3px;
+        font: 10.5px/1.9 var(--font-mono);
+        color: var(--muted-foreground);
+        text-align: right;
+        cursor: pointer;
+      }
+      .para .ts:hover {
+        color: var(--foreground);
+      }
+      .words {
+        color: color-mix(in srgb, var(--foreground) 74%, transparent);
+      }
+      .w {
+        border-radius: 2px;
+        cursor: text;
+      }
+      .w:hover {
+        color: var(--foreground);
+        text-decoration: underline;
+        text-decoration-color: var(--border);
+        text-underline-offset: 4px;
+      }
+      /* A pick: solid tint; the shadow fills the following space so a pick reads as one run. */
+      .w.p {
+        color: var(--foreground);
+        background: color-mix(in srgb, var(--primary) 26%, var(--background));
+        box-shadow: 0.4em 0 0 color-mix(in srgb, var(--primary) 26%, var(--background));
+      }
+      .w.p.pe {
+        box-shadow: none;
+      }
+      .w.p.k {
+        background: color-mix(in srgb, var(--primary) 42%, var(--background));
+        box-shadow: 0.4em 0 0 color-mix(in srgb, var(--primary) 42%, var(--background));
+      }
+      .w.p.k.pe {
+        box-shadow: none;
+      }
+      /* The agent's suggestion: dashed and in the info colour until the user takes it. */
+      .w.g {
+        color: var(--foreground);
+        background: color-mix(in srgb, var(--info) 9%, var(--background));
+        box-shadow: 0.4em 0 0 color-mix(in srgb, var(--info) 9%, var(--background));
+        text-decoration: underline dashed var(--info);
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 4px;
+      }
+      .w.g.pe {
+        box-shadow: none;
+      }
+      .w.g.k {
+        background: color-mix(in srgb, var(--info) 20%, var(--background));
+        box-shadow: 0.4em 0 0 color-mix(in srgb, var(--info) 20%, var(--background));
+      }
+      .w.g.k.pe {
+        box-shadow: none;
+      }
+      .w.hit {
+        background: color-mix(in srgb, var(--warning) 32%, var(--background));
+      }
+      .w.sel {
+        color: var(--foreground);
+        background: color-mix(in srgb, var(--ring) 34%, var(--background));
+        box-shadow: 0.4em 0 0 color-mix(in srgb, var(--ring) 34%, var(--background));
+      }
+      .w.sel.se {
+        box-shadow: none;
+      }
+      .w.cur {
+        outline: 1.5px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .w.now {
+        color: var(--primary-foreground);
+        background: var(--primary);
+        box-shadow: none;
+      }
+      .only .para.off {
+        display: none;
+      }
+      .only .tclip.off {
+        display: none;
+      }
+      .only .w:not(.p):not(.g) {
+        opacity: 0.4;
+      }
+      .silent {
+        padding: 8px 18px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .silent-head {
+        margin-bottom: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .silent-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .silent-clip {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        height: 22px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        background: var(--card);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .silent-clip:hover {
+        background: var(--muted);
+      }
+      .silent-clip[aria-current="true"] {
+        border-color: var(--ring);
+      }
+      .silent-clip:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .only .silent,
+      .hide-silent .silent {
+        display: none;
+      }
+      .clip-row.silent-row {
+        padding-top: 4px;
+        padding-bottom: 4px;
+      }
+      .clip-row.silent-row .clip-name {
+        font-weight: 400;
+        color: var(--muted-foreground);
+      }
+      .clip-row.silent-row .clip-sub,
+      .clip-row.silent-row .cover {
+        display: none;
+      }
+      .clip-row.silent-row .clip-dur::before {
+        content: "no speech · ";
+        font-family: var(--font-sans);
+      }
+      .hide-silent .clip-row.silent-row {
+        display: none;
+      }
+      .lib-foot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .lib-foot label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: auto;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .lib-foot label[hidden] {
+        display: none;
+      }
+      .lib-foot input {
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .tclip-nomedia {
+        padding: 2px 18px 0 70px;
+        font-size: 11px;
+        color: var(--warning);
+      }
+      .doc-foot {
+        flex: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        padding: 6px 12px;
+        border-top: 1px solid var(--border);
+        background: var(--card);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      /* ---- Inspector ---- */
+      .insp {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--border);
+        background: var(--card);
+      }
+      .monitor {
+        position: relative;
+        flex: none;
+        height: clamp(200px, 34vh, 380px);
+        background: var(--muted);
+        border-bottom: 1px solid var(--border);
+      }
+      /* Portrait footage (iPhone 9:16) gets a taller monitor. */
+      .monitor.portrait {
+        height: clamp(240px, 42vh, 540px);
+      }
+      .player {
+        position: absolute;
+        inset: 0;
+      }
+      .monitor-note {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        color: var(--muted-foreground);
+        pointer-events: none;
+      }
+      .monitor-note[hidden] {
+        display: none;
+      }
+      .monitor-note span {
+        max-width: 280px;
+        padding: 6px 10px;
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--popover);
+        border: 1px solid var(--border);
+      }
+      .mode-tag {
+        position: absolute;
+        left: 8px;
+        top: 8px;
+        padding: 1px 7px;
+        border-radius: calc(var(--radius) - 4px);
+        border: 1px solid var(--border);
+        background: var(--popover);
+        font: 10.5px/1.6 var(--font-mono);
+        pointer-events: none;
+        max-width: calc(100% - 16px);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .transport {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 10px;
+      }
+      .transport .tc {
+        margin-left: 6px;
+        color: var(--foreground);
+      }
+      .strip {
+        flex: none;
+        position: relative;
+        display: flex;
+        height: 30px;
+        margin: 0 10px 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--muted);
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .strip-empty {
+        margin: auto;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .blk {
+        position: relative;
+        min-width: 3px;
+        height: 100%;
+        border-right: 1px solid var(--card);
+        overflow: hidden;
+        font: 10px/28px var(--font-mono);
+        padding-left: 4px;
+        white-space: nowrap;
+        color: var(--foreground);
+      }
+      .blk[aria-current="true"] {
+        box-shadow: inset 0 0 0 2px var(--ring);
+      }
+      .blk.nomedia {
+        background-image: repeating-linear-gradient(
+          135deg,
+          transparent 0 4px,
+          color-mix(in srgb, var(--warning) 30%, transparent) 4px 6px
+        );
+      }
+      .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        margin-left: -1px;
+        background: var(--foreground);
+        pointer-events: none;
+      }
+      .meter {
+        flex: none;
+        padding: 0 10px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .meter-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 5px;
+      }
+      .meter-row .big {
+        font: 600 15px var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .meter-row .delta {
+        font: 11px var(--font-mono);
+      }
+      .delta.ok {
+        color: var(--success);
+      }
+      .delta.over {
+        color: var(--warning);
+      }
+      .delta.under {
+        color: var(--muted-foreground);
+      }
+      .bar {
+        position: relative;
+        height: 8px;
+        border-radius: 4px;
+        background: var(--muted);
+      }
+      .bar i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+      }
+      .bar .fill {
+        left: 0;
+        border-radius: 4px;
+        background: var(--primary);
+      }
+      .bar .fill.over {
+        background: var(--warning);
+      }
+      .bar .ghost {
+        background: repeating-linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--info) 55%, transparent) 0 3px,
+          transparent 3px 6px
+        );
+      }
+      .bar .target {
+        top: -4px;
+        bottom: -4px;
+        width: 2px;
+        margin-left: -1px;
+        border-radius: 1px;
+        background: var(--foreground);
+      }
+      .panel {
+        flex: none;
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel-body {
+        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .tabs {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 34px;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .tab {
+        height: 26px;
+        padding: 0 9px;
+        border: 0;
+        border-radius: calc(var(--radius) - 3px);
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        cursor: pointer;
+      }
+      .tab[aria-selected="true"] {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .tabpanel {
+        flex: 1 1 0;
+        min-height: 96px;
+        overflow-y: auto;
+      }
+      .tabpanel[hidden] {
+        display: none;
+      }
+      .history-host {
+        height: 100%;
+        min-height: 180px;
+      }
+      .entry {
+        position: relative;
+        display: grid;
+        grid-template-columns: 14px 20px minmax(0, 1fr) auto;
+        gap: 0 6px;
+        align-items: start;
+        padding: 7px 10px 7px 6px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+      }
+      .entry:hover {
+        background: color-mix(in srgb, var(--foreground) 4%, transparent);
+      }
+      .entry[aria-selected="true"] {
+        background: color-mix(in srgb, var(--primary) 9%, transparent);
+        box-shadow: inset 2px 0 0 var(--primary);
+      }
+      .entry.sugg {
+        background: color-mix(in srgb, var(--info) 5%, transparent);
+      }
+      .entry.sugg::after {
+        content: "";
+        position: absolute;
+        inset: 3px 4px;
+        border: 1px dashed color-mix(in srgb, var(--info) 70%, transparent);
+        border-radius: calc(var(--radius) - 3px);
+        pointer-events: none;
+      }
+      .entry.sugg[aria-selected="true"] {
+        box-shadow: inset 2px 0 0 var(--info);
+      }
+      .entry.drop-before {
+        box-shadow: inset 0 2px 0 var(--ring);
+      }
+      .entry.drop-after {
+        box-shadow: inset 0 -2px 0 var(--ring);
+      }
+      .entry.dragging {
+        opacity: 0.5;
+      }
+      .grip {
+        width: 14px;
+        height: 30px;
+        cursor: grab;
+        touch-action: none;
+        background: radial-gradient(circle, var(--muted-foreground) 1px, transparent 1.4px) 0 0 /
+          5px 5px;
+        opacity: 0.45;
+      }
+      .grip:hover {
+        opacity: 0.9;
+      }
+      .num {
+        font: 600 11px/20px var(--font-mono);
+        color: var(--muted-foreground);
+        text-align: right;
+      }
+      .entry-main {
+        min-width: 0;
+      }
+      .entry-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        line-height: 20px;
+      }
+      .entry-head .clip-name {
+        color: var(--foreground);
+        font-size: 11px;
+        max-width: 150px;
+      }
+      .tag {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .tag.sugg {
+        color: var(--info);
+      }
+      .tag.taken {
+        color: var(--success);
+      }
+      .tag.changed {
+        color: var(--warning);
+      }
+      .entry-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        font-size: 12.5px;
+        line-height: 1.45;
+      }
+      .entry-note {
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-style: italic;
+      }
+      .entry-dur {
+        font: 11px/20px var(--font-mono);
+        color: var(--muted-foreground);
+        text-align: right;
+        white-space: nowrap;
+      }
+      .entry-tools {
+        grid-column: 3 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 6px;
+        margin-top: 6px;
+      }
+      .entry-tools .grp {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .entry-tools .iconbtn {
+        width: 22px;
+        height: 22px;
+        border: 1px solid var(--border);
+      }
+      .entry-tools input[type="number"] {
+        width: 52px;
+        height: 22px;
+        padding: 0 4px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        font: 11px var(--font-mono);
+      }
+      .entry-tools textarea {
+        width: 100%;
+        min-height: 40px;
+        padding: 4px 6px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        resize: vertical;
+        font-size: 12px;
+      }
+      .entry-tools > .entry-note {
+        flex-basis: 100%;
+        margin: 0 0 2px;
+      }
+      .entry-tools .spacer {
+        flex: 1;
+      }
+      .budget {
+        padding: 6px 10px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        border-top: 1px solid var(--border);
+      }
+      .budget.bad {
+        color: var(--warning);
+      }
+      .composer {
+        width: 100%;
+        min-width: 320px;
+        flex: none;
+        margin-top: auto;
+      }
+      .app.native .page-chrome {
+        display: none;
+      }
+      @media (max-width: 1180px) {
+        .stage {
+          grid-template-columns: 210px minmax(0, 1fr) 360px;
+        }
+      }
+      @media (max-width: 900px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          min-height: 100vh;
+        }
+        .stage {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .lib {
+          max-height: 40vh;
+        }
+        .doc {
+          height: 70vh;
+        }
+        .insp {
+          border-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="top">
+        <h1 id="title">Transcript Cut</h1>
+        <span class="tc" id="tc">00:00.0 / 00:00.0</span>
+        <span class="grow"></span>
+        <span class="status" id="status" aria-live="polite"></span>
+        <div class="toolbar page-chrome" id="toolbar"></div>
+        <button
+          class="btn suggest page-chrome"
+          id="acceptAll"
+          type="button"
+          hidden
+          title="Take every pending suggestion as it is, in its place in the order (Shift+A)"
+        >
+          Accept All <kbd>⇧A</kbd>
+        </button>
+        <button
+          class="btn page-chrome"
+          id="export"
+          type="button"
+          title="Download and attach the EDL, the ffmpeg render script and the SRT captions (E)"
+        >
+          Export
+        </button>
+        <button
+          class="btn primary"
+          id="send"
+          type="button"
+          title="Send the cut to the agent: a summary plus the EDL and captions (Cmd/Ctrl+Enter)"
+        >
+          Send <kbd id="sendKey">⌘↵</kbd>
+        </button>
+      </header>
+      <main class="stage">
+        <aside class="lib" aria-label="Clips">
+          <div class="search">
+            <label class="search-box">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M7 2a5 5 0 0 1 3.9 8.1l3 3-1 1-3-3A5 5 0 1 1 7 2zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"
+                />
+              </svg>
+              <input
+                id="search"
+                type="search"
+                placeholder="Search all transcripts"
+                aria-label="Search all transcripts (/)"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <kbd>/</kbd>
+            </label>
+            <div class="search-meta" id="searchMeta" hidden></div>
+          </div>
+          <div class="lib-list" id="libList" role="list"></div>
+          <div class="lib-foot">
+            <span id="libStats"></span>
+            <label
+              id="hideSilentWrap"
+              hidden
+              title="Hide clips whose transcript has no words (B-roll)"
+            >
+              <input type="checkbox" id="hideSilent" /> Hide no speech
+            </label>
+          </div>
+        </aside>
+        <section class="doc" aria-label="Transcript">
+          <div class="pane-head doc-head">
+            <b>Transcript</b>
+            <span class="sel-info" id="selInfo"></span>
+            <span class="grow"></span>
+            <div class="seg" role="group" aria-label="Transcript view">
+              <button type="button" id="viewAll" aria-pressed="true" title="Every word (D toggles)">
+                All
+              </button>
+              <button
+                type="button"
+                id="viewPicked"
+                aria-pressed="false"
+                title="Only paragraphs with picks or suggestions (D toggles)"
+              >
+                Picked
+              </button>
+            </div>
+            <button
+              class="btn sm"
+              id="follow"
+              type="button"
+              aria-pressed="true"
+              title="Scroll the transcript with playback (F)"
+            >
+              Follow
+            </button>
+          </div>
+          <div
+            class="doc-scroll"
+            id="doc"
+            tabindex="0"
+            role="application"
+            aria-label="Transcript words: drag or Shift+arrows to select, Enter to pick, Backspace to remove"
+          ></div>
+          <div class="doc-foot" id="legend">
+            <span><kbd>drag</kbd> / <kbd>⇧</kbd><kbd>←→</kbd> select</span>
+            <span><kbd>↵</kbd> pick</span>
+            <span><kbd>⌫</kbd> remove</span>
+            <span><kbd>S</kbd> sentence</span>
+            <span><kbd>A</kbd> accept · <kbd>⇧A</kbd> all · <kbd>X</kbd> reject</span>
+            <span><kbd>[</kbd><kbd>]</kbd> extend · <kbd>{</kbd><kbd>}</kbd> shrink</span>
+            <span><kbd>⌥↑↓</kbd> reorder</span>
+            <span><kbd>N</kbd> next pick</span>
+            <span><kbd>Space</kbd> play · <kbd>M</kbd> source</span>
+          </div>
+        </section>
+        <aside class="insp" id="insp" aria-label="Program">
+          <div class="monitor" id="monitor">
+            <div class="player" id="player"></div>
+            <div class="mode-tag" id="modeTag">Program</div>
+            <div class="monitor-note" id="monitorNote" hidden>
+              <span id="monitorNoteText"></span>
+            </div>
+          </div>
+          <div class="transport">
+            <button class="iconbtn" id="prevPick" type="button" title="Previous pick (Shift+N)">
+              <svg viewBox="0 0 16 16"><path d="M3 3h1.6v10H3zM13 3v10L5.4 8z" /></svg>
+            </button>
+            <button class="iconbtn play" id="play" type="button" title="Play / pause (Space)">
+              <svg viewBox="0 0 16 16"><path id="playIcon" d="M5 3v10l8-5z" /></svg>
+            </button>
+            <button class="iconbtn" id="nextPick" type="button" title="Next pick (N)">
+              <svg viewBox="0 0 16 16"><path d="M3 3v10l7.6-5zM11.4 3H13v10h-1.6z" /></svg>
+            </button>
+            <span class="tc" id="ptc">00:00.0 / 00:00.0</span>
+            <span class="grow"></span>
+            <div class="seg" role="group" aria-label="Monitor">
+              <button type="button" id="modeProgram" aria-pressed="true" title="Play the cut (M)">
+                Program
+              </button>
+              <button
+                type="button"
+                id="modeSource"
+                aria-pressed="false"
+                title="Play the clip under the cursor, uncut (M)"
+              >
+                Source
+              </button>
+            </div>
+          </div>
+          <div class="strip" id="strip" title="The cut, pick by pick: click to seek"></div>
+          <div class="meter" id="meter"></div>
+          <div class="tabs" role="tablist" id="tabs">
+            <button class="tab" role="tab" id="tabPicks" aria-selected="true" type="button">
+              Picks
+            </button>
+            <button class="tab" role="tab" id="tabHistory" aria-selected="false" type="button">
+              History
+            </button>
+            <span class="grow"></span>
+            <span class="muted" id="pickCount"></span>
+          </div>
+          <div class="tabpanel" id="picksPanel" role="tabpanel"></div>
+          <div class="tabpanel" id="historyPanel" role="tabpanel" hidden>
+            <div class="history-host" id="history"></div>
+          </div>
+          <div class="budget" id="budget"></div>
+          <div class="composer" id="composer" data-t3-composer></div>
+        </aside>
+      </main>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+
+        // ---- Options and constants -------------------------------------------------
+        const DEFAULTS = {
+          title: "Transcript Cut",
+          clips: [],
+          highlights: [],
+          accept: false,
+          targetSeconds: 60,
+          padding: 0.08,
+          fade: 0.02,
+          frame: "auto",
+          resolution: 1080,
+          customScript: "",
+          controls: {},
+        };
+        const FRAMES = { "9:16": [9, 16], "16:9": [16, 9], "1:1": [1, 1], "4:5": [4, 5] };
+        const RESOLUTIONS = [0, 720, 1080, 1440, 2160];
+        const MEDIA_RE = /\.(mp4|mov|m4v|webm|mkv|m4a|mp3|wav|aac|ogg|opus)$/i;
+        const STATE_BUDGET = 60000; // bytes of the 64 KB state the page lets itself use
+        const MAX_PAD = 2;
+        const PARA_GAP = 1.2; // seconds of silence that start a new paragraph
+        const PARA_MIN = 14; // a sentence end after this many seconds starts one too
+        const PARA_MAX = 40;
+        const MAX_RESULTS = 200;
+        const RESERVED = [
+          "space",
+          "enter",
+          "backspace",
+          "delete",
+          "escape",
+          "a",
+          "shift+a",
+          "x",
+          "s",
+          "[",
+          "]",
+          "{",
+          "}",
+          "n",
+          "shift+n",
+          "m",
+          "d",
+          "f",
+          "e",
+          "/",
+          "mod+enter",
+          "mod+z",
+          "mod+shift+z",
+          "mod+y",
+        ];
+        const ICON_PLAY = "M5 3v10l8-5z";
+        const ICON_PAUSE = "M4 3h3v10H4zM9 3h3v10H9z";
+        const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+        // ---- Small helpers ---------------------------------------------------------
+        const $ = (id) => document.getElementById(id);
+        const el = (tag, cls, text) => {
+          const n = document.createElement(tag);
+          if (cls) n.className = cls;
+          if (text !== undefined) n.textContent = text;
+          return n;
+        };
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        const r3 = (v) => Math.round(v * 1000) / 1000;
+        const num = (v) =>
+          Number(v)
+            .toFixed(3)
+            .replace(/\.?0+$/, "") || "0";
+        const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+        const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+        const fmtT = (t) => {
+          const s = Math.max(0, t);
+          const m = Math.floor(s / 60);
+          return `${String(m).padStart(2, "0")}:${(s - m * 60).toFixed(1).padStart(4, "0")}`;
+        };
+        const fmtLen = (t) => {
+          const s = Math.round(Math.max(0, t));
+          return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+        };
+        const fmtDelta = (d) => `${d < 0 ? "−" : "+"}${fmtLen(Math.abs(d))}`;
+        const srtTime = (t) => {
+          const ms = Math.max(0, Math.round(t * 1000));
+          const p = (n, w = 2) => String(n).padStart(w, "0");
+          return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+        };
+        const baseName = (n) => String(n).replace(/\.[^./]+$/, "");
+        const slug = (s) =>
+          String(s)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "cut";
+        const shellQuote = (s) => `"${String(s).replace(/(["\\$`])/g, "\\$1")}"`;
+        const sq = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+        const normWord = (t) =>
+          String(t)
+            .toLowerCase()
+            .replace(/[\u2019']/g, "'")
+            .replace(/[^\p{L}\p{N}']+/gu, "");
+        const isMediaAsset = (a) =>
+          /^(video|audio)\//.test(a.mimeType ?? "") || MEDIA_RE.test(a.name ?? "");
+        const isTranscriptName = (n) => /\.json$/i.test(n ?? "");
+
+        // ---- State -------------------------------------------------------------------
+        // clips[i] = { key, label, media (asset name | null), url, source (absolute path), transcript (asset name),
+        //   duration, words: [{ s, e, t, n (normalised), seg, sentEnd }], segs: [{ a, b, s }], meta (probed size) }
+        // seq: the ordered cut. Each entry is a pick { kind: 'pick', id, c, a, b, pi, po, note, sg } (a..b = word
+        //   indices in clip c, pi/po = handles in seconds or null for the default, sg = the suggestion it came from)
+        //   or a pending suggestion { kind: 'sugg', sid }. suggestions: [{ id, c, a, b, note }] from options.
+        const clips = [];
+        const byKey = new Map();
+        const suggestions = [];
+        const suggById = new Map();
+        let seq = [];
+        let nextPick = 1;
+        let opts = null;
+        let rt = null;
+        let api = null;
+        let player = null;
+        let history = null;
+        let historyLink = null;
+        const ui = {};
+        const wordEls = []; // wordEls[c][i] -> span
+        const paraEls = []; // paraEls[c][segIndex] -> element
+        const clipEls = []; // clip section in the transcript
+        const wordClass = []; // last class string per word, so updates only touch what changed
+        let cursor = { c: 0, i: 0 };
+        let anchor = null; // { c, i } of a selection
+        let selection = null; // { c, a, b } or null
+        let selId = null; // selected entry: pick id or 'g:' + suggestion id
+        let mode = "program"; // 'program' | 'source'
+        let sourceClip = -1;
+        let program = []; // [{ entry, start, in, out, dur }]
+        let programKey = "";
+        let nowWord = null; // { c, i }
+        let follow = true;
+        let pickedOnly = false;
+        let hits = []; // search results [{ c, a, b }]
+        let hitIndex = -1;
+        let saveTimer = 0;
+        let stateBytes = 0;
+        let unsaved = false;
+        const probes = new Map(); // media name -> Promise<{ width, height, duration }>
+        const probed = new Map(); // media name -> { width, height, duration }
+
+        // ---- Options -------------------------------------------------------------------
+        function pickOption(raw, key, ok) {
+          if (raw[key] === undefined) return structuredClone(DEFAULTS[key]);
+          if (ok(raw[key])) return raw[key];
+          console.warn(
+            `transcript-cut: option "${key}" is invalid, using ${JSON.stringify(DEFAULTS[key])}`,
+          );
+          return structuredClone(DEFAULTS[key]);
+        }
+        const isNonNeg = (v) => isNum(v) && v >= 0;
+        const optStr = (v) => v === undefined || typeof v === "string";
+        const clipsOk = (v) =>
+          Array.isArray(v) &&
+          v.every(
+            (c) =>
+              isObj(c) &&
+              Object.keys(c).every((k) => ["media", "transcript", "source", "label"].includes(k)) &&
+              typeof c.transcript === "string" &&
+              optStr(c.media) &&
+              optStr(c.label) &&
+              (c.source === undefined ||
+                (typeof c.source === "string" && /^(\/|[a-z]:[\\/])/i.test(c.source))),
+          );
+        const highlightsOk = (v) =>
+          Array.isArray(v) &&
+          v.every(
+            (h) =>
+              isObj(h) &&
+              Object.keys(h).every((k) => ["clip", "start", "end", "note", "order"].includes(k)) &&
+              typeof h.clip === "string" &&
+              isNonNeg(h.start) &&
+              isNonNeg(h.end) &&
+              h.end > h.start &&
+              optStr(h.note) &&
+              (h.order === undefined || isNum(h.order)),
+          );
+        function readOptions() {
+          const raw = JSON.parse(
+            document.getElementById("t3-template-options")?.textContent || "{}",
+          );
+          return {
+            title: pickOption(raw, "title", (v) => typeof v === "string" && v.trim() !== ""),
+            clips: pickOption(raw, "clips", clipsOk),
+            highlights: pickOption(raw, "highlights", highlightsOk),
+            accept: pickOption(raw, "accept", (v) => typeof v === "boolean"),
+            targetSeconds: pickOption(raw, "targetSeconds", isNonNeg),
+            padding: pickOption(raw, "padding", (v) => isNonNeg(v) && v <= MAX_PAD),
+            fade: pickOption(raw, "fade", (v) => isNonNeg(v) && v <= 1),
+            frame: pickOption(raw, "frame", (v) => v === "auto" || Object.hasOwn(FRAMES, v)),
+            resolution: pickOption(raw, "resolution", (v) => RESOLUTIONS.includes(v)),
+            customScript: pickOption(raw, "customScript", (v) => typeof v === "string"),
+            controls: pickOption(raw, "controls", isObj),
+          };
+        }
+
+        // ---- Loading clips and transcripts -----------------------------------------------
+        function checkTranscript(doc, name) {
+          const bad = (why) => new Error(`transcript-cut: ${name} is not a transcript (${why})`);
+          if (!isObj(doc) || doc.v !== 1) throw bad('expected { "v": 1, ... }');
+          if (!isNum(doc.duration) || doc.duration <= 0) throw bad("duration must be seconds > 0");
+          if (!Array.isArray(doc.words)) throw bad("words must be an array");
+          doc.words.forEach((w, i) => {
+            if (!isObj(w) || !isNum(w.start) || !isNum(w.end) || typeof w.text !== "string")
+              throw bad(`words[${i}] must be { start, end, text }`);
+          });
+          if (doc.segments !== undefined && !Array.isArray(doc.segments))
+            throw bad("segments must be an array");
+        }
+
+        // Words in time order, each tagged with its paragraph (transcript segment) and whether it ends a sentence.
+        function buildWords(doc) {
+          const words = doc.words
+            .filter((w) => w.text.trim() !== "")
+            .map((w) => ({
+              s: r3(Math.max(0, w.start)),
+              e: r3(Math.max(w.start, w.end)),
+              t: w.text.trim(),
+            }))
+            .sort((x, y) => x.s - y.s);
+          for (const w of words) {
+            w.n = normWord(w.t);
+            w.sentEnd = /[.?!…]["”')\]]*$/.test(w.t);
+          }
+          const segs = [];
+          const segTimes = (doc.segments ?? [])
+            .filter((s) => isObj(s) && isNum(s.start) && isNum(s.end))
+            .sort((x, y) => x.start - y.start);
+          let k = 0;
+          words.forEach((w, i) => {
+            // A word belongs to the last segment that starts at or before its middle.
+            const mid = (w.s + w.e) / 2;
+            while (k + 1 < segTimes.length && segTimes[k + 1].start <= mid + 1e-3) k++;
+            const startNew =
+              i === 0 ||
+              (segTimes.length
+                ? words[i - 1].seg !== k
+                : words[i - 1].sentEnd && w.s - words[i - 1].e > 0.6);
+            if (startNew) segs.push({ a: i, b: i, s: w.s });
+            w.seg = segTimes.length ? k : segs.length - 1;
+            segs[segs.length - 1].b = i;
+          });
+          // Transcript segments are phrases of a few seconds; paragraphs join them until a pause, or a sentence end once
+          // the paragraph is long enough to read as one.
+          const paras = [];
+          for (const p of segs) {
+            const last = paras[paras.length - 1];
+            const gap = last ? words[p.a].s - words[last.b].e : Infinity;
+            const len = last ? words[last.b].e - last.s : 0;
+            const ended = last ? words[last.b].sentEnd : true;
+            if (last && gap < PARA_GAP && len < PARA_MAX && !(ended && len >= PARA_MIN))
+              last.b = p.b;
+            else paras.push({ ...p });
+          }
+          segs.length = 0;
+          segs.push(...paras);
+          // seg holds the paragraph index from here on.
+          segs.forEach((p, n) => {
+            for (let i = p.a; i <= p.b; i++) words[i].seg = n;
+            words[p.b].sentEnd = true;
+          });
+          return { words, segs };
+        }
+
+        // A transcript's stem: IMG_0151.transcript.json (media_prepare's name) and IMG_0151.json both give IMG_0151.
+        const transcriptStem = (name) => baseName(name).replace(/\.(transcript|words)$/i, "");
+
+        async function readTranscript(asset) {
+          if (!asset.file)
+            throw new Error(`transcript-cut: transcript ${asset.name} arrived without its file`);
+          const text = await asset.file.text();
+          try {
+            return JSON.parse(text);
+          } catch (err) {
+            throw new Error(`transcript-cut: ${asset.name} is not JSON (${err.message})`);
+          }
+        }
+
+        // Pairs each transcript with its media: options.clips names them; otherwise a transcript's "source" (the
+        // original's absolute path) matches the media asset's path, and failing that the base names match
+        // (IMG_0151.MOV + IMG_0151.transcript.json).
+        async function loadClips(assets) {
+          const byName = new Map(assets.map((a) => [a.name, a]));
+          const media = assets.filter(isMediaAsset);
+          const bySource = (doc) =>
+            typeof doc.source === "string" && doc.source
+              ? (media.find((m) => typeof m.path === "string" && m.path === doc.source) ?? null)
+              : null;
+          const byStem = (stem) =>
+            media.find((m) => baseName(m.name) === stem || m.name === stem) ?? null;
+          const plan = [];
+          if (opts.clips.length) {
+            opts.clips.forEach((c, i) => {
+              const t = byName.get(c.transcript);
+              if (!t) {
+                console.warn(
+                  `transcript-cut: clips[${i}].transcript "${c.transcript}" is not attached, skipped`,
+                );
+                return;
+              }
+              const m = c.media === undefined ? undefined : (byName.get(c.media) ?? null);
+              if (m === null)
+                console.warn(
+                  `transcript-cut: clips[${i}].media "${c.media}" is not attached; the clip edits and exports, without a preview`,
+                );
+              plan.push({ t, m, label: c.label, source: c.source, mediaName: c.media });
+            });
+          } else {
+            for (const t of assets.filter((a) => isTranscriptName(a.name) && !isMediaAsset(a)))
+              plan.push({ t, m: undefined, label: undefined });
+          }
+          const docs = await Promise.all(plan.map((p) => readTranscript(p.t)));
+          plan.forEach((p, i) => {
+            const doc = docs[i];
+            // JSON files that are not transcripts (a config, say) are skipped when clips is not given.
+            if (!opts.clips.length && (!isObj(doc) || doc.v !== 1 || !Array.isArray(doc.words))) {
+              console.warn(`transcript-cut: ${p.t.name} is not a transcript, skipped`);
+              return;
+            }
+            checkTranscript(doc, p.t.name);
+            // undefined = not named: find it by the transcript's source path, else by base name.
+            const m = p.m === undefined ? (bySource(doc) ?? byStem(transcriptStem(p.t.name))) : p.m;
+            const { words, segs } = buildWords(doc);
+            const source =
+              p.source ??
+              (m && typeof m.path === "string" && m.path ? m.path : null) ??
+              (typeof doc.source === "string" && doc.source ? doc.source : null);
+            if (!source)
+              throw new Error(
+                `transcript-cut: no source path for ${p.t.name}: give clips[].source, attach the media, or set "source" in the transcript`,
+              );
+            const key = m ? m.name : (p.mediaName ?? p.t.name);
+            if (byKey.has(key)) {
+              console.warn(`transcript-cut: ${key} is listed twice, the second is skipped`);
+              return;
+            }
+            if (m && typeof m.url !== "string")
+              throw new Error(`transcript-cut: media ${m.name} arrived without a url`);
+            const clip = {
+              index: clips.length,
+              key,
+              label: p.label ?? (m ? baseName(m.name) : transcriptStem(p.t.name)),
+              media: m ? m.name : null,
+              url: m ? m.url : null,
+              source,
+              transcript: p.t.name,
+              duration: doc.duration,
+              model: typeof doc.model === "string" ? doc.model : null,
+              words,
+              segs,
+            };
+            clips.push(clip);
+            byKey.set(key, clip);
+            byKey.set(baseName(key), byKey.get(baseName(key)) ?? clip);
+            byKey.set(clip.label, byKey.get(clip.label) ?? clip);
+          });
+          const unpaired = media.filter((m) => !clips.some((c) => c.media === m.name));
+          // options.clips leaves media out on purpose; without it, media with no transcript is worth a word.
+          if (unpaired.length && !opts.clips.length)
+            console.warn(
+              `transcript-cut: no transcript for ${unpaired.map((m) => m.name).join(", ")}; run media_prepare on it to edit it here`,
+            );
+        }
+
+        // Media metadata through the URL (the browser reads only the header); never the bytes in script.
+        // At most PROBE_SLOTS media elements read headers at once, so 84 clips do not open 84 players.
+        const PROBE_SLOTS = 4;
+        let probing = 0;
+        const probeQueue = [];
+        function probeNext() {
+          while (probing < PROBE_SLOTS && probeQueue.length) {
+            const job = probeQueue.shift();
+            probing += 1;
+            job().finally(() => {
+              probing -= 1;
+              probeNext();
+            });
+          }
+        }
+        function probe(clip) {
+          if (!clip.media) return Promise.reject(new Error(`${clip.label} has no media attached`));
+          if (!probes.has(clip.media)) {
+            probes.set(
+              clip.media,
+              new Promise((resolve, reject) => {
+                probeQueue.push(
+                  () =>
+                    new Promise((done) => {
+                      const v = document.createElement("video");
+                      v.preload = "metadata";
+                      v.muted = true;
+                      v.onloadedmetadata = () => {
+                        const meta = {
+                          width: v.videoWidth,
+                          height: v.videoHeight,
+                          duration: v.duration,
+                        };
+                        v.removeAttribute("src");
+                        v.load();
+                        probed.set(clip.media, meta);
+                        resolve(meta);
+                        done();
+                      };
+                      v.onerror = () => {
+                        reject(
+                          new Error(
+                            `transcript-cut: cannot read ${clip.media} (media error ${v.error ? v.error.code : "?"})`,
+                          ),
+                        );
+                        done();
+                      };
+                      v.src = clip.url;
+                    }),
+                );
+                probeNext();
+              }),
+            );
+          }
+          return probes.get(clip.media);
+        }
+
+        // ---- Suggestions -----------------------------------------------------------------
+        // A time range snapped to the words it overlaps; null when it covers no word.
+        function wordsIn(clip, s, e) {
+          const w = clip.words;
+          let a = -1;
+          let b = -1;
+          for (let i = 0; i < w.length; i++) {
+            const mid = (w[i].s + w[i].e) / 2;
+            if (mid >= s - 1e-3 && mid <= e + 1e-3) {
+              if (a < 0) a = i;
+              b = i;
+            }
+          }
+          return a < 0 ? null : { a, b };
+        }
+
+        function readSuggestions() {
+          const list = opts.highlights.map((h, i) => ({ h, i }));
+          list.sort((x, y) => (x.h.order ?? x.i) - (y.h.order ?? y.i) || x.i - y.i);
+          for (const { h, i } of list) {
+            const clip = byKey.get(h.clip);
+            if (!clip) {
+              console.warn(
+                `transcript-cut: highlights[${i}].clip "${h.clip}" names no clip (${clips.map((c) => c.label).join(", ")}), skipped`,
+              );
+              continue;
+            }
+            const r = wordsIn(clip, h.start, h.end);
+            if (!r) {
+              console.warn(
+                `transcript-cut: highlights[${i}] (${h.start}..${h.end} s) covers no word of ${clip.label}, skipped`,
+              );
+              continue;
+            }
+            const s = { id: `s${i + 1}`, c: clip.index, a: r.a, b: r.b, note: h.note ?? "" };
+            suggestions.push(s);
+            suggById.set(s.id, s);
+          }
+        }
+
+        // ---- Model queries -----------------------------------------------------------------
+        const isPick = (x) => x.kind === "pick";
+        const picks = () => seq.filter(isPick);
+        const entryRange = (x) => (isPick(x) ? x : suggById.get(x.sid));
+        const entryId = (x) => (isPick(x) ? x.id : `g:${x.sid}`);
+        const findEntry = (id) => seq.find((x) => entryId(x) === id) ?? null;
+        const pendingSuggestions = () => seq.filter((x) => !isPick(x));
+
+        function suggestionStatus(s) {
+          if (seq.some((x) => !isPick(x) && x.sid === s.id)) return "pending";
+          const from = seq.filter((x) => isPick(x) && x.sg === s.id);
+          if (!from.length) return "rejected";
+          if (from.length === 1 && from[0].c === s.c && from[0].a === s.a && from[0].b === s.b)
+            return "taken";
+          return "changed";
+        }
+
+        // How a taken suggestion was changed, in words.
+        function changeOf(s) {
+          const from = seq.filter((x) => isPick(x) && x.sg === s.id);
+          if (from.length > 1) return `split in ${from.length}`;
+          const p = from[0];
+          const bits = [];
+          if (p.a < s.a) bits.push(`starts ${plural(s.a - p.a, "word")} earlier`);
+          if (p.a > s.a) bits.push(`starts ${plural(p.a - s.a, "word")} later`);
+          if (p.b > s.b) bits.push(`ends ${plural(p.b - s.b, "word")} later`);
+          if (p.b < s.b) bits.push(`ends ${plural(s.b - p.b, "word")} earlier`);
+          return bits.join(", ");
+        }
+
+        // In and out in source seconds: the words plus their handles, never into a neighbouring word.
+        function pickTimes(p) {
+          const clip = clips[p.c];
+          const w = clip.words;
+          const first = w[p.a];
+          const last = w[p.b];
+          const prev = w[p.a - 1];
+          const next = w[p.b + 1];
+          const pi = p.pi ?? opts.padding;
+          const po = p.po ?? opts.padding;
+          const inS = Math.min(first.s, Math.max(first.s - pi, prev ? prev.e : 0, 0));
+          const outS = Math.max(last.e, Math.min(last.e + po, next ? next.s : clip.duration));
+          return { in: r3(inS), out: r3(Math.min(outS, clip.duration)) };
+        }
+
+        const textOf = (c, a, b) =>
+          clips[c].words
+            .slice(a, b + 1)
+            .map((w) => w.t)
+            .join(" ");
+
+        function rebuildProgram() {
+          let t = 0;
+          program = picks().map((p) => {
+            const { in: inS, out } = pickTimes(p);
+            const item = { entry: p, start: r3(t), in: inS, out, dur: r3(out - inS) };
+            t += item.dur;
+            return item;
+          });
+        }
+        const programDuration = () => program.reduce((t, x) => t + x.dur, 0);
+        const pendingDuration = () =>
+          pendingSuggestions().reduce((t, x) => {
+            const s = suggById.get(x.sid);
+            const { in: inS, out } = pickTimes(s);
+            return t + out - inS;
+          }, 0);
+
+        // Per-word state for the transcript: which entry covers each word.
+        function coverage() {
+          const cov = clips.map((c) => new Array(c.words.length).fill(null));
+          for (const x of seq) {
+            const r = entryRange(x);
+            for (let i = r.a; i <= r.b; i++) cov[r.c][i] = x;
+          }
+          return cov;
+        }
+
+        // ---- Edits -------------------------------------------------------------------------
+        function newPickId() {
+          return `p${nextPick++}`;
+        }
+
+        // Adds words a..b of clip c to the cut. Picks and pending suggestions they touch or overlap merge into one pick
+        // in the place of the first of them (a suggestion that merges is taken, as changed). A new pick goes after the
+        // selected entry, else at the end.
+        function addRange(c, a, b) {
+          const touched = seq.filter((x) => {
+            const r = entryRange(x);
+            return r.c === c && r.a <= b + 1 && r.b >= a - 1;
+          });
+          if (touched.length === 1 && isPick(touched[0]) && touched[0].a <= a && touched[0].b >= b)
+            return { changed: false, pick: touched[0] };
+          let lo = a;
+          let hi = b;
+          for (const x of touched) {
+            const r = entryRange(x);
+            lo = Math.min(lo, r.a);
+            hi = Math.max(hi, r.b);
+          }
+          const first = touched[0] ?? null;
+          const base = first ? (isPick(first) ? first : null) : null;
+          const sg = touched.map((x) => (isPick(x) ? x.sg : x.sid)).find(Boolean) ?? null;
+          const note = touched
+            .map((x) => (isPick(x) ? x.note : suggById.get(x.sid).note))
+            .filter(Boolean)
+            .join(" / ");
+          const pick = {
+            kind: "pick",
+            id: base ? base.id : newPickId(),
+            c,
+            a: lo,
+            b: hi,
+            pi: base ? base.pi : null,
+            po: base ? base.po : null,
+            note,
+            sg,
+          };
+          if (first) {
+            const at = seq.indexOf(first);
+            seq = seq.filter((x) => !touched.includes(x));
+            seq.splice(at, 0, pick);
+          } else {
+            const after = selId ? findEntry(selId) : null;
+            const at = after ? seq.indexOf(after) + 1 : seq.length;
+            seq.splice(at, 0, pick);
+          }
+          return { changed: true, pick };
+        }
+
+        // Removes words a..b of clip c from the cut: picks shrink or split; a pending suggestion it overlaps is taken
+        // without those words (changed), or rejected when nothing is left.
+        function removeRange(c, a, b) {
+          let changed = false;
+          const out = [];
+          for (const x of seq) {
+            const r = entryRange(x);
+            if (r.c !== c || r.b < a || r.a > b) {
+              out.push(x);
+              continue;
+            }
+            changed = true;
+            const base = isPick(x)
+              ? x
+              : {
+                  kind: "pick",
+                  id: null,
+                  c,
+                  a: r.a,
+                  b: r.b,
+                  pi: null,
+                  po: null,
+                  note: suggById.get(x.sid).note,
+                  sg: x.sid,
+                };
+            const parts = [];
+            if (r.a < a) parts.push({ ...base, a: r.a, b: a - 1 });
+            if (r.b > b) parts.push({ ...base, a: b + 1, b: r.b });
+            parts.forEach((p, k) => {
+              p.id = k === 0 && base.id ? base.id : newPickId();
+              out.push(p);
+            });
+          }
+          if (changed) seq = out;
+          return changed;
+        }
+
+        function accept(sids) {
+          const want = new Set(sids);
+          let n = 0;
+          seq = seq.map((x) => {
+            if (isPick(x) || !want.has(x.sid)) return x;
+            const s = suggById.get(x.sid);
+            n++;
+            return {
+              kind: "pick",
+              id: newPickId(),
+              c: s.c,
+              a: s.a,
+              b: s.b,
+              pi: null,
+              po: null,
+              note: s.note,
+              sg: s.id,
+            };
+          });
+          return n;
+        }
+
+        function reject(sids) {
+          const want = new Set(sids);
+          const before = seq.length;
+          seq = seq.filter((x) => isPick(x) || !want.has(x.sid));
+          return before - seq.length;
+        }
+
+        function moveEntry(id, to) {
+          const x = findEntry(id);
+          if (!x) return false;
+          const from = seq.indexOf(x);
+          const at = clamp(to, 0, seq.length - 1);
+          if (at === from) return false;
+          seq.splice(from, 1);
+          seq.splice(at, 0, x);
+          return true;
+        }
+
+        // One user edit: re-render, save, re-sequence the player and push one undo step.
+        function afterEdit(label) {
+          refreshAll();
+          historyLink.commit(label);
+          if (label) say(label);
+        }
+
+        function say(text) {
+          ui.status.textContent = text;
+        }
+
+        // ---- Edit commands (keys, buttons) -----------------------------------------------
+        function currentRange() {
+          if (selection) return selection;
+          return { c: cursor.c, a: cursor.i, b: cursor.i };
+        }
+
+        function cmdAdd() {
+          if (!clips[cursor.c]?.words.length) return say("No words here to pick");
+          const r = currentRange();
+          const { changed, pick } = addRange(r.c, r.a, r.b);
+          selId = pick.id;
+          clearSelection();
+          if (!changed) {
+            refreshAll();
+            return say("Already picked");
+          }
+          afterEdit(`Pick “${clipText(pick.c, pick.a, pick.b, 4)}”`);
+        }
+
+        function cmdRemove() {
+          if (!clips[cursor.c]?.words.length) return;
+          if (!selection) {
+            const x = selId ? findEntry(selId) : null;
+            if (x) return cmdDeleteEntry(x);
+          }
+          const r = currentRange();
+          clearSelection();
+          if (!removeRange(r.c, r.a, r.b)) {
+            refreshAll();
+            return say("Nothing picked there");
+          }
+          if (selId && !findEntry(selId)) selId = null;
+          afterEdit(`Remove ${plural(r.b - r.a + 1, "word")}`);
+        }
+
+        function cmdDeleteEntry(x) {
+          if (isPick(x)) {
+            seq = seq.filter((y) => y !== x);
+            selId = null;
+            afterEdit(`Delete pick ${pickNumber(x)}`);
+          } else {
+            reject([x.sid]);
+            selId = null;
+            afterEdit(`Reject ${x.sid}`);
+          }
+        }
+
+        // The suggestion a key acts on: the selected entry, else the one under the cursor.
+        function targetSuggestion() {
+          const x = selId ? findEntry(selId) : null;
+          if (x && !isPick(x)) return x.sid;
+          const cov = coverage();
+          const under = cov[cursor.c]?.[cursor.i];
+          if (under && !isPick(under)) return under.sid;
+          return null;
+        }
+
+        function cmdAccept() {
+          const sid = targetSuggestion();
+          if (!sid)
+            return say("No pending suggestion here: select one in Picks or put the cursor on it");
+          accept([sid]);
+          const p = seq.find((x) => isPick(x) && x.sg === sid);
+          selId = p.id;
+          afterEdit(`Accept ${sid}`);
+        }
+
+        function cmdAcceptAll() {
+          const ids = pendingSuggestions().map((x) => x.sid);
+          if (!ids.length) return say("No pending suggestions");
+          accept(ids);
+          afterEdit(`Accept ${plural(ids.length, "suggestion")}`);
+        }
+
+        function cmdReject() {
+          const sid = targetSuggestion();
+          if (!sid) return say("No pending suggestion here");
+          reject([sid]);
+          if (selId === `g:${sid}`) selId = null;
+          afterEdit(`Reject ${sid}`);
+        }
+
+        // [ / ] grow the selected pick by a word at the start / end; { / } shrink it.
+        function cmdNudge(edge, dir) {
+          const x = selId ? findEntry(selId) : null;
+          if (!x || !isPick(x))
+            return say("Select a pick first (click it in the transcript or Picks)");
+          const clip = clips[x.c];
+          if (edge === "start") {
+            if (dir < 0) {
+              if (x.a === 0) return say("The pick already starts at the first word");
+              addRange(x.c, x.a - 1, x.a - 1);
+            } else {
+              if (x.a === x.b) return say("A pick keeps at least one word");
+              removeRange(x.c, x.a, x.a);
+            }
+          } else if (dir > 0) {
+            if (x.b === clip.words.length - 1) return say("The pick already ends at the last word");
+            addRange(x.c, x.b + 1, x.b + 1);
+          } else {
+            if (x.a === x.b) return say("A pick keeps at least one word");
+            removeRange(x.c, x.b, x.b);
+          }
+          const label =
+            edge === "start"
+              ? dir < 0
+                ? "Extend start"
+                : "Trim start"
+              : dir > 0
+                ? "Extend end"
+                : "Trim end";
+          if (!findEntry(selId)) selId = null;
+          afterEdit(label);
+        }
+
+        function cmdMove(dir) {
+          const x = selId ? findEntry(selId) : null;
+          if (!x) return say("Select an entry in Picks to move it");
+          if (moveEntry(selId, seq.indexOf(x) + dir)) afterEdit(dir < 0 ? "Move up" : "Move down");
+        }
+
+        function cmdSelectSentence() {
+          const clip = clips[cursor.c];
+          if (!clip || !clip.words.length) return;
+          const w = clip.words;
+          let a = cursor.i;
+          while (a > 0 && !w[a - 1].sentEnd) a--;
+          let b = cursor.i;
+          while (b < w.length - 1 && !w[b].sentEnd) b++;
+          setSelection(cursor.c, a, b);
+        }
+
+        function pickNumber(x) {
+          return picks().indexOf(x) + 1;
+        }
+
+        function clipText(c, a, b, max) {
+          const ws = clips[c].words.slice(a, b + 1).map((w) => w.t);
+          return ws.length > max ? `${ws.slice(0, max).join(" ")}…` : ws.join(" ");
+        }
+
+        // ---- Selection and cursor ----------------------------------------------------------
+        function setSelection(c, a, b) {
+          selection = { c, a: Math.min(a, b), b: Math.max(a, b) };
+          anchor = { c, i: selection.a };
+          cursor = { c, i: selection.b };
+          renderWords();
+          renderSelInfo();
+        }
+        function clearSelection() {
+          selection = null;
+          anchor = null;
+          renderSelInfo();
+        }
+        function moveCursor(c, i, extend) {
+          const clip = clips[c];
+          if (!clip || !clip.words.length) return;
+          i = clamp(i, 0, clip.words.length - 1);
+          if (extend) {
+            if (!anchor || anchor.c !== c || !selection)
+              anchor = { c, i: cursor.c === c ? cursor.i : i };
+            selection = { c, a: Math.min(anchor.i, i), b: Math.max(anchor.i, i) };
+          } else {
+            selection = null;
+            anchor = null;
+          }
+          cursor = { c, i };
+          renderWords();
+          renderSelInfo();
+          scrollWordIntoView(c, i);
+        }
+        function stepCursor(delta, extend) {
+          let { c, i } = cursor;
+          i += delta;
+          if (!extend) {
+            while (i < 0 && c > 0) {
+              c--;
+              i += clips[c].words.length;
+            }
+            while (c < clips.length - 1 && i >= clips[c].words.length) {
+              i -= clips[c].words.length;
+              c++;
+            }
+          }
+          moveCursor(c, i, extend);
+        }
+        function stepParagraph(dir, extend) {
+          const clip = clips[cursor.c];
+          if (!clip || !clip.words.length) return;
+          const seg = clip.words[cursor.i].seg + dir;
+          if (seg >= 0 && seg < clip.segs.length)
+            return moveCursor(cursor.c, clip.segs[seg].a, extend);
+          if (extend) return moveCursor(cursor.c, dir < 0 ? 0 : clip.words.length - 1, true);
+          let c = cursor.c + dir;
+          while (c >= 0 && c < clips.length && !clips[c].words.length) c += dir;
+          if (c < 0 || c >= clips.length) return;
+          const target = clips[c];
+          moveCursor(c, dir < 0 ? target.segs[target.segs.length - 1].a : 0, false);
+        }
+        function stepSentence(dir, extend) {
+          const w = clips[cursor.c]?.words ?? [];
+          if (!w.length) return;
+          let i = cursor.i;
+          if (dir < 0) {
+            i = Math.max(0, i - 1);
+            while (i > 0 && !w[i - 1].sentEnd) i--;
+          } else {
+            while (i < w.length - 1 && !w[i].sentEnd) i++;
+            i = Math.min(w.length - 1, i + 1);
+          }
+          moveCursor(cursor.c, i, extend);
+        }
+
+        function renderSelInfo() {
+          if (!selection) {
+            const clip = clips[cursor.c];
+            const w = clip?.words[cursor.i];
+            ui.selInfo.textContent = w ? `${clip.label} · ${fmtT(w.s)}` : "";
+            return;
+          }
+          const clip = clips[selection.c];
+          const s = clip.words[selection.a].s;
+          const e = clip.words[selection.b].e;
+          ui.selInfo.textContent = `${plural(selection.b - selection.a + 1, "word")} · ${(e - s).toFixed(1)} s · ${clip.label} ${fmtT(s)}  ↵ pick  ⌫ remove`;
+        }
+
+        // ---- Transcript rendering ------------------------------------------------------------
+        function renderTranscript() {
+          const root = ui.doc;
+          root.replaceChildren();
+          const frag = document.createDocumentFragment();
+          let silent = null; // the open group of consecutive clips without speech
+          clips.forEach((clip, c) => {
+            wordClass[c] = [];
+            wordEls[c] = [];
+            paraEls[c] = [];
+            if (!clip.words.length) {
+              if (!silent) {
+                silent = { box: el("section", "silent"), clips: [] };
+                silent.head = el("div", "silent-head");
+                silent.list = el("div", "silent-list");
+                silent.box.append(silent.head, silent.list);
+                frag.append(silent.box);
+              }
+              silent.clips.push(clip);
+              const chip = el("button", "silent-clip");
+              chip.type = "button";
+              chip.dataset.c = String(c);
+              chip.title = clip.media
+                ? `${clip.source}\nNo speech in the transcript. Click to play it in Source.`
+                : `${clip.source}\nNo speech, and no media attached.`;
+              chip.append(
+                el("span", null, clip.label),
+                el("span", "mono muted", fmtLen(clip.duration)),
+              );
+              silent.list.append(chip);
+              clipEls[c] = chip;
+              const n = silent.clips.length;
+              silent.head.textContent = `No speech · ${plural(n, "clip")} · ${fmtLen(silent.clips.reduce((t, k) => t + k.duration, 0))}`;
+              return;
+            }
+            silent = null;
+            const sec = el("section", "tclip");
+            sec.dataset.c = String(c);
+            const head = el("div", "tclip-head");
+            head.append(
+              el("span", "clip-name", clip.label),
+              el("span", "chip mono", fmtLen(clip.duration)),
+              el("span", "src", clip.source),
+            );
+            sec.append(head);
+            if (!clip.media) {
+              sec.append(
+                el(
+                  "div",
+                  "tclip-nomedia",
+                  "Media not attached: this clip edits and exports, but does not preview.",
+                ),
+              );
+            }
+            const spans = [];
+            const paras = [];
+            for (const p of clip.segs) {
+              const para = el("div", "para");
+              const ts = el("span", "ts", fmtT(p.s));
+              ts.dataset.c = String(c);
+              ts.dataset.i = String(p.a);
+              ts.title = "Play from here in Source";
+              const words = el("div", "words");
+              for (let i = p.a; i <= p.b; i++) {
+                const sp = el("span", "w", clip.words[i].t);
+                sp.dataset.c = String(c);
+                sp.dataset.i = String(i);
+                spans[i] = sp;
+                words.append(sp);
+                if (i < p.b) words.append(" ");
+              }
+              para.append(ts, words);
+              paras.push(para);
+              sec.append(para);
+            }
+            wordEls[c] = spans;
+            paraEls[c] = paras;
+            clipEls[c] = sec;
+            wordClass[c] = new Array(clip.words.length).fill("w");
+            frag.append(sec);
+          });
+          if (!clips.length)
+            frag.append(
+              el(
+                "div",
+                "empty",
+                "No transcripts attached. Attach each clip with its transcript JSON (media_prepare writes them).",
+              ),
+            );
+          root.append(frag);
+        }
+
+        // Updates word classes where they changed: picks, suggestions, selection, cursor, playback, search hits.
+        function renderWords() {
+          const cov = coverage();
+          const selEntry = selId ? findEntry(selId) : null;
+          const hitSet = new Set();
+          for (const h of hits) for (let i = h.a; i <= h.b; i++) hitSet.add(`${h.c}:${i}`);
+          clips.forEach((clip, c) => {
+            const spans = wordEls[c];
+            const last = wordClass[c];
+            const segOn = new Array(clip.segs.length).fill(false);
+            let clipOn = false;
+            for (let i = 0; i < clip.words.length; i++) {
+              const x = cov[c][i];
+              let cls = "w";
+              if (x) {
+                cls += isPick(x) ? " p" : " g";
+                if (cov[c][i + 1] !== x) cls += " pe";
+                if (x === selEntry) cls += " k";
+                segOn[clip.words[i].seg] = true;
+                clipOn = true;
+              }
+              if (selection && selection.c === c && i >= selection.a && i <= selection.b) {
+                cls += " sel";
+                if (i === selection.b) cls += " se";
+              }
+              if (hitSet.has(`${c}:${i}`)) cls += " hit";
+              if (cursor.c === c && cursor.i === i) cls += " cur";
+              if (nowWord && nowWord.c === c && nowWord.i === i) cls += " now";
+              if (cls !== last[i]) {
+                spans[i].className = cls;
+                last[i] = cls;
+              }
+            }
+            paraEls[c].forEach((p, k) => p.classList.toggle("off", !segOn[k]));
+            if (clip.words.length) clipEls[c].classList.toggle("off", !clipOn);
+          });
+        }
+
+        function scrollWordIntoView(c, i, center) {
+          const sp = wordEls[c]?.[i];
+          if (!sp) return;
+          const box = ui.doc.getBoundingClientRect();
+          const r = sp.getBoundingClientRect();
+          const top = box.top + 34; // below the sticky clip header
+          if (r.top < top || r.bottom > box.bottom - 8) {
+            const delta = center
+              ? r.top - (box.top + box.height / 2)
+              : r.top < top
+                ? r.top - top - 8
+                : r.bottom - box.bottom + 24;
+            ui.doc.scrollTop += delta;
+          }
+        }
+
+        // ---- Library (left) ------------------------------------------------------------------
+        function renderLibrary() {
+          if (ui.search.value.trim()) return renderResults();
+          ui.searchMeta.hidden = true;
+          const list = ui.libList;
+          list.replaceChildren();
+          const counts = clips.map(() => ({ p: 0, g: 0 }));
+          for (const x of seq) counts[entryRange(x).c][isPick(x) ? "p" : "g"] += 1;
+          clips.forEach((clip, c) => {
+            const row = el("button", clip.words.length ? "clip-row" : "clip-row silent-row");
+            row.type = "button";
+            row.setAttribute("role", "listitem");
+            row.dataset.c = String(c);
+            row.setAttribute("aria-current", String(cursor.c === c));
+            row.title = `${clip.source}\n${clip.transcript}`;
+            const sub = el("div", "clip-sub");
+            sub.append(
+              el("span", null, clip.words.length ? plural(clip.words.length, "word") : "No speech"),
+            );
+            if (counts[c].p) sub.append(el("span", "chip pick", plural(counts[c].p, "pick")));
+            if (counts[c].g) sub.append(el("span", "chip sugg", `${counts[c].g} suggested`));
+            if (!clip.media) sub.append(el("span", "chip warn", "no media"));
+            const cover = el("div", "cover");
+            for (const x of seq) {
+              const r = entryRange(x);
+              if (r.c !== c) continue;
+              const t = pickTimes(r);
+              const i = el("i", isPick(x) ? null : "g");
+              i.style.left = `${(100 * t.in) / clip.duration}%`;
+              i.style.width = `${Math.max(1.5, (100 * (t.out - t.in)) / clip.duration)}%`;
+              cover.append(i);
+            }
+            row.append(
+              el("span", "clip-name", clip.label),
+              el("span", "clip-dur", fmtLen(clip.duration)),
+              sub,
+              cover,
+            );
+            list.append(row);
+          });
+          const total = clips.reduce((t, c) => t + c.duration, 0);
+          const words = clips.reduce((t, c) => t + c.words.length, 0);
+          const silent = clips.filter((c) => !c.words.length).length;
+          ui.libStats.textContent = `${plural(clips.length, "clip")} · ${fmtLen(total)} · ${words.toLocaleString()} words`;
+          ui.hideSilentWrap.hidden = silent === 0;
+          ui.hideSilentWrap.lastChild.textContent = ` Hide no speech (${silent})`;
+        }
+
+        // ---- Search -------------------------------------------------------------------------
+        function runSearch() {
+          const q = ui.search.value.trim().split(/\s+/).map(normWord).filter(Boolean);
+          hits = [];
+          hitIndex = -1;
+          if (q.length) {
+            outer: for (const clip of clips) {
+              const w = clip.words;
+              for (let i = 0; i + q.length <= w.length; i++) {
+                let ok = true;
+                for (let k = 0; k < q.length; k++) {
+                  const n = w[i + k].n;
+                  // Whole words, except the last query word, which may be the start of a word (typing ahead).
+                  if (k === q.length - 1 ? !n.startsWith(q[k]) : n !== q[k]) {
+                    ok = false;
+                    break;
+                  }
+                }
+                if (ok) {
+                  hits.push({ c: clip.index, a: i, b: i + q.length - 1 });
+                  if (hits.length >= MAX_RESULTS) break outer;
+                }
+              }
+            }
+          }
+          renderLibrary();
+          renderWords();
+        }
+
+        function renderResults() {
+          const list = ui.libList;
+          list.replaceChildren();
+          ui.searchMeta.hidden = false;
+          const n = hits.length;
+          ui.searchMeta.replaceChildren(
+            el(
+              "span",
+              null,
+              n >= MAX_RESULTS ? `${MAX_RESULTS}+ matches` : plural(n, "match", "matches"),
+            ),
+            el("span", null, n ? "↑↓ move · ↵ select · Esc clear" : "Esc clear"),
+          );
+          if (!n) {
+            list.append(
+              el(
+                "div",
+                "empty",
+                "No word matches. Search finds whole words; the last one may be partial.",
+              ),
+            );
+            return;
+          }
+          hits.forEach((h, k) => {
+            const clip = clips[h.c];
+            const row = el("button", "result");
+            row.type = "button";
+            row.dataset.k = String(k);
+            row.setAttribute("aria-selected", String(k === hitIndex));
+            const head = el("div", "result-head");
+            head.append(el("span", null, clip.label), el("span", "mono", fmtT(clip.words[h.a].s)));
+            const text = el("div");
+            const from = Math.max(0, h.a - 5);
+            const to = Math.min(clip.words.length - 1, h.b + 6);
+            if (from > 0) text.append("… ");
+            for (let i = from; i <= to; i++) {
+              const t = clip.words[i].t;
+              text.append(i >= h.a && i <= h.b ? el("mark", null, t) : t, i < to ? " " : "");
+            }
+            if (to < clip.words.length - 1) text.append(" …");
+            row.append(head, text);
+            list.append(row);
+          });
+        }
+
+        function goToHit(k) {
+          if (!hits.length) return;
+          hitIndex = clamp(k, 0, hits.length - 1);
+          const h = hits[hitIndex];
+          setSelection(h.c, h.a, h.b);
+          anchor = { c: h.c, i: h.a };
+          scrollWordIntoView(h.c, h.a, true);
+          for (const r of ui.libList.querySelectorAll(".result"))
+            r.setAttribute("aria-selected", String(Number(r.dataset.k) === hitIndex));
+          ui.libList
+            .querySelector(`.result[data-k="${hitIndex}"]`)
+            ?.scrollIntoView({ block: "nearest" });
+          renderLibraryCurrent();
+        }
+
+        function renderLibraryCurrent() {
+          for (const r of ui.libList.querySelectorAll(".clip-row"))
+            r.setAttribute("aria-current", String(Number(r.dataset.c) === cursor.c));
+        }
+
+        // ---- Picks list, strip and meter (right) ----------------------------------------------
+        const SVG = {
+          left: "M10.5 3v10L5 8z",
+          right: "M5.5 3v10L11 8z",
+          check: "M6.2 11.6 2.8 8.2l1-1 2.4 2.4 6-6 1 1z",
+          close: "M4.2 3.2 8 7l3.8-3.8 1 1L9 8l3.8 3.8-1 1L8 9l-3.8 3.8-1-1L7 8 3.2 4.2z",
+          up: "M8 4l5 6H3z",
+          down: "M8 12 3 6h10z",
+        };
+        function iconButton(path, title, onClick) {
+          const b = el("button", "iconbtn");
+          b.type = "button";
+          b.title = title;
+          b.setAttribute("aria-label", title);
+          b.innerHTML = `<svg viewBox="0 0 16 16"><path d="${path}"/></svg>`;
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            onClick();
+          });
+          return b;
+        }
+
+        function renderPicks() {
+          const panel = ui.picksPanel;
+          const keepScroll = panel.scrollTop;
+          panel.replaceChildren();
+          const nPicks = picks().length;
+          const nPending = pendingSuggestions().length;
+          ui.pickCount.textContent = nPending
+            ? `${nPicks} picked · ${nPending} suggested`
+            : plural(nPicks, "pick");
+          if (!seq.length) {
+            panel.append(
+              el(
+                "div",
+                "empty",
+                "Nothing picked yet. Select words in the transcript and press Enter, or press S then Enter to pick a sentence.",
+              ),
+            );
+            return;
+          }
+          let n = 0;
+          for (const x of seq) {
+            const id = entryId(x);
+            const r = entryRange(x);
+            const clip = clips[r.c];
+            const t = pickTimes(r);
+            const row = el("div", isPick(x) ? "entry" : "entry sugg");
+            row.dataset.id = id;
+            row.setAttribute("aria-selected", String(id === selId));
+            const grip = el("div", "grip");
+            grip.title = "Drag to reorder (Alt+↑/↓)";
+            const numEl = el("div", "num", isPick(x) ? String(++n) : "·");
+            const main = el("div", "entry-main");
+            const head = el("div", "entry-head");
+            head.append(el("span", "clip-name", clip.label), el("span", "mono", fmtT(t.in)));
+            if (!isPick(x)) head.append(el("span", "tag sugg", "Suggested"));
+            else if (x.sg) {
+              const st = suggestionStatus(suggById.get(x.sg));
+              head.append(
+                el(
+                  "span",
+                  `tag ${st === "taken" ? "taken" : "changed"}`,
+                  st === "taken" ? `From ${x.sg}` : `${x.sg} changed`,
+                ),
+              );
+            }
+            const text = el("div", "entry-text", textOf(r.c, r.a, r.b));
+            main.append(head, text);
+            const note = isPick(x) ? x.note : suggById.get(x.sid).note;
+            if (note && id !== selId) main.append(el("div", "entry-note", note));
+            const dur = el("div", "entry-dur", `${(t.out - t.in).toFixed(1)} s`);
+            row.append(grip, numEl, main, dur);
+            if (id === selId) row.append(entryTools(x));
+            panel.append(row);
+          }
+          panel.scrollTop = keepScroll;
+        }
+
+        // Tools of the selected entry: a suggestion's accept and reject; a pick's word nudges, handles, note, delete.
+        function entryTools(x) {
+          const tools = el("div", "entry-tools");
+          if (!isPick(x)) {
+            const s = suggById.get(x.sid);
+            if (s.note) tools.append(el("div", "entry-note", s.note));
+            const acc = el("button", "btn sm suggest");
+            acc.type = "button";
+            acc.innerHTML = "Accept <kbd>A</kbd>";
+            acc.addEventListener("click", (e) => {
+              e.stopPropagation();
+              cmdAccept();
+            });
+            const rej = el("button", "btn sm");
+            rej.type = "button";
+            rej.innerHTML = "Reject <kbd>X</kbd>";
+            rej.addEventListener("click", (e) => {
+              e.stopPropagation();
+              cmdReject();
+            });
+            tools.append(acc, rej);
+            return tools;
+          }
+          const start = el("span", "grp", "Start ");
+          start.append(
+            iconButton(SVG.left, "Start one word earlier ([)", () => cmdNudge("start", -1)),
+            iconButton(SVG.right, "Start one word later ({)", () => cmdNudge("start", 1)),
+          );
+          const end = el("span", "grp", "End ");
+          end.append(
+            iconButton(SVG.left, "End one word earlier (})", () => cmdNudge("end", -1)),
+            iconButton(SVG.right, "End one word later (])", () => cmdNudge("end", 1)),
+          );
+          const pad = el("span", "grp", "Handles ");
+          pad.title =
+            "Extra seconds before the first word and after the last (stops at the neighbouring words)";
+          pad.append(
+            padInput(x, "pi", "Handle before, seconds"),
+            padInput(x, "po", "Handle after, seconds"),
+          );
+          const del = iconButton(SVG.close, "Delete this pick (Backspace)", () =>
+            cmdDeleteEntry(x),
+          );
+          const note = document.createElement("textarea");
+          note.placeholder = "Note (why this pick, what to fix)…";
+          note.value = x.note ?? "";
+          note.setAttribute("aria-label", "Pick note");
+          note.addEventListener("click", (e) => e.stopPropagation());
+          note.addEventListener("change", () => {
+            if (note.value === (x.note ?? "")) return;
+            x.note = note.value;
+            afterEdit(`Note on pick ${pickNumber(x)}`);
+          });
+          tools.append(start, end, pad, el("span", "spacer"), del, note);
+          return tools;
+        }
+
+        function padInput(x, key, label) {
+          const input = document.createElement("input");
+          input.type = "number";
+          input.min = "0";
+          input.max = String(MAX_PAD);
+          input.step = "0.05";
+          input.value = String(x[key] ?? opts.padding);
+          input.title = label;
+          input.setAttribute("aria-label", label);
+          input.addEventListener("click", (e) => e.stopPropagation());
+          input.addEventListener("change", () => {
+            const v = Number(input.value);
+            if (!(isNum(v) && v >= 0 && v <= MAX_PAD)) {
+              input.value = String(x[key] ?? opts.padding);
+              return say(`Handles are 0 to ${MAX_PAD} s`);
+            }
+            x[key] = r3(v);
+            afterEdit(`${key === "pi" ? "Handle before" : "Handle after"} ${num(v)} s`);
+          });
+          return input;
+        }
+
+        function renderStrip() {
+          const strip = ui.strip;
+          strip.replaceChildren();
+          const total = programDuration();
+          if (!program.length) {
+            strip.append(el("span", "strip-empty", "The cut is empty"));
+            return;
+          }
+          const colors = [
+            "--chart-1",
+            "--chart-2",
+            "--chart-3",
+            "--chart-4",
+            "--chart-5",
+            "--chart-6",
+          ];
+          program.forEach((item, k) => {
+            const b = el("div", "blk", String(k + 1));
+            b.style.flex = `${item.dur} 0 0`;
+            const clip = clips[item.entry.c];
+            b.style.background = `color-mix(in srgb, var(${colors[clip.index % colors.length]}) 38%, var(--card))`;
+            if (!clip.media) b.classList.add("nomedia");
+            b.setAttribute("aria-current", String(item.entry.id === selId));
+            b.title = `${k + 1}. ${clip.label} ${fmtT(item.in)}–${fmtT(item.out)} · ${item.dur.toFixed(1)} s\n${clipText(item.entry.c, item.entry.a, item.entry.b, 12)}`;
+            strip.append(b);
+          });
+          ui.playhead = el("div", "playhead");
+          strip.append(ui.playhead);
+          movePlayhead(mode === "program" ? player.time() : 0, total);
+        }
+
+        function movePlayhead(t, total = programDuration()) {
+          if (!ui.playhead) return;
+          ui.playhead.hidden = mode !== "program" || !total;
+          ui.playhead.style.left = `${total ? (100 * clamp(t, 0, total)) / total : 0}%`;
+        }
+
+        function renderMeter() {
+          const total = programDuration();
+          const pend = pendingDuration();
+          const target = opts.targetSeconds;
+          const m = ui.meter;
+          m.replaceChildren();
+          const row = el("div", "meter-row");
+          row.append(el("span", "label", "Length"), el("span", "big", fmtLen(total)));
+          if (target > 0) {
+            row.append(el("span", "muted", `of ${fmtLen(target)} target`));
+            const d = total - target;
+            const tol = Math.max(5, target * 0.1);
+            const cls = Math.abs(d) <= tol ? "ok" : d > 0 ? "over" : "under";
+            row.append(el("span", `delta ${cls}`, Math.abs(d) < 0.5 ? "on target" : fmtDelta(d)));
+          }
+          if (pend > 0)
+            row.append(el("span", "grow"), el("span", "muted", `+${fmtLen(pend)} suggested`));
+          const scale = Math.max(total + pend, target * 1.15, 1);
+          const bar = el("div", "bar");
+          const fill = el(
+            "i",
+            `fill${target > 0 && total > target + Math.max(5, target * 0.1) ? " over" : ""}`,
+          );
+          fill.style.width = `${(100 * total) / scale}%`;
+          bar.append(fill);
+          if (pend > 0) {
+            const g = el("i", "ghost");
+            g.style.left = `${(100 * total) / scale}%`;
+            g.style.width = `${(100 * pend) / scale}%`;
+            bar.append(g);
+          }
+          if (target > 0) {
+            const t = el("i", "target");
+            t.style.left = `${(100 * target) / scale}%`;
+            t.title = `Target ${fmtLen(target)}`;
+            bar.append(t);
+          }
+          m.append(row, bar);
+        }
+
+        // ---- Monitor (program / source) --------------------------------------------------------
+        function mediaMap() {
+          return Object.fromEntries(clips.filter((c) => c.media).map((c) => [c.media, c.url]));
+        }
+
+        function programValue() {
+          return {
+            tracks: [
+              {
+                id: "V1",
+                kind: "video",
+                clips: program
+                  .filter((x) => clips[x.entry.c].media)
+                  .map((x) => ({
+                    id: x.entry.id,
+                    src: clips[x.entry.c].media,
+                    in: x.in,
+                    out: x.out,
+                    start: x.start,
+                  })),
+              },
+            ],
+          };
+        }
+
+        function sourceValue(c) {
+          const clip = clips[c];
+          return [{ id: "source", src: clip.media, in: 0, out: clip.duration, start: 0 }];
+        }
+
+        // Re-sequences the player when the cut changed (only in Program); keeps the playhead.
+        async function syncPlayer() {
+          if (mode !== "program") return;
+          const key = JSON.stringify(programValue());
+          if (key === programKey) return;
+          programKey = key;
+          const t = Math.min(player.time(), programDuration());
+          await player.set({ value: programValue(), time: t });
+          updateMonitorNote(t);
+        }
+
+        async function setMode(next, { c, time, play } = {}) {
+          if (next === "source") {
+            const clip = clips[c ?? cursor.c];
+            if (!clip) return;
+            if (!clip.media) {
+              say(`${clip.label} has no media attached, so it cannot play`);
+              return;
+            }
+            const switching = mode !== "source" || sourceClip !== clip.index;
+            mode = "source";
+            sourceClip = clip.index;
+            programKey = "";
+            if (switching)
+              await player.set({ value: sourceValue(clip.index), time: time ?? 0, playing: false });
+            else await player.seek(time ?? player.time());
+          } else {
+            const was = mode;
+            mode = "program";
+            if (was !== "program") {
+              programKey = JSON.stringify(programValue());
+              await player.set({ value: programValue(), time: time ?? 0, playing: false });
+            } else if (time !== undefined) await player.seek(time);
+          }
+          renderMode();
+          if (play) await player.play();
+        }
+
+        function renderMode() {
+          ui.modeProgram.setAttribute("aria-pressed", String(mode === "program"));
+          ui.modeSource.setAttribute("aria-pressed", String(mode === "source"));
+          ui.modeTag.textContent =
+            mode === "program"
+              ? `Program · ${plural(program.length, "pick")}`
+              : `Source · ${clips[sourceClip].label}`;
+          movePlayhead(mode === "program" ? player.time() : 0);
+          updateMonitorNote(player.time());
+          if (api) rt.syncChrome();
+        }
+
+        function updateMonitorNote(t) {
+          let text = "";
+          if (mode === "program") {
+            if (!program.length)
+              text = pendingSuggestions().length
+                ? "Nothing picked yet. Accept suggestions (A, or Shift+A for all) or select words and press Enter."
+                : "Nothing picked yet. Select words in the transcript and press Enter.";
+            else {
+              const item = programAt(t);
+              if (item && !clips[item.entry.c].media)
+                text = `${clips[item.entry.c].label}: media not attached`;
+            }
+          }
+          ui.monitorNote.hidden = !text;
+          ui.monitorNoteText.textContent = text;
+        }
+
+        function programAt(t) {
+          for (const x of program) if (t >= x.start - 1e-3 && t < x.start + x.dur - 1e-3) return x;
+          return program.length && t >= programDuration() - 1e-3
+            ? program[program.length - 1]
+            : null;
+        }
+
+        // The word under a source time, by binary search.
+        function wordAt(clip, t) {
+          const w = clip.words;
+          let lo = 0;
+          let hi = w.length - 1;
+          let hit = -1;
+          while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (w[mid].s <= t + 1e-3) {
+              hit = mid;
+              lo = mid + 1;
+            } else hi = mid - 1;
+          }
+          return hit >= 0 && t <= w[hit].e + 0.15 ? hit : -1;
+        }
+
+        function onTime({ time, duration, playing }) {
+          const total = mode === "program" ? programDuration() : duration;
+          ui.ptc.textContent = `${fmtT(time)} / ${fmtT(total)}`;
+          ui.tc.textContent = `${fmtT(mode === "program" ? time : programDuration() ? player.time() : 0)} / ${fmtT(programDuration())}`;
+          ui.playIcon.setAttribute("d", playing ? ICON_PAUSE : ICON_PLAY);
+          let now = null;
+          if (mode === "program") {
+            movePlayhead(time);
+            const item = programAt(time);
+            if (item) {
+              const i = wordAt(clips[item.entry.c], item.in + (time - item.start));
+              if (i >= item.entry.a && i <= item.entry.b) now = { c: item.entry.c, i };
+            }
+            updateMonitorNote(time);
+            if (api) rt.setPreviewTime(time, previewInfo(item));
+          } else if (sourceClip >= 0) {
+            const i = wordAt(clips[sourceClip], time);
+            if (i >= 0) now = { c: sourceClip, i };
+          }
+          if (
+            (now && (!nowWord || now.c !== nowWord.c || now.i !== nowWord.i)) ||
+            (!now && nowWord)
+          ) {
+            nowWord = now;
+            renderWords();
+            if (now && follow && playing) scrollWordIntoView(now.c, now.i, true);
+          }
+        }
+
+        function previewInfo(item) {
+          return {
+            pick: item
+              ? {
+                  id: item.entry.id,
+                  start: item.start,
+                  duration: item.dur,
+                  in: item.in,
+                  out: item.out,
+                  clip: clips[item.entry.c].key,
+                }
+              : null,
+          };
+        }
+
+        function togglePlay() {
+          player.toggle();
+        }
+
+        function seekPick(dir) {
+          if (!program.length) return say("The cut is empty");
+          const t = mode === "program" ? player.time() : 0;
+          let k;
+          if (dir > 0) k = program.findIndex((x) => x.start > t + 0.05);
+          else {
+            const cur = program.findIndex((x) => t >= x.start - 1e-3 && t < x.start + x.dur);
+            k = t - (program[cur]?.start ?? 0) > 0.6 ? cur : cur - 1;
+          }
+          if (k < 0) k = dir > 0 ? program.length - 1 : 0;
+          const item = program[k];
+          selId = item.entry.id;
+          refreshViews();
+          scrollWordIntoView(item.entry.c, item.entry.a, true);
+          setMode("program", { time: item.start }).catch(report);
+        }
+
+        // ---- Export --------------------------------------------------------------------------
+        // The clip whose picture sets the frame when options.frame is auto: the first pick's, else (while the cut is
+        // empty) the first suggestion's, else the first clip with media.
+        function frameClip() {
+          if (program[0]) return clips[program[0].entry.c];
+          if (seq[0]) return clips[entryRange(seq[0]).c];
+          return clips.find((c) => c.media) ?? null;
+        }
+
+        // Output frame: options.frame, else frameClip()'s picture; options.resolution is its short side.
+        function outputSize() {
+          let ratio;
+          if (opts.frame !== "auto") ratio = FRAMES[opts.frame];
+          else {
+            const clip = frameClip();
+            if (!clip)
+              throw new Error(
+                'transcript-cut: no clip has media to take the frame from; pass options.frame ("9:16", "16:9", "1:1" or "4:5")',
+              );
+            const meta = clip.media ? probed.get(clip.media) : null;
+            if (!meta)
+              throw new Error(
+                clip.media
+                  ? `transcript-cut: the picture size of ${clip.media} is not known yet; try again in a moment`
+                  : `transcript-cut: the first pick's clip ${clip.label} has no media to take the frame from; pass options.frame ("9:16", "16:9", "1:1" or "4:5")`,
+              );
+            if (!meta.width || !meta.height)
+              throw new Error(`transcript-cut: ${clip.media} has no picture; pass options.frame`);
+            ratio = [meta.width, meta.height];
+            if (opts.resolution === 0) return { w: even(meta.width), h: even(meta.height) };
+          }
+          const short = opts.resolution || 1080;
+          const [rw, rh] = ratio;
+          return rw <= rh
+            ? { w: even(short), h: even((short * rh) / rw) }
+            : { w: even((short * rw) / rh), h: even(short) };
+        }
+        const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+
+        // { edl, script, srt, overlays }: the cut as t3-edl/1 after bolt-on transforms, its render command and captions.
+        function buildEdl({ phase = "export" } = {}) {
+          rebuildProgram();
+          if (!program.length)
+            throw new Error("transcript-cut: nothing to export, the cut has no picks");
+          const name = slug(opts.title);
+          const size = outputSize();
+          const used = [...new Set(program.map((x) => x.entry.c))].map((c) => clips[c]);
+          let edl = {
+            format: "t3-edl/1",
+            kind: "transcript-cut",
+            title: opts.title,
+            width: size.w,
+            height: size.h,
+            duration: 0,
+            targetSeconds: opts.targetSeconds,
+            sources: Object.fromEntries(
+              used.map((c) => [
+                c.source,
+                {
+                  label: c.label,
+                  media: c.media,
+                  transcript: c.transcript,
+                  duration: r3(c.duration),
+                },
+              ]),
+            ),
+            tracks: [
+              {
+                id: "V1",
+                kind: "video",
+                clips: program.map((x) => {
+                  const p = x.entry;
+                  const clip = clips[p.c];
+                  const out = {
+                    id: p.id,
+                    label: clip.label,
+                    source: clip.source,
+                    media: clip.media,
+                    in: x.in,
+                    out: x.out,
+                    start: x.start,
+                    duration: x.dur,
+                    words: [p.a, p.b],
+                    text: textOf(p.c, p.a, p.b),
+                  };
+                  if (p.note) out.note = p.note;
+                  if (p.sg)
+                    out.suggestion = { id: p.sg, status: suggestionStatus(suggById.get(p.sg)) };
+                  return out;
+                }),
+              },
+            ],
+            markers: [],
+          };
+          const info = {
+            phase,
+            pickId: selId && findEntry(selId) && isPick(findEntry(selId)) ? selId : null,
+            playhead: mode === "program" ? player.time() : 0,
+          };
+          edl = rt.transformEdl(edl, { phase, info });
+          const out = edl.tracks?.[0]?.clips;
+          if (!Array.isArray(out) || !out.length)
+            throw new Error("transcript-cut: a bolt-on EDL transform left tracks[0].clips empty");
+          const seen = new Set();
+          let cursorT = 0;
+          for (const [i, c] of out.entries()) {
+            if (typeof c.id !== "string" || !c.id || seen.has(c.id))
+              throw new Error(
+                `transcript-cut: EDL clip ${i + 1} needs its own string id (got ${JSON.stringify(c.id)})`,
+              );
+            seen.add(c.id);
+            if (typeof c.source !== "string" || !/^(\/|[a-z]:[\\/])/i.test(c.source))
+              throw new Error(
+                `transcript-cut: EDL clip ${c.id} needs source, the original's absolute path`,
+              );
+            if (!(isNum(c.in) && isNum(c.out) && c.out > c.in))
+              throw new Error(`transcript-cut: EDL clip ${c.id} needs in < out in source seconds`);
+            c.in = r3(c.in);
+            c.out = r3(c.out);
+            c.duration = r3(c.out - c.in);
+            c.start = r3(cursorT);
+            cursorT += c.duration;
+          }
+          edl.duration = r3(cursorT);
+          const fx = rt.exportFilters(edl, { phase, info });
+          const overlays = rt.renderOverlays({ phase }).map((o) => ({
+            ...o,
+            file: `${name}-overlay-${o.id}.png`,
+            start: r3(o.start),
+            end: r3(o.end),
+          }));
+          const command = ffmpegCommand(out, size, `${name}.mp4`, fx, overlays);
+          const srt = buildSrt(out);
+          edl.captions = { file: `${name}.srt`, cues: srt.cues };
+          edl.render = {
+            output: `${name}.mp4`,
+            script: `${name}.render.sh`,
+            command,
+            notes:
+              "Cuts each pick from the original by absolute path (accurate input seek), scales and pads it to the frame, and concatenates them to H.264/AAC with sound. Run it anywhere.",
+            boltOn: {
+              controls: rt.state(),
+              videoFilter: fx.video.join(","),
+              audioFilter: fx.audio.join(","),
+              notes: fx.notes,
+              overlays: overlays.map((o) => ({
+                id: o.id,
+                file: o.file,
+                start: o.start,
+                end: o.end,
+              })),
+            },
+          };
+          const script = [
+            "#!/bin/sh",
+            `# Renders ${name}.mp4 from the originals named in ${name}.edl.json.${overlays.length ? " Run it next to the overlay PNGs." : ""}`,
+            ...fx.notes.map((n) => `# ${String(n).replace(/\s+/g, " ")}`),
+            "set -e",
+            command,
+            "",
+          ].join("\n");
+          return { edl, script, srt: srt.text, overlays };
+        }
+
+        // One -ss/-t input per pick: ffmpeg seeks each original and decodes only that span.
+        function ffmpegCommand(list, size, output, fx, overlays) {
+          const { w, h } = size;
+          const graph = [];
+          const seqPads = [];
+          const f = opts.fade;
+          list.forEach((c, i) => {
+            const d = c.duration;
+            const fd = Math.min(f, d / 4);
+            graph.push(
+              `[${i}:v]trim=duration=${num(d)},setpts=PTS-STARTPTS,scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v${i}]`,
+            );
+            const fades =
+              fd > 0 ? `,afade=t=in:d=${num(fd)},afade=t=out:st=${num(d - fd)}:d=${num(fd)}` : "";
+            graph.push(
+              `[${i}:a]atrim=duration=${num(d)},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo${fades},apad,atrim=duration=${num(d)}[a${i}]`,
+            );
+            seqPads.push(`[v${i}][a${i}]`);
+          });
+          graph.push(`${seqPads.join("")}concat=n=${list.length}:v=1:a=1[outv][outa]`);
+          let vOut = "[outv]";
+          let aOut = "[outa]";
+          overlays.forEach((o, k) => {
+            graph.push(
+              `${vOut}[${list.length + k}:v]overlay=0:0:format=auto:enable='between(t,${num(o.start)},${num(o.end)})'[ov${k}]`,
+            );
+            vOut = `[ov${k}]`;
+          });
+          if (fx.video.length) {
+            graph.push(`${vOut}${fx.video.join(",")},format=yuv420p[fxv]`);
+            vOut = "[fxv]";
+          } else if (overlays.length) {
+            graph.push(`${vOut}format=yuv420p[fxv]`);
+            vOut = "[fxv]";
+          }
+          if (fx.audio.length) {
+            graph.push(`[outa]${fx.audio.join(",")}[fxa]`);
+            aOut = "[fxa]";
+          }
+          return [
+            "ffmpeg -y \\",
+            ...list.map(
+              (c) => `  -ss ${num(c.in)} -t ${num(c.duration)} -i ${shellQuote(c.source)} \\`,
+            ),
+            ...overlays.map((o) => `  -i ${shellQuote(o.file)} \\`),
+            `  -filter_complex ${sq(graph.join(";"))} \\`,
+            `  -map "${vOut}" -map "${aOut}" -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart \\`,
+            `  ${shellQuote(output)}`,
+          ].join("\n");
+        }
+
+        // Captions of the picked words on the cut's clock: a cue ends at a sentence end, a pause, ~42 characters or a
+        // pick boundary.
+        function buildSrt(list) {
+          const cues = [];
+          for (const c of list) {
+            const clip = byKey.get(c.media ?? "") ?? clips.find((k) => k.source === c.source);
+            if (!clip) continue;
+            const words = clip.words.filter((w) => w.e > c.in + 0.01 && w.s < c.out - 0.01);
+            let cue = null;
+            const flush = () => {
+              if (cue && cue.words.length) cues.push(cue);
+              cue = null;
+            };
+            for (const w of words) {
+              const s = r3(c.start + Math.max(0, w.s - c.in));
+              const e = r3(Math.min(c.start + c.duration, c.start + (w.e - c.in)));
+              if (cue && (s - cue.end > 0.6 || (cue.text + " " + w.t).length > 42)) flush();
+              if (!cue) cue = { start: s, end: e, text: w.t, words: [w.t] };
+              else {
+                cue.text += ` ${w.t}`;
+                cue.words.push(w.t);
+                cue.end = e;
+              }
+              if (w.sentEnd && cue.text.length > 12) flush();
+            }
+            flush();
+          }
+          for (let i = 0; i + 1 < cues.length; i++)
+            cues[i].end = Math.min(cues[i].end, cues[i + 1].start);
+          const text = cues
+            .map(
+              (q, i) =>
+                `${i + 1}\n${srtTime(q.start)} --> ${srtTime(Math.max(q.end, q.start + 0.2))}\n${q.text}\n`,
+            )
+            .join("\n");
+          return { text, cues: cues.length };
+        }
+
+        const pngOf = (canvas, what) =>
+          new Promise((resolve, reject) => {
+            canvas.toBlob(
+              (b) =>
+                b
+                  ? resolve(b)
+                  : reject(new Error(`transcript-cut: could not encode ${what} as PNG`)),
+              "image/png",
+            );
+          });
+
+        async function exportBundle() {
+          const fc = frameClip();
+          if (opts.frame === "auto" && fc && fc.media) await probe(fc);
+          const { edl, script, srt, overlays } = buildEdl();
+          const name = slug(opts.title);
+          const files = [
+            new File([JSON.stringify(edl, null, 2)], `${name}.edl.json`, {
+              type: "application/json",
+            }),
+            new File([script], `${name}.render.sh`, { type: "text/x-shellscript" }),
+            new File([srt], `${name}.srt`, { type: "application/x-subrip" }),
+          ];
+          for (const o of overlays)
+            files.push(
+              new File([await pngOf(o.canvas, `overlay "${o.id}"`)], o.file, { type: "image/png" }),
+            );
+          return { edl, files };
+        }
+
+        async function exportFiles() {
+          say("Exporting…");
+          const { edl, files } = await exportBundle();
+          for (const f of files) {
+            await window.t3.workspace.attach(f);
+            await window.t3.workspace.download(f, f.name);
+          }
+          say(
+            `Exported ${plural(edl.tracks[0].clips.length, "pick")}, ${fmtLen(edl.duration)}: EDL, render script and captions`,
+          );
+          return { edl, files, ffmpeg: [edl.render.command] };
+        }
+
+        // What Send says: the cut, its length against the target, and what became of each suggestion.
+        function summaryOf() {
+          const s = {
+            picks: program.length,
+            seconds: r3(programDuration()),
+            target: opts.targetSeconds,
+          };
+          const counts = { taken: 0, changed: 0, rejected: 0, pending: 0 };
+          for (const g of suggestions) counts[suggestionStatus(g)] += 1;
+          return { ...s, suggestions: { total: suggestions.length, ...counts } };
+        }
+
+        function sendMessage(edl, files) {
+          const sum = summaryOf();
+          const used = new Set(program.map((x) => x.entry.c));
+          const lines = [];
+          const len = fmtLen(sum.seconds);
+          lines.push(
+            sum.target > 0
+              ? `Cut ready: ${plural(sum.picks, "pick")} from ${plural(used.size, "clip")}, ${len} against a ${fmtLen(sum.target)} target (${Math.abs(sum.seconds - sum.target) < 0.5 ? "on target" : fmtDelta(sum.seconds - sum.target)}).`
+              : `Cut ready: ${plural(sum.picks, "pick")} from ${plural(used.size, "clip")}, ${len}.`,
+          );
+          if (suggestions.length) {
+            const g = sum.suggestions;
+            const parts = [`${g.taken + g.changed} of ${g.total} suggestions taken`];
+            const changed = suggestions
+              .filter((x) => suggestionStatus(x) === "changed")
+              .map((x) => `${x.id} ${changeOf(x)}`);
+            const rejected = suggestions
+              .filter((x) => suggestionStatus(x) === "rejected")
+              .map((x) => x.id);
+            const pending = suggestions
+              .filter((x) => suggestionStatus(x) === "pending")
+              .map((x) => x.id);
+            if (changed.length) parts.push(`changed ${changed.join("; ")}`);
+            if (rejected.length) parts.push(`rejected ${rejected.join(", ")}`);
+            if (pending.length) parts.push(`left undecided ${pending.join(", ")}`);
+            lines.push(`${parts.join("; ")}.`);
+          }
+          const own = program.filter((x) => !x.entry.sg).length;
+          if (own) lines.push(`${plural(own, "pick")} chosen by the user.`);
+          lines.push(
+            "Order: " +
+              program
+                .map(
+                  (x, k) =>
+                    `${k + 1}. ${clips[x.entry.c].label} ${fmtT(x.in)} “${clipText(x.entry.c, x.entry.a, x.entry.b, 6)}”${x.entry.note ? ` (${x.entry.note})` : ""}`,
+                )
+                .join(" · "),
+          );
+          lines.push(
+            `Files: ${files.map((f) => f.name).join(", ")}. Render with edl.render.command (it reads the originals by absolute path).`,
+          );
+          return lines.join("\n");
+        }
+
+        // Send is called straight from the click or key press: T3 sends only during the user's gesture.
+        async function sendToAgent() {
+          const { edl, files } = await exportBundle();
+          const keep = files.filter((f) => /\.(edl\.json|srt)$/.test(f.name));
+          await window.t3.workspace.send(sendMessage(edl, keep), { files: keep });
+          say(
+            `Sent the cut (${plural(edl.tracks[0].clips.length, "pick")}, ${fmtLen(edl.duration)}) to the agent`,
+          );
+        }
+
+        const report = (err) => rt.reportError(err);
+
+        // ---- Persistence -----------------------------------------------------------------------
+        // Compact, by time: { p: id, c: clip key, s, e, pi?, po?, n?, g? } for a pick, { g } for a pending suggestion.
+        function compactSeq() {
+          return seq.map((x) => {
+            if (!isPick(x)) return { g: x.sid };
+            const clip = clips[x.c];
+            const o = { p: x.id, c: clip.key, s: clip.words[x.a].s, e: clip.words[x.b].e };
+            if (x.pi !== null && x.pi !== undefined) o.pi = x.pi;
+            if (x.po !== null && x.po !== undefined) o.po = x.po;
+            if (x.note) o.n = x.note;
+            if (x.sg) o.g = x.sg;
+            return o;
+          });
+        }
+
+        // Back from the compact form; entries that no longer fit the transcripts are dropped with a warning.
+        function expandSeq(list, where) {
+          if (!Array.isArray(list)) throw new Error(`transcript-cut: ${where} is not a list`);
+          const out = [];
+          const seen = new Set();
+          for (const o of list) {
+            if (!isObj(o)) continue;
+            if (o.p === undefined) {
+              if (suggById.has(o.g) && !seen.has(`g:${o.g}`)) {
+                seen.add(`g:${o.g}`);
+                out.push({ kind: "sugg", sid: o.g });
+              } else console.warn(`transcript-cut: ${where}: suggestion ${o.g} is gone, dropped`);
+              continue;
+            }
+            const clip = byKey.get(o.c);
+            const r = clip && isNum(o.s) && isNum(o.e) ? wordsIn(clip, o.s, o.e) : null;
+            if (!r || typeof o.p !== "string" || seen.has(o.p)) {
+              console.warn(
+                `transcript-cut: ${where}: pick ${JSON.stringify(o.p)} no longer fits, dropped`,
+              );
+              continue;
+            }
+            seen.add(o.p);
+            out.push({
+              kind: "pick",
+              id: o.p,
+              c: clip.index,
+              a: r.a,
+              b: r.b,
+              pi: isNum(o.pi) ? clamp(o.pi, 0, MAX_PAD) : null,
+              po: isNum(o.po) ? clamp(o.po, 0, MAX_PAD) : null,
+              note: typeof o.n === "string" ? o.n : "",
+              sg: typeof o.g === "string" && suggById.has(o.g) ? o.g : null,
+            });
+          }
+          return out;
+        }
+
+        function bumpIds() {
+          for (const x of seq)
+            if (isPick(x)) nextPick = Math.max(nextPick, Number(x.id.slice(1)) + 1 || nextPick);
+        }
+
+        function scheduleSave() {
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(save, 300);
+        }
+
+        // The summary goes first (T3 shows the agent the start of the state). History keeps as many of the latest
+        // steps as fit the budget (the redo tail goes first); the cut itself always saves when it fits alone.
+        function save() {
+          saveTimer = 0;
+          const base = { v: 1, summary: summaryOf(), seq: compactSeq(), controls: rt.state() };
+          const enc = (s) => new TextEncoder().encode(JSON.stringify(s)).length;
+          const h = history.get();
+          let state = { ...base, history: h };
+          let size = enc(state);
+          let keep = h.index + 1;
+          while (size > STATE_BUDGET && keep > 1) {
+            keep = Math.max(1, Math.floor(keep / 2));
+            const entries = h.entries.slice(h.index + 1 - keep, h.index + 1);
+            state = { ...base, history: { ...h, entries, index: entries.length - 1 } };
+            size = enc(state);
+          }
+          if (size > STATE_BUDGET) {
+            state = base;
+            size = enc(state);
+          }
+          unsaved = size > STATE_BUDGET;
+          stateBytes = size;
+          if (!unsaved) window.t3.workspace.setState(state);
+          renderBudget();
+        }
+
+        function renderBudget() {
+          ui.budget.classList.toggle("bad", unsaved);
+          ui.budget.textContent = unsaved
+            ? `This cut is too large to save (${(stateBytes / 1024).toFixed(1)} KB of ${(STATE_BUDGET / 1024).toFixed(0)} KB): it still applies; Export keeps it.`
+            : `Saved with the thread · ${(stateBytes / 1024).toFixed(1)} of ${(STATE_BUDGET / 1024).toFixed(0)} KB`;
+        }
+
+        // ---- Refresh -----------------------------------------------------------------------------
+        // The monitor's shape follows the output frame: options.frame, else the first pick's (or clip's) picture.
+        function updateMonitorShape() {
+          let r = opts.frame === "auto" ? null : FRAMES[opts.frame];
+          if (!r) {
+            const c = frameClip();
+            const m = c && c.media ? probed.get(c.media) : null;
+            if (m && m.width && m.height) r = [m.width, m.height];
+          }
+          ui.monitor.classList.toggle("portrait", Boolean(r && r[1] > r[0]));
+        }
+
+        function refreshViews() {
+          updateMonitorShape();
+          renderWords();
+          renderLibrary();
+          renderPicks();
+          renderStrip();
+          renderMeter();
+          renderSelInfo();
+          renderAcceptAll();
+          ui.modeTag.textContent =
+            mode === "program"
+              ? `Program · ${plural(program.length, "pick")}`
+              : `Source · ${clips[sourceClip]?.label ?? ""}`;
+        }
+
+        function refreshAll() {
+          rebuildProgram();
+          refreshViews();
+          syncPlayer().catch(report);
+          scheduleSave();
+          if (api) {
+            rt.refresh();
+            rt.emitChange();
+            rt.syncChrome();
+          }
+        }
+
+        function renderAcceptAll() {
+          const n = pendingSuggestions().length;
+          ui.acceptAll.hidden = n === 0;
+          ui.acceptAll.firstChild.textContent = `Accept All ${n} `;
+        }
+
+        // ---- Bolt-on API -----------------------------------------------------------------------
+        function publicPick(x) {
+          const item = program.find((p) => p.entry === x);
+          const clip = clips[x.c];
+          return {
+            id: x.id,
+            clip: clip.key,
+            start: clip.words[x.a].s,
+            end: clip.words[x.b].e,
+            in: item.in,
+            out: item.out,
+            duration: item.dur,
+            programStart: item.start,
+            text: textOf(x.c, x.a, x.b),
+            note: x.note ?? "",
+            padIn: x.pi ?? opts.padding,
+            padOut: x.po ?? opts.padding,
+            suggestion: x.sg,
+          };
+        }
+
+        function getValues() {
+          return {
+            title: opts.title,
+            duration: r3(programDuration()),
+            targetSeconds: opts.targetSeconds,
+            mode,
+            playhead: player.time(),
+            selection: selection
+              ? {
+                  clip: clips[selection.c].key,
+                  start: clips[selection.c].words[selection.a].s,
+                  end: clips[selection.c].words[selection.b].e,
+                  text: textOf(selection.c, selection.a, selection.b),
+                }
+              : null,
+            clips: clips.map((c) => ({
+              key: c.key,
+              label: c.label,
+              media: c.media,
+              source: c.source,
+              duration: c.duration,
+              words: c.words.length,
+              speech: c.words.length
+                ? { start: c.words[0].s, end: c.words[c.words.length - 1].e }
+                : null,
+            })),
+            picks: picks().map(publicPick),
+            suggestions: suggestions.map((s) => ({
+              id: s.id,
+              clip: clips[s.c].key,
+              start: clips[s.c].words[s.a].s,
+              end: clips[s.c].words[s.b].e,
+              text: textOf(s.c, s.a, s.b),
+              note: s.note,
+              status: suggestionStatus(s),
+            })),
+          };
+        }
+
+        // setValues({ picks?, accept?, reject?, playhead? }, label?) -> getValues(). Strict; one undo step.
+        function setValues(partial, label = "Script Edit") {
+          if (!isObj(partial)) throw new TypeError("setValues(partial) needs an object");
+          for (const key of Object.keys(partial))
+            if (!["picks", "accept", "reject", "playhead"].includes(key))
+              throw new TypeError(
+                `setValues: unknown key "${key}" (use picks, accept, reject, playhead)`,
+              );
+          let next = null;
+          if (partial.picks !== undefined) {
+            if (!Array.isArray(partial.picks))
+              throw new TypeError("setValues.picks must be an array");
+            next = partial.picks.map((p, i) => {
+              const at = `setValues.picks[${i}]`;
+              if (!isObj(p)) throw new TypeError(`${at} must be an object`);
+              for (const k of Object.keys(p))
+                if (
+                  !["id", "clip", "start", "end", "note", "padIn", "padOut", "suggestion"].includes(
+                    k,
+                  )
+                )
+                  throw new TypeError(`${at}: unknown key "${k}"`);
+              const clip = byKey.get(p.clip);
+              if (!clip)
+                throw new Error(
+                  `${at}.clip "${p.clip}" names no clip (${clips.map((c) => c.key).join(", ")})`,
+                );
+              if (!(isNonNeg(p.start) && isNonNeg(p.end) && p.end > p.start))
+                throw new RangeError(`${at}: start and end must be seconds with start < end`);
+              const r = wordsIn(clip, p.start, p.end);
+              if (!r)
+                throw new RangeError(
+                  `${at}: ${p.start}..${p.end} s covers no word of ${clip.label}`,
+                );
+              for (const k of ["padIn", "padOut"])
+                if (p[k] !== undefined && !(isNonNeg(p[k]) && p[k] <= MAX_PAD))
+                  throw new RangeError(`${at}.${k} must be 0..${MAX_PAD} seconds`);
+              if (p.note !== undefined && typeof p.note !== "string")
+                throw new TypeError(`${at}.note must be a string`);
+              if (
+                p.suggestion !== undefined &&
+                p.suggestion !== null &&
+                !suggById.has(p.suggestion)
+              )
+                throw new Error(`${at}.suggestion "${p.suggestion}" is not a suggestion id`);
+              return {
+                kind: "pick",
+                id: typeof p.id === "string" && /^p\d+$/.test(p.id) ? p.id : null,
+                c: clip.index,
+                a: r.a,
+                b: r.b,
+                pi: p.padIn ?? null,
+                po: p.padOut ?? null,
+                note: p.note ?? "",
+                sg: p.suggestion ?? null,
+              };
+            });
+          }
+          const ids = (v, key) => {
+            if (v === undefined) return [];
+            const list = v === "all" ? suggestions.map((s) => s.id) : v;
+            if (!Array.isArray(list) || !list.every((s) => suggById.has(s)))
+              throw new TypeError(
+                `setValues.${key} must be "all" or suggestion ids (${suggestions.map((s) => s.id).join(", ")})`,
+              );
+            return list;
+          };
+          const acc = ids(partial.accept, "accept");
+          const rej = ids(partial.reject, "reject");
+          if (partial.playhead !== undefined && !isNonNeg(partial.playhead))
+            throw new TypeError("setValues.playhead must be seconds >= 0");
+          let changed = false;
+          if (next) {
+            const keep = pendingSuggestions().filter((x) => !next.some((p) => p.sg === x.sid));
+            const used = new Set();
+            for (const p of next) {
+              if (!p.id || used.has(p.id)) p.id = newPickId();
+              used.add(p.id);
+            }
+            seq = [...next, ...keep];
+            bumpIds();
+            changed = true;
+          }
+          if (acc.length && accept(acc)) changed = true;
+          if (rej.length && reject(rej)) changed = true;
+          if (changed) {
+            if (selId && !findEntry(selId)) selId = null;
+            afterEdit(label);
+          }
+          if (partial.playhead !== undefined)
+            setMode("program", { time: partial.playhead }).catch(report);
+          return getValues();
+        }
+
+        function frameInfo() {
+          const size = outputSize();
+          return {
+            width: size.w,
+            height: size.h,
+            duration: r3(Math.max(programDuration(), 0.001)),
+          };
+        }
+
+        function createRuntime() {
+          return window.t3kit.templateRuntime.create({
+            id: "transcript-cut",
+            pipeline: "edl",
+            // 'top': under the length meter, above Picks; 'bottom': under Picks and History, above the composer.
+            addPanel(title, { open, position }) {
+              const d = el("details", "panel");
+              d.open = open;
+              const body = el("div", "panel-body");
+              d.append(el("summary", null, title), body);
+              ui.insp.insertBefore(d, position === "top" ? ui.tabs : ui.budget);
+              return body;
+            },
+            toolbar: ui.toolbar,
+            buttonClass: "btn",
+            previewTarget: ui.monitor,
+            frame: () => frameInfo(),
+            export: () => exportFiles(),
+            audioPreview: () => [player],
+            chrome: {
+              toolbar: () => [
+                {
+                  type: "button",
+                  id: "play",
+                  label: "Play / Pause",
+                  icon: "play",
+                  shortcut: "space",
+                  run: () => togglePlay(),
+                },
+                {
+                  type: "button",
+                  id: "prev",
+                  label: "Previous Pick",
+                  icon: "skip-back",
+                  shortcut: "shift+n",
+                  run: () => seekPick(-1),
+                },
+                {
+                  type: "button",
+                  id: "next",
+                  label: "Next Pick",
+                  icon: "skip-forward",
+                  shortcut: "n",
+                  run: () => seekPick(1),
+                },
+                {
+                  type: "segmented",
+                  id: "monitor",
+                  label: "Monitor",
+                  options: [
+                    { value: "program", label: "Program" },
+                    { value: "source", label: "Source" },
+                  ],
+                  value: mode,
+                  run: (v) => setMode(v === "source" ? "source" : "program").catch(report),
+                },
+                { type: "separator" },
+                {
+                  type: "button",
+                  id: "accept",
+                  label: "Accept Suggestion",
+                  icon: "check",
+                  shortcut: "a",
+                  run: () => cmdAccept(),
+                },
+                {
+                  type: "button",
+                  id: "accept-all",
+                  label: "Accept All Suggestions",
+                  icon: "check-check",
+                  shortcut: "shift+a",
+                  run: () => cmdAcceptAll(),
+                },
+                { type: "separator" },
+                {
+                  type: "button",
+                  id: "undo",
+                  label: "Undo",
+                  icon: "undo-2",
+                  run: () => history.undo(),
+                },
+                {
+                  type: "button",
+                  id: "redo",
+                  label: "Redo",
+                  icon: "redo-2",
+                  run: () => history.redo(),
+                },
+                { type: "separator" },
+                {
+                  type: "button",
+                  id: "export",
+                  label: "Export",
+                  icon: "download",
+                  shortcut: "e",
+                  run: () => exportFiles().catch(report),
+                },
+              ],
+              native: (on) => $("app").classList.toggle("native", on),
+            },
+            getValues: () => getValues(),
+            setValues: (partial, label) => setValues(partial, label),
+            reservedKeys: RESERVED,
+            onBoltOnChange: () => {
+              if (api) scheduleSave();
+            },
+          });
+        }
+
+        // ---- Pointer: word selection and pick reordering -----------------------------------------
+        function wordFromEvent(e) {
+          const t = e.target instanceof Element ? e.target.closest(".w") : null;
+          return t ? { c: Number(t.dataset.c), i: Number(t.dataset.i) } : null;
+        }
+
+        let drag = null; // { c, i, moved }
+        let dragFrame = 0;
+        let dragPoint = null;
+        function onDocDown(e) {
+          if (e.button !== 0) return;
+          const ts = e.target instanceof Element ? e.target.closest(".ts") : null;
+          if (ts) {
+            e.preventDefault();
+            const c = Number(ts.dataset.c);
+            const i = Number(ts.dataset.i);
+            moveCursor(c, i, false);
+            setMode("source", { c, time: clips[c].words[i].s, play: true }).catch(report);
+            return;
+          }
+          const w = wordFromEvent(e);
+          if (!w) return;
+          e.preventDefault();
+          ui.doc.focus({ preventScroll: true });
+          if (e.shiftKey) {
+            const from = anchor && anchor.c === w.c ? anchor : cursor.c === w.c ? cursor : w;
+            anchor = { ...from };
+            selection = { c: w.c, a: Math.min(from.i, w.i), b: Math.max(from.i, w.i) };
+            cursor = { ...w };
+            renderWords();
+            renderSelInfo();
+            return;
+          }
+          drag = { c: w.c, i: w.i, moved: false };
+          anchor = { ...w };
+        }
+        function onDocMove(e) {
+          if (!drag) return;
+          dragPoint = { x: e.clientX, y: e.clientY };
+          if (!dragFrame) dragFrame = requestAnimationFrame(flushDrag);
+        }
+        function flushDrag() {
+          dragFrame = 0;
+          if (!drag || !dragPoint) return;
+          const hit = document.elementFromPoint(dragPoint.x, dragPoint.y);
+          const t = hit instanceof Element ? hit.closest(".w") : null;
+          if (!t) return;
+          const c = Number(t.dataset.c);
+          if (c !== drag.c) return;
+          const i = Number(t.dataset.i);
+          if (i === drag.i && !drag.moved) return;
+          drag.moved = true;
+          selection = { c, a: Math.min(drag.i, i), b: Math.max(drag.i, i) };
+          cursor = { c, i };
+          renderWords();
+          renderSelInfo();
+        }
+        function onDocUp(e) {
+          if (!drag) return;
+          if (dragFrame) {
+            cancelAnimationFrame(dragFrame);
+            dragFrame = 0;
+          }
+          if (dragPoint) flushDrag();
+          const d = drag;
+          drag = null;
+          dragPoint = null;
+          if (d.moved) return;
+          clickWord(d.c, d.i);
+        }
+
+        // A click puts the cursor on the word and seeks: in the cut when the word is picked, else in its source.
+        function clickWord(c, i) {
+          selection = null;
+          cursor = { c, i };
+          const under = coverage()[c][i];
+          if (under) selId = entryId(under);
+          refreshViews();
+          renderLibraryCurrent();
+          const item = under && isPick(under) ? program.find((x) => x.entry === under) : null;
+          const w = clips[c].words[i];
+          if (item)
+            setMode("program", { time: r3(item.start + Math.max(0, w.s - item.in)) }).catch(report);
+          else if (clips[c].media)
+            setMode("source", { c, time: Math.max(0, w.s - 0.05) }).catch(report);
+          else say(`${clips[c].label} has no media attached, so it cannot play`);
+        }
+
+        // Picks list: click selects and seeks; the grip drags an entry to a new place.
+        let reorder = null; // { id, to, row }
+        let reorderFrame = 0;
+        let reorderY = 0;
+        function onPicksDown(e) {
+          const row = e.target instanceof Element ? e.target.closest(".entry") : null;
+          if (!row) return;
+          if (e.target.closest(".grip")) {
+            e.preventDefault();
+            reorder = { id: row.dataset.id, to: null, row };
+            row.classList.add("dragging");
+          }
+        }
+        function onPicksMove(e) {
+          if (!reorder) return;
+          reorderY = e.clientY;
+          if (!reorderFrame) reorderFrame = requestAnimationFrame(flushReorder);
+        }
+        function flushReorder() {
+          reorderFrame = 0;
+          if (!reorder) return;
+          const rows = [...ui.picksPanel.querySelectorAll(".entry")];
+          for (const r of rows) r.classList.remove("drop-before", "drop-after");
+          let to = rows.length;
+          for (let k = 0; k < rows.length; k++) {
+            const box = rows[k].getBoundingClientRect();
+            if (reorderY < box.top + box.height / 2) {
+              to = k;
+              break;
+            }
+          }
+          reorder.to = to;
+          if (to < rows.length) rows[to].classList.add("drop-before");
+          else if (rows.length) rows[rows.length - 1].classList.add("drop-after");
+        }
+        function onPicksUp(e) {
+          if (!reorder) return;
+          if (reorderFrame) {
+            cancelAnimationFrame(reorderFrame);
+            reorderFrame = 0;
+          }
+          flushReorder();
+          const { id, to } = reorder;
+          reorder = null;
+          const x = findEntry(id);
+          const from = seq.indexOf(x);
+          const at = to > from ? to - 1 : to;
+          if (to !== null && moveEntry(id, at)) {
+            selId = id;
+            afterEdit("Reorder");
+          } else renderPicks();
+        }
+        function onPicksClick(e) {
+          const row = e.target instanceof Element ? e.target.closest(".entry") : null;
+          if (!row || e.target.closest(".grip, .entry-tools")) return;
+          selectEntry(row.dataset.id, true);
+        }
+
+        function selectEntry(id, seek) {
+          const x = findEntry(id);
+          if (!x) return;
+          selId = id;
+          const r = entryRange(x);
+          selection = null;
+          cursor = { c: r.c, i: r.a };
+          refreshViews();
+          scrollWordIntoView(r.c, r.a, true);
+          if (!seek) return;
+          if (isPick(x)) {
+            const item = program.find((p) => p.entry === x);
+            setMode("program", { time: item.start }).catch(report);
+          } else if (clips[r.c].media)
+            setMode("source", { c: r.c, time: pickTimes(r).in }).catch(report);
+        }
+
+        function onStripClick(e) {
+          if (!program.length) return;
+          const box = ui.strip.getBoundingClientRect();
+          const t = clamp(
+            ((e.clientX - box.left) / box.width) * programDuration(),
+            0,
+            programDuration() - 0.01,
+          );
+          const item = programAt(t);
+          if (item) selId = item.entry.id;
+          refreshViews();
+          setMode("program", { time: t }).catch(report);
+        }
+
+        // ---- Keyboard ------------------------------------------------------------------------------
+        const isField = (t) =>
+          t instanceof HTMLInputElement ||
+          t instanceof HTMLTextAreaElement ||
+          t instanceof HTMLSelectElement ||
+          t?.isContentEditable;
+        const isTextEntry = (t) =>
+          (t instanceof HTMLInputElement && /^(text|search|number)$/.test(t.type)) ||
+          t instanceof HTMLTextAreaElement;
+
+        function onKey(e) {
+          if (!api || e.defaultPrevented) return;
+          const mod = e.metaKey || e.ctrlKey;
+          if (mod && e.key === "Enter") {
+            e.preventDefault();
+            sendToAgent().catch(report);
+            return;
+          }
+          if (e.target === ui.search) return onSearchKey(e);
+          if (isField(e.target) || mod) return;
+          const k = e.key;
+          if (e.altKey) {
+            if (k === "ArrowUp") cmdMove(-1);
+            else if (k === "ArrowDown") cmdMove(1);
+            else if (k === "ArrowLeft") stepSentence(-1, e.shiftKey);
+            else if (k === "ArrowRight") stepSentence(1, e.shiftKey);
+            else return;
+            e.preventDefault();
+            return;
+          }
+          if (k === " " && e.target instanceof HTMLButtonElement) return;
+          if (k === " ") togglePlay();
+          else if (k === "ArrowLeft") stepCursor(-1, e.shiftKey);
+          else if (k === "ArrowRight") stepCursor(1, e.shiftKey);
+          else if (k === "ArrowUp") stepParagraph(-1, e.shiftKey);
+          else if (k === "ArrowDown") stepParagraph(1, e.shiftKey);
+          else if (k === "Enter") cmdAdd();
+          else if (k === "Backspace" || k === "Delete") cmdRemove();
+          else if (k === "Escape") {
+            clearSelection();
+            renderWords();
+          } else if (k === "a") cmdAccept();
+          else if (k === "A") cmdAcceptAll();
+          else if (k === "x" || k === "X") cmdReject();
+          else if (k === "s" || k === "S") cmdSelectSentence();
+          else if (k === "[") cmdNudge("start", -1);
+          else if (k === "{") cmdNudge("start", 1);
+          else if (k === "]") cmdNudge("end", 1);
+          else if (k === "}") cmdNudge("end", -1);
+          else if (k === "n") seekPick(1);
+          else if (k === "N") seekPick(-1);
+          else if (k === "m" || k === "M")
+            setMode(
+              mode === "program" ? "source" : "program",
+              mode === "program"
+                ? { c: cursor.c, time: clips[cursor.c]?.words[cursor.i]?.s ?? 0 }
+                : {},
+            ).catch(report);
+          else if (k === "d" || k === "D") setView(!pickedOnly);
+          else if (k === "f" || k === "F") setFollow(!follow);
+          else if (k === "e" || k === "E") exportFiles().catch(report);
+          else if (k === "/") {
+            ui.search.focus();
+            ui.search.select();
+          } else return;
+          e.preventDefault();
+        }
+
+        function onSearchKey(e) {
+          if (e.key === "ArrowDown") goToHit(hitIndex + 1);
+          else if (e.key === "ArrowUp") goToHit(hitIndex - 1);
+          else if (e.key === "Enter") {
+            goToHit(hitIndex < 0 ? 0 : hitIndex);
+            ui.doc.focus({ preventScroll: true });
+          } else if (e.key === "Escape") {
+            ui.search.value = "";
+            runSearch();
+            ui.doc.focus({ preventScroll: true });
+          } else return;
+          e.preventDefault();
+        }
+
+        function setView(only) {
+          pickedOnly = only;
+          ui.doc.classList.toggle("only", only);
+          ui.viewAll.setAttribute("aria-pressed", String(!only));
+          ui.viewPicked.setAttribute("aria-pressed", String(only));
+        }
+        function setFollow(on) {
+          follow = on;
+          ui.follow.setAttribute("aria-pressed", String(on));
+          say(on ? "The transcript follows playback" : "The transcript stays put during playback");
+        }
+
+        // ---- Startup ---------------------------------------------------------------------------------
+        async function start() {
+          opts = readOptions();
+          document.title = opts.title;
+          ui.title.textContent = opts.title;
+          const ws = await window.t3.workspace.ready();
+          await loadClips(ws.assets ?? []);
+          readSuggestions();
+          const saved = ws.state ?? (await window.t3.workspace.initialState()) ?? null;
+          const restored = isObj(saved) && saved.v === 1 && Array.isArray(saved.seq) ? saved : null;
+          seq = restored
+            ? expandSeq(restored.seq, "saved cut")
+            : suggestions.map((s) => ({ kind: "sugg", sid: s.id }));
+          bumpIds();
+          if (!restored && opts.accept) accept(suggestions.map((s) => s.id));
+          rebuildProgram();
+
+          renderTranscript();
+          player = window.t3kit.player.create(ui.player, {
+            value: programValue(),
+            media: mediaMap(),
+            controls: false,
+          });
+          programKey = JSON.stringify(programValue());
+          history = window.t3kit.history.create(ui.history, {
+            title: "History",
+            keys: false,
+            label: restored ? "Restored" : "Original",
+          });
+          if (restored && isObj(restored.history)) history.set(restored.history);
+          historyLink = rt.linkHistory(
+            history,
+            () => ({ seq: compactSeq() }),
+            (s) => {
+              seq = expandSeq(s.seq, "history step");
+              bumpIds();
+              if (selId && !findEntry(selId)) selId = null;
+              refreshAll();
+            },
+          );
+          history.on("change", () => scheduleSave());
+          player.on("timeupdate", onTime);
+          player.on("error", ({ message }) =>
+            report(new Error(`transcript-cut: playback stopped: ${message}`)),
+          );
+
+          // An expiring media URL is swapped for a fresh one; playback resumes where it was.
+          window.t3.workspace.on("asset-url", ({ name, url }) => {
+            const clip = clips.find((c) => c.media === name);
+            if (!clip || typeof url !== "string") return;
+            clip.url = url;
+            const time = player.time();
+            const playing = player.get().playing;
+            player.set({ media: mediaMap(), time, playing }).catch(report);
+          });
+
+          ui.doc.addEventListener("pointerdown", onDocDown);
+          // A drag follows the pointer anywhere in the page, so it keeps going past the transcript's edges.
+          window.addEventListener("pointermove", onDocMove);
+          window.addEventListener("pointerup", onDocUp);
+          window.addEventListener("pointercancel", onDocUp);
+          ui.doc.addEventListener("click", (e) => {
+            const chip = e.target instanceof Element ? e.target.closest(".silent-clip") : null;
+            if (chip) playSilent(Number(chip.dataset.c));
+          });
+          ui.hideSilent.addEventListener("change", () => {
+            $("app").classList.toggle("hide-silent", ui.hideSilent.checked);
+          });
+          ui.doc.addEventListener("dblclick", (e) => {
+            const w = wordFromEvent(e);
+            if (!w) return;
+            cursor = w;
+            cmdSelectSentence();
+          });
+          ui.libList.addEventListener("click", (e) => {
+            const t = e.target instanceof Element ? e.target : null;
+            const res = t?.closest(".result");
+            if (res) return goToHit(Number(res.dataset.k));
+            const row = t?.closest(".clip-row");
+            if (!row) return;
+            const c = Number(row.dataset.c);
+            clipEls[c]?.scrollIntoView({ block: clips[c].words.length ? "start" : "nearest" });
+            if (clips[c].words.length) {
+              moveCursor(c, 0, false);
+              renderLibraryCurrent();
+            } else playSilent(c);
+          });
+          ui.picksPanel.addEventListener("pointerdown", onPicksDown);
+          window.addEventListener("pointermove", onPicksMove);
+          window.addEventListener("pointerup", onPicksUp);
+          window.addEventListener("pointercancel", onPicksUp);
+          ui.picksPanel.addEventListener("click", onPicksClick);
+          ui.strip.addEventListener("click", onStripClick);
+          ui.search.addEventListener("input", runSearch);
+          ui.play.addEventListener("click", togglePlay);
+          ui.prevPick.addEventListener("click", () => seekPick(-1));
+          ui.nextPick.addEventListener("click", () => seekPick(1));
+          ui.modeProgram.addEventListener("click", () => setMode("program").catch(report));
+          ui.modeSource.addEventListener("click", () =>
+            setMode("source", {
+              c: cursor.c,
+              time: clips[cursor.c]?.words[cursor.i]?.s ?? 0,
+            }).catch(report),
+          );
+          ui.viewAll.addEventListener("click", () => setView(false));
+          ui.viewPicked.addEventListener("click", () => setView(true));
+          ui.follow.addEventListener("click", () => setFollow(!follow));
+          ui.acceptAll.addEventListener("click", cmdAcceptAll);
+          ui.export.addEventListener("click", () => exportFiles().catch(report));
+          ui.send.addEventListener("click", () => sendToAgent().catch(report));
+          ui.tabPicks.addEventListener("click", () => setTab("picks"));
+          ui.tabHistory.addEventListener("click", () => setTab("history"));
+          document.addEventListener("keydown", onKey);
+
+          // The first pick's picture size decides the export frame; the rest load in the background.
+          const firstMedia = frameClip();
+          if (firstMedia && firstMedia.media) await probe(firstMedia);
+          for (const c of clips) if (c.media) probe(c).then(updateMonitorShape, report);
+
+          api = rt.publish({
+            instances: { player, history },
+            extras: { links: { history: historyLink }, buildEdl, exportBundle },
+            saved: restored?.controls,
+          });
+          const firstSpoken = clips.findIndex((c) => c.words.length);
+          cursor = { c: Math.max(0, firstSpoken), i: 0 };
+          refreshAll();
+          renderMode();
+          ui.tc.textContent = `${fmtT(0)} / ${fmtT(programDuration())}`;
+          ui.ptc.textContent = `${fmtT(0)} / ${fmtT(programDuration())}`;
+          const nSugg = pendingSuggestions().length;
+          say(
+            clips.length
+              ? nSugg
+                ? `${plural(nSugg, "suggestion")} from the agent: A accepts one, Shift+A all`
+                : `${plural(clips.length, "clip")} loaded`
+              : "No transcripts attached",
+          );
+          rt.setPreviewTime(0, previewInfo(program[0] ?? null));
+          rt.runCustomScript(opts.customScript, opts);
+        }
+
+        // A clip without speech (B-roll) has no words to pick: its chip plays it in Source.
+        function playSilent(c) {
+          const clip = clips[c];
+          for (const chip of ui.doc.querySelectorAll(".silent-clip"))
+            chip.setAttribute("aria-current", String(Number(chip.dataset.c) === c));
+          if (!clip.media) return say(`${clip.label} has no media attached, so it cannot play`);
+          say(`${clip.label}: no speech in its transcript (B-roll), playing it in Source`);
+          setMode("source", { c, time: 0, play: true }).catch(report);
+        }
+
+        function setTab(tab) {
+          ui.tabPicks.setAttribute("aria-selected", String(tab === "picks"));
+          ui.tabHistory.setAttribute("aria-selected", String(tab === "history"));
+          ui.picksPanel.hidden = tab !== "picks";
+          ui.historyPanel.hidden = tab !== "history";
+        }
+
+        // ---- Wiring --------------------------------------------------------------------------------
+        for (const id of [
+          "title",
+          "tc",
+          "status",
+          "toolbar",
+          "acceptAll",
+          "export",
+          "send",
+          "search",
+          "searchMeta",
+          "libList",
+          "libStats",
+          "hideSilentWrap",
+          "hideSilent",
+          "selInfo",
+          "viewAll",
+          "viewPicked",
+          "follow",
+          "doc",
+          "insp",
+          "monitor",
+          "player",
+          "modeTag",
+          "monitorNote",
+          "monitorNoteText",
+          "prevPick",
+          "play",
+          "playIcon",
+          "nextPick",
+          "ptc",
+          "modeProgram",
+          "modeSource",
+          "strip",
+          "meter",
+          "tabs",
+          "tabPicks",
+          "tabHistory",
+          "pickCount",
+          "picksPanel",
+          "historyPanel",
+          "history",
+          "budget",
+        ])
+          ui[id] = $(id);
+        $("sendKey").textContent = MAC ? "⌘↵" : "Ctrl+↵";
+        rt = createRuntime();
+
+        // One undo stack: Cmd/Ctrl+Z goes to History.
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (!(e.metaKey || e.ctrlKey) || e.altKey || !history || isTextEntry(e.target)) return;
+            const k = e.key.toLowerCase();
+            if (k === "z" && !e.shiftKey) history.undo();
+            else if ((k === "z" && e.shiftKey) || (k === "y" && e.ctrlKey && !e.metaKey))
+              history.redo();
+            else return;
+            e.preventDefault();
+            e.stopPropagation();
+          },
+          true,
+        );
+
+        window.addEventListener("unhandledrejection", (e) => report(e.reason));
+
+        start().catch(report);
+      })();
+    </script>
+  </body>
+</html>

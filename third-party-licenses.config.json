@@ -1,6 +1,25 @@
 {
   "customNotices": [
     {
+      "name": "opencode Office viewers",
+      "bundles": ["web"],
+      "license": "MIT",
+      "sourceUrl": "https://github.com/anomalyco/opencode",
+      "noticeFile": "apps/web/src/components/files/office/LICENSE.opencode"
+    },
+    {
+      "bundles": ["desktop", "web"],
+      "license": "MIT",
+      "name": "Ionic keyboard assist",
+      "sourceUrl": "https://github.com/ionic-team/ionic-framework/blob/main/core/src/utils/keyboard/keyboard.ts",
+      "generatedNotices": [
+        {
+          "licenseId": "MIT",
+          "copyrights": ["Copyright (c) 2015-present Drifty Co."]
+        }
+      ]
+    },
+    {
       "bundles": ["assets", "desktop", "web"],
       "license": "CC0-1.0",
       "name": "Notification Sound 1 by deadrobotmusic",
@@ -134,6 +153,64 @@
       ]
     },
     {
+      "bundles": ["server"],
+      "license": "Apache-2.0 AND blessing AND MIT",
+      "name": "SQLite Wasm",
+      "sourceUrl": "https://github.com/sqlite/sqlite-wasm",
+      "version": "3.53.4-build1",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0",
+          "preamble": [
+            "The workspace kit inlines @sqlite.org/sqlite-wasm (dist/index.mjs and dist/sqlite3.wasm) into SQL workspace pages. The npm wrapper is licensed under Apache-2.0."
+          ]
+        },
+        {
+          "licenseId": "blessing",
+          "preamble": [
+            "SQLite and its WebAssembly/JavaScript APIs (https://sqlite.org) are in the public domain."
+          ]
+        },
+        {
+          "licenseId": "MIT",
+          "preamble": [
+            "The bundle includes Emscripten's glue code (https://emscripten.org), available under the MIT license and the University of Illinois/NCSA Open Source License."
+          ],
+          "copyrights": ["Copyright (c) 2010-2014 Emscripten authors, see AUTHORS file."]
+        }
+      ]
+    },
+    {
+      "bundles": ["server"],
+      "license": "Apache-2.0",
+      "name": "fermion-research",
+      "sourceUrl": "https://github.com/fermionresearch/phonon",
+      "version": "0.2.11",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0",
+          "preamble": [
+            "On first use of media transcription, T3 installs the fermion-research package from PyPI into a Python environment under its home directory and runs it to transcribe speech. fermion-research is licensed under the Apache License, Version 2.0."
+          ],
+          "copyrights": ["Copyright 2026 Fermion Research"]
+        }
+      ]
+    },
+    {
+      "bundles": ["server"],
+      "license": "CC-BY-4.0",
+      "name": "Phonon-2 by Fermion Research",
+      "sourceUrl": "https://huggingface.co/FermionResearch/Phonon-2",
+      "generatedNotices": [
+        {
+          "licenseId": "CC-BY-4.0",
+          "preamble": [
+            "Media transcription downloads and runs the Phonon-2 speech model (https://huggingface.co/FermionResearch/Phonon-2), Copyright 2026 Fermion Research, licensed under the Creative Commons Attribution 4.0 International licence (CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/). T3 does not modify the model.\n\nPhonon-2 is derived from NVIDIA's Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), (c) NVIDIA Corporation, licensed under CC-BY-4.0. Fermion Research re-trained and quantised the encoder's linear weights to a five-value alphabet and quantised the remaining parameters to 6-bit integer tables; the encoder architecture, TDT decoder, tokenizer and feature-extractor configuration derive from that model."
+          ]
+        }
+      ]
+    },
+    {
       "bundles": ["mobile"],
       "license": "MIT",
       "name": "react-native-uitextview",
@@ -147,9 +224,206 @@
       "name": "Expo text editor implementation",
       "noticeFile": "apps/mobile/modules/t3-composer-editor/LICENSE",
       "sourceUrl": "https://github.com/expo/expo"
+    },
+    {
+      "bundles": ["ios", "android", "mobile"],
+      "license": "Apache-2.0",
+      "name": "wasm2c runtime (WABT)",
+      "version": "1.0.42",
+      "noticeFile": "apps/mobile/modules/t3-highlights/Vendor/wasm2c/LICENSE",
+      "sourceUrl": "https://github.com/WebAssembly/wabt/tree/1.0.42/wasm2c"
+    },
+    {
+      "bundles": ["ios", "android", "mobile"],
+      "license": "MIT",
+      "name": "SIMD Everywhere",
+      "version": "0.8.2",
+      "noticeFile": "apps/mobile/modules/t3-highlights/Vendor/simde/LICENSE",
+      "sourceUrl": "https://github.com/simd-everywhere/simde/tree/v0.8.2"
+    },
+    {
+      "bundles": ["ios", "android", "mobile"],
+      "license": "MIT",
+      "name": "RaTeX",
+      "version": "0.1.15",
+      "sourceUrl": "https://github.com/erweixin/RaTeX/tree/v0.1.15",
+      "generatedNotices": [
+        {
+          "licenseId": "MIT",
+          "copyrights": ["Copyright (c) erweixin"]
+        }
+      ]
+    },
+    {
+      "bundles": ["ios", "android", "mobile", "web", "desktop"],
+      "license": "MIT",
+      "name": "micromark-extension-llm-math",
+      "version": "3.1.0",
+      "sourceUrl": "https://github.com/ofk/micromark-extension-llm-math",
+      "generatedNotices": [
+        {
+          "licenseId": "MIT",
+          "copyrights": ["Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com>"]
+        }
+      ]
+    },
+    {
+      "bundles": ["ios", "android", "mobile", "web", "desktop"],
+      "license": "OFL-1.1",
+      "name": "KaTeX mathematical fonts",
+      "sourceUrl": "https://github.com/KaTeX/KaTeX",
+      "generatedNotices": [
+        {
+          "licenseId": "OFL-1.1",
+          "copyrights": [
+            "Copyright (c) 2009-2010, Design Science, Inc. (<www.mathjax.org>)",
+            "Copyright (c) 2014-2018 Khan Academy (<www.khanacademy.org>)"
+          ],
+          "preamble": [
+            "Unmodified KaTeX_* mathematical fonts. Reserved Font Names include KaTeX_Main, KaTeX_Math, KaTeX_AMS, and KaTeX_Caligraphic."
+          ]
+        }
+      ]
     }
   ],
   "packageOverrides": [
+    {
+      "name": "entities",
+      "version": "8.1.0",
+      "license": "BSD-2-Clause",
+      "sourceUrl": "https://github.com/fb55/entities"
+    },
+    {
+      "name": "@nodable/entities",
+      "version": "2.1.1",
+      "sourceUrl": "https://github.com/nodable/val-parsers",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2026 Nodable"]
+      }
+    },
+    {
+      "name": "xml-naming",
+      "version": "0.1.0",
+      "sourceUrl": "https://github.com/NaturalIntelligence/xml-naming",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2026 Natural Intelligence"]
+      }
+    },
+    {
+      "name": "fast-xml-parser",
+      "version": "5.7.3",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/NaturalIntelligence/fast-xml-parser"
+    },
+    {
+      "name": "@betteroffice/xlsx",
+      "version": "0.3.0",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/openooxml/betteroffice",
+      "generatedNotice": {
+        "licenseId": "Apache-2.0"
+      }
+    },
+    {
+      "name": "@betteroffice/pptx",
+      "version": "0.2.0",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/openooxml/betteroffice",
+      "generatedNotice": {
+        "licenseId": "Apache-2.0"
+      }
+    },
+    {
+      "name": "@betteroffice/docx",
+      "version": "0.4.3",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/openooxml/betteroffice",
+      "generatedNotice": {
+        "licenseId": "Apache-2.0"
+      }
+    },
+    {
+      "name": "character-entities",
+      "version": "2.0.2",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/wooorm/character-entities",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>"]
+      }
+    },
+    {
+      "name": "saxes",
+      "version": "6.0.0",
+      "license": "ISC",
+      "sourceUrl": "https://github.com/lddubeau/saxes",
+      "generatedNotice": {
+        "licenseId": "ISC",
+        "copyrights": [
+          "Copyright (c) 2018-2021 Louis-Dominique Dubeau",
+          "Copyright (c) Contributors",
+          "Copyright (c) Isaac Z. Schlueter and Contributors"
+        ]
+      }
+    },
+    {
+      "name": "pdfjs-dist",
+      "version": "6.4.299",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/mozilla/pdf.js"
+    },
+    {
+      "name": "@betteroffice/fonts",
+      "version": "0.4.0",
+      "license": "Apache-2.0 AND OFL-1.1",
+      "generatedNotices": [
+        { "licenseId": "Apache-2.0" },
+        {
+          "licenseId": "OFL-1.1",
+          "copyrights": [
+            "Copyright 2013 The Carlito Project Authors (https://github.com/googlefonts/carlito), with Reserved Font Name \"Carlito\""
+          ]
+        }
+      ]
+    },
+    {
+      "name": "remark-math",
+      "version": "6.0.0",
+      "sourceUrl": "https://github.com/remarkjs/remark-math/blob/main/license",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Junyoung Choi <fluke8259@gmail.com>"]
+      }
+    },
+    {
+      "name": "@react-native-async-storage/async-storage",
+      "version": "3.1.1",
+      "sourceUrl": "https://github.com/react-native-async-storage/async-storage",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2025 Krzysztof Borowy"]
+      }
+    },
+    {
+      "name": "deprecated-react-native-prop-types",
+      "version": "2.3.0",
+      "sourceUrl": "https://github.com/facebookarchive/react-native-deprecated-modules",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Meta Platforms, Inc. and affiliates."]
+      }
+    },
+    {
+      "name": "@react-native/normalize-color",
+      "version": "2.1.0",
+      "sourceUrl": "https://github.com/facebook/react-native",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Meta Platforms, Inc. and affiliates."]
+      }
+    },
     {
       "name": "@bufbuild/protobuf",
       "version": "1.10.0",
@@ -637,6 +911,21 @@
         "licenseId": "MIT",
         "copyrights": ["Copyright (c) 2019-present Fabio Spampinato, Andrew Maney"]
       }
+    },
+    {
+      "name": "sql.js",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/sql-js/sql.js"
+    },
+    {
+      "name": "tiff",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/image-js/tiff"
+    },
+    {
+      "name": "iobuffer",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/image-js/iobuffer"
     }
   ]
 }

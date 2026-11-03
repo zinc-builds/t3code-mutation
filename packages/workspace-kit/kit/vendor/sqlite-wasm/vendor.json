@@ -1,0 +1,9 @@
+{
+  "package": "@sqlite.org/sqlite-wasm",
+  "version": "3.53.4-build1",
+  "license": "Apache-2.0 (the npm wrapper); SQLite itself is public domain, Emscripten's glue MIT",
+  "files": [
+    { "path": "dist/index.mjs", "load": "module" },
+    { "path": "dist/sqlite3.wasm", "load": "bytes" }
+  ]
+}

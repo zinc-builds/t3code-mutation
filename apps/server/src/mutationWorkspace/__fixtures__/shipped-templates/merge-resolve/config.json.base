@@ -1,0 +1,9 @@
+{
+  "name": "kit",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,128 @@
+{
+  "id": "photo-develop",
+  "title": "Photo Develop",
+  "summary": "Lightroom-class develop module for one photo: live GPU develop (Basic, Color Mix, tone curve, colour grading wheels), histogram, viewer with fit, zoom, before/after, side-by-side and crop, history with thumbnails and presets, command bar, full-resolution export. Pick it for any single-photo tone, colour or crop edit.",
+  "kit": [
+    "develop",
+    "histogram",
+    "curves",
+    "viewer",
+    "history",
+    "colorwheels",
+    "links",
+    "template-runtime"
+  ],
+  "chrome": true,
+  "options": {
+    "title": { "type": "string", "default": "Develop", "description": "Header title." },
+    "look": {
+      "type": "string",
+      "enum": ["neutral", "moody", "film", "vivid", "mono"],
+      "default": "neutral",
+      "description": "Starting look applied on load as an undoable step (every look is also a preset)."
+    },
+    "values": {
+      "type": "object",
+      "default": {},
+      "description": "Adjustments applied over the look: { develop: { exposure, contrast, ..., hsl: { hue|sat|lum: [8] } }, curves: { rgb: [[x,y],...] }, wheels: { shadows: { h, s, l }, ... } }."
+    },
+    "openPanels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["histogram", "basic", "color", "curve", "wheels", "history"]
+      },
+      "default": ["histogram", "basic", "curve", "history"],
+      "description": "Panels open on load: inspector sections plus the history rail."
+    },
+    "cropAspect": {
+      "type": "string",
+      "enum": ["free", "1:1", "4:5", "3:2", "16:9"],
+      "default": "free",
+      "description": "Starting crop; anything but free opens the crop tool at that aspect."
+    },
+    "view": {
+      "type": "string",
+      "enum": ["single", "split", "side"],
+      "default": "single",
+      "description": "Starting viewer mode: single, before/after split, or side by side."
+    },
+    "exportFormat": {
+      "type": "string",
+      "enum": ["jpeg", "png"],
+      "default": "jpeg",
+      "description": "File type of the Export button."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, image stages, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    { "title": "Moody edit", "look": "moody" },
+    {
+      "title": "Film portrait",
+      "look": "film",
+      "cropAspect": "4:5",
+      "openPanels": ["histogram", "curve", "wheels", "history"]
+    },
+    {
+      "title": "Vivid before and after",
+      "look": "vivid",
+      "view": "split",
+      "openPanels": ["histogram", "basic", "color"]
+    },
+    {
+      "title": "Warm black and white",
+      "look": "mono",
+      "values": {
+        "develop": { "exposure": 0.15 },
+        "wheels": { "highlights": { "h": 40, "s": 0.12 } }
+      },
+      "exportFormat": "png"
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the media has loaded, the first preview has rendered and the template's panels exist. Add controls, then an image stage that reads them: stages draw on the developed photo (after Basic including Vignette and Grain, Color Mix, curves, colour grading and the look, Mono too), on the preview AND on the full-resolution export, before crop and straighten. Export encodes the result as options.exportFormat. Control values persist with the edit; options.controls ({ id: value }) sets starting values, and a saved edit wins over it. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows? (text; rows > 1 = multi-line), panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. Labels show about 14 characters. User edits and set() re-run every hook and re-render; onChange runs on edits only, not on load (hooks receive controls on every run, so read them there). Every control edit is one undo step (a slider drag, a typing burst, one toggle or select), named after the control and value; undo, redo, history jumps and presets restore control values with the edit (onChange does not run then).",
+      "addImageStage(id, (ctx, controls) => void, { at? }): edit ctx.canvas in place with ctx.context (2D; getImageData works). ctx = { canvas, context, width, height, scale, phase, copy(), random(seed?), crop }. width/height are the canvas size: the 1600 px preview, or the full-resolution photo on export. scale = width / preview width: multiply pixel sizes (blur radius, line width) by it, or size things as fractions of width. copy() -> a snapshot canvas of the current pixels: draw it back blurred for glows (never draw the canvas onto itself). random(seed?) -> seeded () => [0, 1), the same pattern on every render (grain, noise). phase = 'preview' | 'export'.",
+      "ctx.crop = the viewer crop { x, y, w, h, angle } in this canvas's pixels (angle 0 = exact): draw corner marks and text inside it so cropping keeps them.",
+      "addShaderStage(id, glsl, (controls, { width, height, scale }) => ({ u_name: number | boolean | [x, y(, z, w)] | '#rrggbb' }), { at? }): GLSL ES 1.0 fragment shader; u_image, u_resolution, u_scale and varying v_uv (0,0 bottom left) are declared for you, declare your own uniforms. Stages run in the order added.   removeStage(id).",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes to it; the same title returns the same panel). 'top' = first in the inspector below the Histogram (bolt-on panels in creation order), so a new panel is in view on load; 'bottom' = after Color Grading.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'g' | 'shift+g' | 'mod+g', title? }) -> button (also in T3's native toolbar when the workspace shows native chrome); it is also in the command bar.   refresh() re-renders the preview (only for state a hook reads that is not a control).   export() -> Promise<{ files: [{ name, type, size, width, height }] }>: runs the Export button (files go to t3.workspace.attach and download) and reports what it wrote; it throws on failure.",
+      "getValues() -> { develop, curves, wheels, controls }.   setValues({ develop?, curves?, wheels?, controls? }, label?) -> Promise<values>: strict (unknown keys throw), develop/curves/wheels become one undo step.",
+      "addPreset(name, { develop?, curves?, wheels?, controls? }) / applyPreset(name) (looks are presets: 'Moody', 'Film', ...).   on('change', cb(values)) -> off.",
+      "instances: { develop, histogram, curves, colorwheels, viewer, history }."
+    ],
+    "reservedShortcuts": [
+      "/",
+      "\\",
+      "y",
+      "h",
+      "e",
+      "j",
+      "k",
+      "shift+j",
+      "shift+k",
+      "mod+k",
+      "mod+z",
+      "mod+shift+z",
+      "alt+0..5",
+      "-",
+      "=",
+      "0",
+      "1",
+      "c",
+      "g",
+      "r"
+    ],
+    "example": "t3template.addControl({ id: 'glow', label: 'Amount', type: 'slider', min: 0, max: 1, step: 0.01, default: 0.4, panel: 'Glow' });\nt3template.addControl({ id: 'radius', label: 'Radius', type: 'slider', min: 2, max: 60, step: 1, default: 18, panel: 'Glow' });\nt3template.addControl({ id: 'credit', label: 'Credit', type: 'text', placeholder: 'Photo credit', default: '', panel: 'Glow' });\nt3template.addImageStage('glow', ({ context, width, height, scale, copy, crop }, c) => {\n  if (c.glow > 0) {\n    const soft = copy();\n    context.globalCompositeOperation = 'screen';\n    context.globalAlpha = c.glow;\n    context.filter = `blur(${c.radius * scale}px)`;\n    context.drawImage(soft, 0, 0);\n  }\n  if (c.credit) {\n    context.globalCompositeOperation = 'source-over';\n    context.globalAlpha = 0.8;\n    context.filter = 'none';\n    context.fillStyle = '#ffffff';\n    context.font = `${Math.round(width * 0.02)}px sans-serif`;\n    context.textAlign = 'right';\n    context.fillText(c.credit, crop.x + crop.w - width * 0.02, crop.y + crop.h - width * 0.02);\n  }\n});\nt3template.addToolbarButton('Glow Off', (t) => t.setValues({ controls: { glow: 0 } }), { shortcut: 'shift+g' });"
+  }
+}

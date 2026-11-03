@@ -1,0 +1,79 @@
+{
+  "id": "social-crop",
+  "title": "Social Crop",
+  "summary": "Make one photo post-ready for social: grade presets, a locked-aspect crop per platform (Instagram 4:5 and 1:1, Story 9:16, X 16:9, LinkedIn 1.91:1) with safe-area overlays, side-by-side previews and a batch export at each platform's size; other formats (e.g. Pinterest 2:3) bolt on with addPlatform. Pick it for any crop, resize or post-ready request for Instagram, Stories, X, LinkedIn or another social format.",
+  "kit": ["develop", "viewer", "history", "links", "template-runtime"],
+  "chrome": false,
+  "options": {
+    "title": { "type": "string", "default": "Social Crop", "description": "Header title." },
+    "look": {
+      "type": "string",
+      "enum": ["neutral", "moody", "film", "vivid"],
+      "default": "neutral",
+      "description": "Starting grade preset, applied on first load as an undoable history step."
+    },
+    "platforms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["ig-feed", "ig-square", "story", "x", "linkedin"],
+      "description": "Platforms to crop, preview and export: ig-feed 4:5, ig-square 1:1, story 9:16, x 16:9, linkedin 1.91:1, plus any customScript registers with t3template.addPlatform. The first is the active crop."
+    },
+    "safeArea": {
+      "type": "boolean",
+      "default": true,
+      "description": "Shade each platform's UI zones (Story profile and reply bars, feed margins) on the previews."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, image stages, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    { "title": "Feed and Story", "platforms": ["ig-feed", "story"], "look": "vivid" },
+    { "title": "Moody Launch", "platforms": ["x", "linkedin"], "look": "moody" },
+    {
+      "title": "Film Carousel",
+      "platforms": ["ig-square", "ig-feed"],
+      "look": "film",
+      "safeArea": false
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the media has loaded, the first preview has rendered and the template's panels exist. Add controls, then image stages that read them. at: 'image' (default) draws on the graded, uncropped photo, so the viewer, every card and every crop get it. at: 'output' draws on each finished crop (each platform card and each exported file, after crop and resize), so frames, captions and watermarks never get cut off. Control values persist with the edit; options.controls ({ id: value }) sets starting values, and a saved edit wins over it. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows? (text; rows > 1 = multi-line), panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. Labels show about 14 characters. User edits and set() re-run every hook and re-render; onChange runs on edits only, not on load (hooks receive controls on every run, so read them there). Every control edit is one undo step (a slider drag, a typing burst, one toggle or select), named after the control and value; undo, redo, history jumps and presets restore control values with the edit (onChange does not run then).",
+      "addImageStage(id, (ctx, controls) => void, { at? }): edit ctx.canvas in place with ctx.context (2D; getImageData works). ctx = { canvas, context, width, height, scale, phase, copy(), random(seed?), crops | output }. width/height are the canvas size: 'image' = the 2048 px working photo (smaller for the live look while dragging, the full-resolution original on export); 'output' = the platform card on the preview, the exported size (e.g. 1080 x 1350) on export. scale = width / preview width: multiply pixel sizes (blur radius, line width) by it, or size things as fractions of width. copy() -> a snapshot canvas of the current pixels: draw it back blurred for glows (never draw the canvas onto itself). random(seed?) -> seeded () => [0, 1), the same pattern on every render (grain, noise). phase = 'preview' | 'export'.",
+      "ctx.crops ('image' stages) = { [platformId]: { x, y, w, h, angle } } in canvas pixels.   ctx.output ('output' stages) = { id, name, aspect, width, height, safe: { top, bottom, side } }: width/height are the exported size; keep text out of the safe fractions (Story reply bar). For 'output' stages scale = canvas width / exported width (1 on export).",
+      "addShaderStage(id, glsl, (controls, { width, height, scale }) => ({ u_name: number | boolean | [x, y(, z, w)] | '#rrggbb' }), { at? }): GLSL ES 1.0 fragment shader; u_image, u_resolution, u_scale and varying v_uv (0,0 bottom left) are declared for you, declare your own uniforms. Stages run in the order added.   removeStage(id).",
+      "addPlatform({ id, name, short?, aspect: 'w:h', width: upload px, safe?: { top, bottom, side } fractions = 0.05, enabled? }) -> id: a new crop target (e.g. Pinterest 2:3, 1000 px) with its own locked crop, card and export. Included unless options.platforms lists others. options.platforms may name it; an id still unknown after customScript is an error.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes to it; the same title returns the same panel). 'top' = first in the inspector above Platforms (bolt-on panels in creation order), so a new panel is in view on load; 'bottom' = above Export.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'g' | 'shift+g' | 'mod+g', title? }) -> button.   refresh() re-renders the preview (only for state a hook reads that is not a control).   export() -> Promise<{ files: [{ name, type, size, width, height }] }>: runs the Export button (files go to t3.workspace.attach and download) and reports what it wrote; it throws on failure.",
+      "getValues() -> { title, look, platforms, active, safeArea, develop, crops, controls }.   setValues({ title?, look?, platforms?, active?, safeArea?, develop?, crops?, controls? }) -> values: strict; develop and crops become one undo step. Built-in platform ids: ig-feed, ig-square, story, x, linkedin; crops are fractions { x, y, w, h, angle } of the photo.",
+      "addPreset(name, { exposure?, contrast?, ...develop params, controls? }) / applyPreset(name) (looks: 'Neutral', 'Moody', 'Film', 'Vivid').   on('change', cb(values)) -> off.",
+      "instances: { develop, viewer, history, link }."
+    ],
+    "reservedShortcuts": [
+      "mod+e",
+      "[",
+      "]",
+      "\\",
+      "s",
+      "mod+z",
+      "mod+shift+z",
+      "-",
+      "=",
+      "0",
+      "1",
+      "c",
+      "g",
+      "r"
+    ],
+    "example": "t3template.addControl({ id: 'warmth', label: 'Amount', type: 'slider', min: 0, max: 1, step: 0.01, default: 0.35, panel: 'Tint' });\nt3template.addControl({ id: 'tint', label: 'Colour', type: 'color', default: '#ff9a3c', panel: 'Tint' });\nt3template.addShaderStage('tint', `uniform float u_amount;\nuniform vec3 u_tint;\nvoid main() {\n  vec4 c = texture2D(u_image, v_uv);\n  gl_FragColor = vec4(mix(c.rgb, c.rgb * u_tint * 1.4, u_amount), c.a);\n}`, (c) => ({ u_amount: c.warmth, u_tint: c.tint }));\nt3template.addControl({ id: 'caption', label: 'Caption', type: 'text', default: 'Sonoma, spring', panel: 'Caption' });\nt3template.addControl({ id: 'frame', label: 'Frame', type: 'color', default: '#ffffff', panel: 'Caption' });\nt3template.addImageStage('caption', ({ context, width, height, output }, c) => {\n  const edge = Math.round(Math.min(width, height) * 0.02);\n  context.strokeStyle = c.frame;\n  context.lineWidth = edge * 2;\n  context.strokeRect(0, 0, width, height);\n  if (!c.caption) return;\n  context.fillStyle = c.frame;\n  context.font = `600 ${Math.round(height * 0.04)}px sans-serif`;\n  context.textAlign = 'center';\n  context.fillText(c.caption, width / 2, height * (1 - output.safe.bottom) - edge * 2);\n}, { at: 'output' });\nt3template.addPlatform({ id: 'pinterest', name: 'Pinterest Pin', short: 'Pin', aspect: '2:3', width: 1000 });\nt3template.addToolbarButton('Tint Off', (t) => t.setValues({ controls: { warmth: 0 } }), { shortcut: 't' });"
+  }
+}

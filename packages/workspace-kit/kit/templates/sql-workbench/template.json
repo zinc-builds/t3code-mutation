@@ -1,0 +1,154 @@
+{
+  "id": "sql-workbench",
+  "title": "SQL Workbench",
+  "summary": "SQL workbench over SQLite (the official wasm build, in memory, in a worker): a schema browser with tables, views, columns, keys and row counts, a highlighted SQL editor with completion where Cmd+Enter runs the statement under the cursor or the selection, result sets in a datagrid with timing, inline errors at their line and column, a chart of any result, saved queries, a run log and undo history. A running query shows a timer and can be cancelled (Esc). Opens .sqlite and .db files and imports CSVs as typed tables to join. Data edits (INSERT, UPDATE, CREATE...) are kept with the workspace as a log of up to 48 KB of SQL, replayed over the files when it opens; the files on disk never change (T3 has no way to write them back), so Export saves the result as CSV and the database as .sqlite. Pick it to explore, join, reshape or edit data with SQL.",
+  "kit": ["datagrid", "chart", "history", "links", "template-runtime"],
+  "vendor": ["sqlite-wasm"],
+  "chrome": true,
+  "verifyAssets": "trips.sqlite,weather.csv",
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "SQL",
+      "description": "Header title."
+    },
+    "query": {
+      "type": "string",
+      "default": "",
+      "description": "SQL in the editor on open; several statements are fine. Empty = SELECT * FROM the table with the most rows LIMIT 100. If it fails on open, the error comes back as a page error. Statements that change data are kept like the user's own edits, so a reopened workspace does not run it again."
+    },
+    "run": {
+      "type": "boolean",
+      "default": true,
+      "description": "Run every statement of the editor's SQL on open."
+    },
+    "tables": {
+      "type": "object",
+      "default": {},
+      "description": "Table names for CSV assets, { \"file.csv\": \"table_name\" }. A CSV without one imports as its file stem (weather.csv -> weather), with INTEGER, REAL or TEXT columns inferred and blanks as NULL. The first .sqlite or .db asset opens as main; more attach under their stems."
+    },
+    "saved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "sql": { "type": "string" } },
+        "required": ["name", "sql"]
+      },
+      "default": [],
+      "description": "Saved queries to start with, [{ name, sql }]. Click opens one in the editor, double-click runs it; the user saves more with Cmd+S."
+    },
+    "view": {
+      "type": "string",
+      "enum": ["grid", "chart", "split"],
+      "default": "grid",
+      "description": "How results show: the grid, a chart of the result, or both side by side."
+    },
+    "chart": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["bar", "line", "area", "scatter", "histogram"] },
+        "x": { "type": "string" },
+        "y": { "type": ["string", "null"] },
+        "series": { "type": ["string", "null"] },
+        "aggregate": {
+          "type": ["string", "null"],
+          "enum": ["count", "sum", "mean", "min", "max", "none", null]
+        }
+      },
+      "default": {},
+      "description": "Result chart, used while the result has its columns: { type, x, y (number column, null counts rows), series, aggregate }. Empty, or columns the result lacks = picked from the result: the first date or text column as x; as y the last number column named like a rate or average (per, avg, mean, rate, ratio, pct, share...), else the last number column; a second text column with at most 12 values as series."
+    },
+    "maxRows": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 100000,
+      "default": 10000,
+      "description": "Rows kept per result set; a longer result says it was cut."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, panels, buttons, presets and queries. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins)."
+    }
+  },
+  "examples": [
+    {
+      "title": "Busiest Stations",
+      "query": "-- Trips and average ride per station\nSELECT station, city, count(*) AS trips, round(avg(duration_min), 1) AS avg_min\nFROM trip_facts\nGROUP BY station, city\nORDER BY trips DESC\nLIMIT 15;",
+      "view": "split",
+      "chart": { "type": "bar", "x": "station", "y": "trips" }
+    },
+    {
+      "title": "Rain and Ridership",
+      "query": "-- Daily Berlin trips against rainfall from weather.csv\nSELECT w.date, w.precip_mm, w.temp_c, count(t.trip_id) AS trips\nFROM weather AS w\nLEFT JOIN trip_facts AS t ON t.city = w.city AND date(t.started_at) = w.date\nWHERE w.city = 'Berlin'\nGROUP BY w.date\nORDER BY w.date;",
+      "view": "chart",
+      "chart": { "type": "line", "x": "date", "y": "trips" }
+    },
+    {
+      "title": "Revenue Mix",
+      "query": "SELECT plan, count(*) AS trips, round(sum(fare_usd), 2) AS revenue\nFROM trip_facts\nGROUP BY plan;\n\nSELECT b.label, count(*) AS trips, round(avg(t.fare_usd), 2) AS avg_fare\nFROM trips AS t\nJOIN bike_types AS b USING (bike_type)\nGROUP BY b.label\nORDER BY trips DESC;",
+      "saved": [
+        {
+          "name": "Top Riders",
+          "sql": "SELECT rider_id, count(*) AS trips, round(sum(fare_usd), 2) AS spent\nFROM trips\nGROUP BY rider_id\nORDER BY trips DESC\nLIMIT 20;"
+        },
+        {
+          "name": "Ratings by City",
+          "sql": "SELECT city, round(avg(rating), 2) AS avg_rating, count(rating) AS rated\nFROM trip_facts\nGROUP BY city\nORDER BY avg_rating DESC;"
+        }
+      ]
+    },
+    {
+      "title": "Rain and Dry by City",
+      "query": "-- Trips per day in rain and dry weather, by city\nSELECT w.city,\n       CASE WHEN w.precip_mm > 0 THEN 'rain' ELSE 'dry' END AS weather,\n       count(DISTINCT w.date) AS days,\n       count(t.trip_id) AS trips,\n       round(count(t.trip_id) * 1.0 / count(DISTINCT w.date), 1) AS trips_per_day\nFROM weather AS w\nLEFT JOIN trip_facts AS t ON t.city = w.city AND date(t.started_at) = w.date\nGROUP BY w.city, weather\nORDER BY w.city, weather;",
+      "view": "split"
+    },
+    {
+      "title": "Fare Targets",
+      "query": "CREATE TABLE targets (city TEXT PRIMARY KEY, avg_fare_usd REAL NOT NULL);\nINSERT INTO targets VALUES ('Austin', 1.5), ('Berlin', 2.5), ('Lisbon', 2.0), ('Osaka', 2.25);\nSELECT g.city, g.avg_fare_usd AS target, round(avg(t.fare_usd), 2) AS actual,\n       round(avg(t.fare_usd) - g.avg_fare_usd, 2) AS gap\nFROM targets AS g\nJOIN trip_facts AS t ON t.city = g.city\nGROUP BY g.city\nORDER BY gap DESC;",
+      "view": "split",
+      "chart": { "type": "bar", "x": "city", "y": "gap" }
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code) after the database is open, the starting SQL has run and the grid shows its result. SQLite runs in a worker, so reach it through t3template.run (it fills the editor and runs every statement, as Cmd+Shift+Enter does) or t3template.query (silent, resolves to rows); the schema browser, results, run log and history follow. A statement that changes data, from either, is kept like the user's edits (replayed on reopen, one undo step). Every control edit is one undo step; history steps hold the editor's SQL, the results view and the chart. Errors log '[t3template] customScript error: ...' and show in a dismissible banner. This is a data template (pipeline 'data'): addImageStage, addShaderStage, EDL hooks and addAudioFilter throw; bolt on through controls, panels, toolbar buttons, presets and queries.",
+    "api": [
+      "run(sql?, label?) -> Promise<{ results: [{ columns, rowCount, truncated, ms } | { changes, ms }] }>: puts sql in the editor (one undo step named label) and runs all of it; without sql it runs the editor as it is. Rejects with SQLite's message and its statement, line and column when a statement fails, and with 'Cancelled after N s' when the user cancels it.",
+      "query(sql, params?) -> Promise<{ columns, rows: [{ column: value }] }>: runs one statement in the worker without touching the editor or results (params: an array for ? placeholders, or { ':name': value }). Rejects on SQL errors. Rows are capped by nothing, so add LIMIT. A write is kept with its params (binary params cannot be stored, so they stay unsaved).   addSavedQuery(name, sql) adds to Saved Queries (the same name replaces it).",
+      "discardEdits() -> Promise: back to the original files (one undo step; undo brings the edits back). The Data Edits panel shows the kept edits against the 48 KB budget, statements over it (applied now, lost on reload: export them), and replays that will differ (random(), 'now', DEFAULT CURRENT_TIMESTAMP).",
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. onChange runs on user edits only, not on load. Every control edit is one undo step.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes; the same title returns the same panel). 'top' = first in the right inspector, above Saved Queries; 'bottom' = after History.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'shift+r' (any key not in reservedShortcuts), title? }) -> button (also listed in the command palette, Cmd+K).   refresh() re-renders after silent changes.",
+      "export() -> Promise<{ files: [{ name, type, size }] }>: the result on screen as CSV (the grid's filters, sort and visible columns) when there is one, and the database with its edits as .sqlite, sent to t3.workspace.attach and downloaded. The same as the Export button; it throws on failure. It waits for a running query.",
+      "getValues() -> { sql, view: 'grid'|'chart'|'split', chart: { type, x, y, series, aggregate }, controls }.   setValues({ sql?, view?, chart? }, label?) -> values: strict, so unknown keys throw; chart merges; it does not run the SQL. One undo step.",
+      "addPreset(name, { sql?, view?, chart? }) / applyPreset(name): presets live in the History panel.   on('change', cb(values)) -> off.",
+      "instances: { grid (t3kit.datagrid of the result on screen, or null), chart (t3kit.chart of it, or null), history (t3kit.history), editor ({ get(), set(sql), insert(text), selection() }) }; grid and chart are getters that follow each run. The database lives in a worker: there is no db object, use query() and run()."
+    ],
+    "reservedShortcuts": [
+      "e",
+      "g",
+      "v",
+      "i",
+      "b",
+      "f",
+      "/",
+      "[",
+      "]",
+      "mod+enter",
+      "mod+shift+enter",
+      "mod+s",
+      "mod+k",
+      "mod+z",
+      "mod+shift+z",
+      "mod+/",
+      "mod+shift+f",
+      "escape"
+    ],
+    "example": "t3template.addSavedQuery('Busiest Hours', \"SELECT strftime('%H', started_at) AS hour, count(*) AS trips\\nFROM trips\\nGROUP BY hour\\nORDER BY hour;\");\nt3template.addControl({ id: 'minMinutes', label: 'Min Minutes', type: 'slider', min: 0, max: 60, step: 5, default: 20, panel: 'Long Rides', onChange(v, t) { t.run(`SELECT city, count(*) AS rides, round(avg(fare_usd), 2) AS avg_fare\\nFROM trip_facts\\nWHERE duration_min >= ${v}\\nGROUP BY city\\nORDER BY rides DESC;`, `Rides of ${v}+ Minutes`); } });\nt3template.addToolbarButton('Revenue by City', (t) => t.run('SELECT city, round(sum(fare_usd), 2) AS revenue\\nFROM trip_facts\\nGROUP BY city\\nORDER BY revenue DESC;', 'Revenue by City'), { shortcut: 'shift+r' });\nreturn t3template.run('SELECT city, count(*) AS rides, round(avg(fare_usd), 2) AS avg_fare\\nFROM trip_facts\\nWHERE duration_min >= 20\\nGROUP BY city\\nORDER BY rides DESC;', 'Rides of 20+ Minutes');"
+  }
+}

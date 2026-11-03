@@ -1,0 +1,2169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Log Trace</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 40px auto minmax(0, 1fr) 24px;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .query {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+      }
+      .query:focus-within {
+        border-color: var(--ring);
+      }
+      .query.bad {
+        border-color: var(--destructive);
+      }
+      .query-hint {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .query input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        font-family: var(--font-mono);
+        font-size: 12px;
+      }
+      .qerr {
+        font-size: 11px;
+        color: var(--destructive);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 240px;
+      }
+      .count {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .brush {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        height: 26px;
+        padding: 0 4px 0 8px;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--accent);
+        color: var(--accent-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--foreground);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .btn:focus-visible,
+      .fv:focus-visible,
+      .pat:focus-visible,
+      .pin-go:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: transparent;
+      }
+      .btn-primary:hover {
+        background: var(--primary);
+        opacity: 0.9;
+      }
+      .btn-ghost {
+        border: 0;
+        background: transparent;
+        padding: 0 4px;
+        cursor: pointer;
+        color: inherit;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .chips:empty {
+        padding: 0;
+        border-bottom: 0;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 22px;
+        padding: 0 4px 0 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .chip.out {
+        color: var(--destructive);
+        text-decoration: line-through;
+      }
+      .chip button {
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        color: var(--muted-foreground);
+        padding: 0 3px;
+      }
+
+      .body {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr) 380px;
+      }
+      .rail,
+      .inspector {
+        min-height: 0;
+        overflow: auto;
+      }
+      .rail {
+        border-right: 1px solid var(--border);
+        padding: 8px;
+      }
+      .inspector {
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      /* The panels scroll; the composer slot stays pinned below them. */
+      .inspector-scroll {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .facet {
+        margin-bottom: 12px;
+      }
+      .facet-h {
+        display: flex;
+        justify-content: space-between;
+        margin: 0 0 4px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .fv {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        width: 100%;
+        height: 22px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: calc(var(--radius) - 4px);
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+      }
+      .fv:hover {
+        background: var(--accent);
+      }
+      .fv.in {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .fv.out {
+        color: var(--destructive);
+        text-decoration: line-through;
+      }
+      .fv-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .fv-n {
+        padding-left: 6px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .fv.in .fv-n {
+        color: inherit;
+      }
+      .fv-bar {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 2px;
+        background: var(--chart-1);
+        opacity: 0.45;
+      }
+
+      .centre {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: 150px minmax(0, 1fr) 200px;
+      }
+      .sect-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .hist {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        border-bottom: 1px solid var(--border);
+      }
+      .hist-plot {
+        min-height: 0;
+        padding: 4px 6px;
+      }
+      .grid-wrap {
+        position: relative;
+        min-height: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .empty-state {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        gap: 6px;
+        text-align: center;
+        background: var(--background);
+        color: var(--muted-foreground);
+      }
+      .empty-state strong {
+        color: var(--foreground);
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .grid-wrap #grid {
+        height: 100%;
+      }
+      .drawer {
+        min-height: 0;
+        overflow: auto;
+        padding: 8px 10px;
+      }
+      .drawer-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .drawer-msg {
+        margin: 4px 0 6px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr);
+        gap: 1px 10px;
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .kv dt {
+        color: var(--muted-foreground);
+      }
+      .kv dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .linkish {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        color: var(--info);
+        font: inherit;
+        text-decoration: underline;
+      }
+      .raw {
+        margin: 6px 0;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--card);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .drawer-actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .lvl {
+        padding: 0 5px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .lvl.err {
+        color: var(--destructive);
+        border-color: var(--destructive);
+      }
+      .lvl.warn {
+        color: var(--warning);
+        border-color: var(--warning);
+      }
+      .lvl.info {
+        color: var(--info);
+      }
+      .lvl.dbg {
+        color: var(--muted-foreground);
+      }
+
+      .panel {
+        flex: 0 0 auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+      }
+      .panel > summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 8px;
+        cursor: pointer;
+        font-weight: 600;
+        list-style: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel-body {
+        padding: 0 8px 8px;
+      }
+      .sum-note {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted-foreground);
+      }
+      .panel {
+        min-width: 0;
+      }
+      /* The page shows the waterfall only: the spantree's own view switcher and search are hidden. */
+      .waterfall .t3k-spantree-bar {
+        display: none;
+      }
+      .waterfall {
+        position: relative;
+        height: 180px;
+        min-height: 0;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .crit {
+        display: grid;
+        gap: 2px;
+        margin-top: 6px;
+        font-size: 11px;
+      }
+      .crit-head {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .crit-step {
+        display: grid;
+        grid-template-columns: 16px minmax(0, 1fr) auto;
+        gap: 6px;
+        padding: 2px 4px;
+        border-left: 2px solid var(--primary);
+        font-family: var(--font-mono);
+      }
+      .crit-n,
+      .crit-ms {
+        color: var(--muted-foreground);
+      }
+      .crit-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pats {
+        max-height: 240px;
+        overflow: auto;
+      }
+      .pat {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 2px 6px;
+        width: 100%;
+        padding: 3px 4px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+      .pat:hover {
+        background: var(--accent);
+      }
+      .pat.on {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .pat-n {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        text-align: right;
+        color: var(--muted-foreground);
+      }
+      .pat.on .pat-n {
+        color: inherit;
+      }
+      .pat-msg {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .pat-t {
+        grid-column: 2;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--muted-foreground);
+      }
+      .pat.on .pat-t {
+        color: inherit;
+      }
+      .pins {
+        display: grid;
+        gap: 2px;
+      }
+      .pin {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
+      .pin-go {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr);
+        gap: 6px;
+        min-width: 0;
+        padding: 3px 4px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .pin-go:hover {
+        background: var(--accent);
+      }
+      .pin-t {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--muted-foreground);
+      }
+      .pin-msg {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .pin-x {
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        color: var(--muted-foreground);
+        padding: 0 4px;
+      }
+      .history {
+        height: 280px;
+        min-height: 0;
+      }
+      .composer {
+        flex: none;
+        min-height: 40px;
+        padding: 8px;
+        border-top: 1px solid var(--border);
+      }
+      .empty {
+        margin: 4px 0;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .status-left {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">Log Trace</h1>
+        <label class="query" id="query-box">
+          <input
+            id="query"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            aria-label="Query"
+            placeholder="text  field:value  -field:value  /regex/  latency_ms:&gt;=200"
+          />
+        </label>
+        <span class="qerr" id="qerr"></span>
+        <span class="count" id="count" title="Events in view / all events">-</span>
+        <span class="brush" id="brush" hidden>
+          <span id="brush-text"></span>
+          <button class="btn-ghost" id="brush-clear" type="button" title="Clear brush (Esc)">
+            ×
+          </button>
+        </span>
+        <div class="tools">
+          <div id="extra-tools" class="tools"></div>
+          <button
+            class="btn"
+            id="send"
+            type="button"
+            title="Send the findings to the agent: a short summary with findings.json and window.jsonl (S)"
+            disabled
+          >
+            Send <kbd>s</kbd>
+          </button>
+          <button class="btn btn-primary" id="export" type="button" disabled>
+            Export <kbd>e</kbd>
+          </button>
+        </div>
+      </header>
+
+      <div class="chips" id="chips"></div>
+
+      <div class="body">
+        <aside class="rail" id="facets" aria-label="Facets"></aside>
+
+        <main class="centre">
+          <section class="hist" aria-label="Event rate">
+            <div class="sect-head">
+              <span>Event rate, stacked by level</span>
+              <span id="hist-meta"></span>
+            </div>
+            <div class="hist-plot" id="hist-plot"></div>
+          </section>
+          <section class="grid-wrap" aria-label="Events">
+            <div id="grid"></div>
+            <div class="empty-state" id="empty" hidden>
+              <strong>No log events</strong>
+              <span
+                >Attach .jsonl, .ndjson, .log or .txt logs; span records and trace .json files feed
+                the waterfall.</span
+              >
+            </div>
+          </section>
+          <section class="drawer" id="drawer" aria-label="Event detail"></section>
+        </main>
+
+        <aside class="inspector" aria-label="Inspector">
+          <div class="inspector-scroll">
+            <details class="panel" id="trace-panel" open>
+              <summary>
+                <span id="trace-title">Trace</span>
+                <span class="sum-note" id="trace-note">focus an event with a trace id</span>
+              </summary>
+              <div class="panel-body">
+                <div class="waterfall" id="waterfall" hidden></div>
+                <div class="crit" id="crit"></div>
+              </div>
+            </details>
+
+            <div id="panels" class="panels">
+              <details class="panel" data-panel="patterns" open>
+                <summary>
+                  <span>Patterns</span>
+                  <span class="sum-note" id="pat-note"></span>
+                </summary>
+                <div class="panel-body">
+                  <div class="pats" id="patterns-list"></div>
+                </div>
+              </details>
+              <details class="panel" data-panel="pins" open>
+                <summary>
+                  <span>Pins</span>
+                  <span class="sum-note" id="pins-count">0</span>
+                </summary>
+                <div class="panel-body">
+                  <div class="pins" id="pins"></div>
+                </div>
+              </details>
+              <details class="panel" data-panel="history" open>
+                <summary>History</summary>
+                <div class="panel-body">
+                  <div class="history" id="history"></div>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <div data-t3-composer class="composer"></div>
+        </aside>
+      </div>
+
+      <footer class="status">
+        <span class="status-left" id="status"></span>
+        <span>/ query · j k rows · p pin · t trace · [ ] shift · Esc clear</span>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const KEY = "log-trace";
+        const LOG_FILE = /\.(jsonl|ndjson|log|txt)$/i;
+        const TRACE_FILE = /\.json$/i; // Chrome trace JSON or OTLP JSON: spans only
+        const CHUNK = 20000; // lines scanned per chunk before yielding to the page
+        const WINDOW_MAX = 5000; // window.jsonl cap
+        const UNIT_MS = { second: 1000, minute: 60000, hour: 3600000, day: 86400000 };
+        const BIN_OPTIONS = ["auto", "second", "minute", "hour"];
+        const TIME_KEYS = ["ts", "time", "timestamp", "@timestamp"];
+        const LEVEL_KEYS = ["level", "severity", "lvl", "loglevel"];
+        const TRACE_KEYS = ["trace_id", "traceId", "trace"];
+        const MSG_KEYS = ["msg", "message"];
+        const STATE_KEYS = ["query", "timeRange", "include", "exclude", "pins", "columnFilters"];
+        const RESERVED = [
+          "/",
+          "[",
+          "]",
+          "j",
+          "k",
+          "p",
+          "t",
+          "e",
+          "s",
+          "escape",
+          "mod+z",
+          "mod+shift+z",
+        ];
+        const MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+        const NUM = new Intl.NumberFormat(undefined);
+        const fmt = (n) => NUM.format(n);
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+        const iso = (t) => new Date(t).toISOString();
+        // Display times are local, like the histogram axis; files and findings keep ISO UTC.
+        const pad = (n, w = 2) => String(n).padStart(w, "0");
+        const hms = (t) => {
+          const d = new Date(t);
+          return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+        };
+        const fmtMs = (ms) => `${ms >= 100 ? Math.round(ms) : ms.toFixed(1)} ms`;
+
+        // ---- Options ---------------------------------------------------------------
+        const isIso = (v) => typeof v === "string" && !Number.isNaN(Date.parse(v));
+        const SPEC = {
+          title: { default: "Log Trace", ok: (v) => typeof v === "string" && v.trim() !== "" },
+          query: { default: "", ok: (v) => typeof v === "string" },
+          timeRange: {
+            default: null,
+            ok: (v) =>
+              v === null ||
+              (isPlain(v) &&
+                isIso(v.from) &&
+                isIso(v.to) &&
+                Date.parse(v.from) <= Date.parse(v.to)),
+          },
+          facets: {
+            default: ["level", "service", "route", "status"],
+            ok: (v) =>
+              Array.isArray(v) &&
+              v.length <= 8 &&
+              v.every((x) => typeof x === "string" && x !== ""),
+          },
+          timeField: {
+            default: null,
+            ok: (v) => v === null || (typeof v === "string" && v !== ""),
+          },
+          traceField: {
+            default: null,
+            ok: (v) => v === null || (typeof v === "string" && v !== ""),
+          },
+          levelField: {
+            default: null,
+            ok: (v) => v === null || (typeof v === "string" && v !== ""),
+          },
+          bins: { default: "auto", ok: (v) => BIN_OPTIONS.includes(v) },
+          groupBy: { default: "pattern", ok: (v) => typeof v === "string" && v !== "" },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn(`${KEY}: options are not valid JSON; using defaults.`, err.message);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(`${KEY}: option "${key}" is invalid; using the default.`);
+              out[key] = clone(spec.default);
+            }
+          }
+          return out;
+        }
+        const OPTS = readOptions();
+
+        // ---- Shared state ----------------------------------------------------------
+        const S = {
+          events: [], // { id (grid source row), t, ts, raw, row, text, lc, pattern, traceId, level }, sorted by t
+          columns: [], // every column of the logs, as t3kit.datagrid parsed them
+          F: { time: null, level: null, trace: null, msg: null, service: null }, // detected or chosen fields
+          groupBy: "pattern",
+          spans: new Map(), // traceId -> span records from the log files (spantree 'spans' format)
+          traceFiles: new Map(), // traceId -> { file, durationMs } for Chrome trace or OTLP JSON attachments
+          rawToId: new Map(),
+          files: [],
+          lines: 0,
+          noTime: 0,
+          spanCount: 0,
+          query: "",
+          terms: [],
+          queryError: null,
+          brush: null, // { from, to } epoch ms
+          include: {}, // field -> [values]
+          exclude: {},
+          pins: [], // { ts, raw }
+          columnFilters: {}, // the grid's own column filters
+          focus: null, // event id
+          scope: [], // events in view (query, brush, facets and column filters), in time order
+          scopeSet: new Set(),
+          traceId: null,
+          trace: null, // { traceId, durationMs, criticalPath }
+          dataMin: 0,
+          dataMax: 0,
+          booted: false,
+        };
+        let history = null;
+        let historyLink = null;
+        let traceSeq = 0;
+        let refreshTimer = null;
+        let persistTimer = null;
+        let filterTimer = null;
+
+        // ---- Parsing ---------------------------------------------------------------
+        // t3kit.datagrid parses the log text (JSON lines, logfmt or timestamp-prefixed lines, in chunks) and keeps
+        // every exact line (grid.raw). The page only moves span records (span_id plus duration_ms) to the waterfall.
+        const toMs = (v) => {
+          if (typeof v === "number" && Number.isFinite(v)) return v < 1e11 ? v * 1000 : v;
+          if (typeof v !== "string" || v.trim() === "") return null;
+          if (/^-?\d+(\.\d+)?$/.test(v.trim())) return toMs(Number(v));
+          const n = Date.parse(v.replace(",", "."));
+          return Number.isNaN(n) ? null : n;
+        };
+        const fileOf = async (asset) => asset.file ?? (await (await fetch(asset.url)).blob());
+        const isSpanLine = (line) =>
+          line.startsWith("{") && line.includes('"span_id"') && line.includes('"duration_ms"');
+        const LOGFMT_KEY = /([A-Za-z_][\w.@-]*)=/g;
+
+        function spanOf(obj, where) {
+          const tKey = TIME_KEYS.find((k) => obj[k] != null);
+          const start = tKey === undefined ? null : toMs(obj[tKey]);
+          if (start === null)
+            throw new Error(
+              `${KEY}: span record at ${where} has no time (${TIME_KEYS.join(", ")})`,
+            );
+          const cKey = OPTS.traceField ?? TRACE_KEYS.find((k) => obj[k] != null);
+          return {
+            id: String(obj.span_id),
+            parentId: obj.parent_span_id ? String(obj.parent_span_id) : null,
+            name: String(obj.name ?? "span"),
+            start,
+            dur: Number(obj.duration_ms),
+            service: obj.service != null ? String(obj.service) : "",
+            trace: cKey !== undefined && obj[cKey] != null ? String(obj[cKey]) : "",
+            error: obj.error === true || obj.status === "error",
+          };
+        }
+
+        // Log files: span lines out, the rest as one Blob per file for the grid. Trace JSON files go to the waterfall.
+        async function splitAssets(assets) {
+          const logs = [];
+          const spans = [];
+          let lines = 0;
+          for (const asset of assets) {
+            const file = await fileOf(asset);
+            if (TRACE_FILE.test(asset.name)) {
+              const info = await tree.load(file, { format: "auto" });
+              for (const t of tree.traces()) {
+                if (t.traceId !== null) S.traceFiles.set(t.traceId, { file, durationMs: t.dur });
+              }
+              S.spanCount += info.spans;
+              continue;
+            }
+            const all = (await file.text()).replace(/^﻿/, "").split(/\r?\n/);
+            const kept = [];
+            for (let start = 0; start < all.length; start += CHUNK) {
+              const end = Math.min(all.length, start + CHUNK);
+              for (let i = start; i < end; i++) {
+                const line = all[i].trim();
+                if (line === "") continue;
+                lines += 1;
+                if (isSpanLine(line))
+                  spans.push(spanOf(JSON.parse(line), `${asset.name}:${i + 1}`));
+                else kept.push(line);
+              }
+              setStatus(`Reading ${asset.name}: ${fmt(end)} of ${fmt(all.length)} lines`);
+              await tick();
+            }
+            if (kept.length) logs.push(new Blob([`${kept.join("\n")}\n`], { type: "text/plain" }));
+          }
+          return { logs, spans, lines };
+        }
+
+        // The time column of the first log line, for merging several files on time.
+        async function mergeKey(blob) {
+          if (OPTS.timeField !== null) return OPTS.timeField;
+          const first = (await blob.slice(0, 4096).text()).split("\n")[0];
+          const keys = first.startsWith("{")
+            ? Object.keys(JSON.parse(first))
+            : [...first.matchAll(LOGFMT_KEY)].map((m) => m[1]);
+          return TIME_KEYS.find((k) => keys.includes(k)) ?? "ts";
+        }
+
+        function pickField(cols, chosen, keys, option) {
+          if (chosen === null) return keys.find((k) => cols.includes(k)) ?? null;
+          if (!cols.includes(chosen))
+            throw new Error(
+              `${KEY}: option ${option} "${chosen}" is not a column of the logs (${cols.join(", ")})`,
+            );
+          return chosen;
+        }
+
+        async function loadEvents(logs) {
+          const merge = logs.length > 1 ? await mergeKey(logs[0]) : null;
+          setStatus("Parsing logs");
+          const loaded = await grid.load(logs.length === 1 ? logs[0] : logs, {
+            format: "auto",
+            mergeOn: merge,
+          });
+          if (!loaded) throw new Error(`${KEY}: the log load was superseded`);
+          const cols = loaded.columns;
+          const F = {
+            time: pickField(cols, OPTS.timeField, TIME_KEYS, "timeField"),
+            level: pickField(cols, OPTS.levelField, LEVEL_KEYS, "levelField"),
+            trace: pickField(cols, OPTS.traceField, TRACE_KEYS, "traceField"),
+            msg: pickField(cols, null, MSG_KEYS, "msg"),
+            service: cols.includes("service") ? "service" : null,
+          };
+          if (F.time === null)
+            throw new Error(
+              `${KEY}: no time column (${TIME_KEYS.join(", ")}) in the logs; set options.timeField`,
+            );
+          S.F = F;
+          S.columns = cols;
+          const lead = [F.time, F.level, F.service, F.msg, F.trace].filter((c) => c !== null);
+          grid.set({
+            columns: [...new Set([...lead, ...cols])].map((id) =>
+              id === F.time ? { id, width: 200 } : { id },
+            ),
+          });
+          for (const f of OPTS.facets)
+            if (!cols.includes(f))
+              console.warn(`${KEY}: facet "${f}" is not a column of these logs.`);
+          S.groupBy = OPTS.groupBy;
+          if (S.groupBy !== "pattern" && !cols.includes(S.groupBy)) {
+            console.warn(
+              `${KEY}: groupBy "${S.groupBy}" is not a column of these logs; grouping by pattern.`,
+            );
+            S.groupBy = "pattern";
+          }
+          const cells = cols.map((c) => [c, grid.column(c)]);
+          const others = cols.filter((c) => c !== F.time);
+          const events = new Array(loaded.rows);
+          let prevT = null;
+          let prevLevel = null;
+          let noTime = 0;
+          for (let i = 0; i < loaded.rows; i++) {
+            const row = {};
+            for (const [c, arr] of cells) row[c] = arr[i] === "" ? null : arr[i];
+            if (F.level !== null && row[F.level] !== null)
+              row[F.level] = row[F.level].toLowerCase();
+            let t = toMs(row[F.time]);
+            let level = F.level !== null ? row[F.level] : null;
+            if (t === null) {
+              noTime += 1;
+              t = prevT; // a continuation line (stack trace) takes the time and level of the line before it
+              level ??= prevLevel;
+            } else {
+              prevT = t;
+              prevLevel = level;
+            }
+            const raw = grid.raw(i) ?? "";
+            const text = others
+              .map((c) => row[c])
+              .filter((v) => v !== null)
+              .join(" ");
+            events[i] = {
+              id: i,
+              t,
+              ts: null,
+              raw,
+              row,
+              text,
+              lc: text.toLowerCase(),
+              pattern: fold((F.msg !== null ? row[F.msg] : null) ?? raw),
+              traceId: F.trace !== null ? row[F.trace] : null,
+              level,
+            };
+            if (i % CHUNK === CHUNK - 1) {
+              setStatus(`Indexing ${fmt(i + 1)} of ${fmt(loaded.rows)} events`);
+              await tick();
+            }
+          }
+          const first = events.find((ev) => ev.t !== null);
+          if (!first) throw new Error(`${KEY}: no line has a time in "${F.time}"`);
+          for (const ev of events) {
+            if (ev.t !== null) break;
+            ev.t = first.t; // lines before the first timestamp take the first time
+          }
+          let min = Infinity;
+          let max = -Infinity;
+          for (const ev of events) {
+            ev.ts = iso(ev.t);
+            if (ev.t < min) min = ev.t;
+            if (ev.t > max) max = ev.t;
+          }
+          S.events = events;
+          S.noTime = noTime;
+          S.dataMin = min;
+          S.dataMax = max;
+          S.rawToId = new Map();
+          for (const ev of events) if (!S.rawToId.has(ev.raw)) S.rawToId.set(ev.raw, ev.id);
+        }
+
+        function indexSpans(spans) {
+          S.spans = new Map();
+          for (const s of spans) {
+            if (!s.trace) continue;
+            if (!S.spans.has(s.trace)) S.spans.set(s.trace, []);
+            S.spans.get(s.trace).push(s);
+          }
+          for (const list of S.spans.values()) list.sort((a, b) => a.start - b.start);
+          S.spanCount += spans.length;
+        }
+
+        // The histogram's bucket, for its caption: 'auto' is the finest unit with about 100 bins (t3kit.chart).
+        function binCaption() {
+          const span = Math.max(1000, S.dataMax - S.dataMin);
+          if (OPTS.bins !== "auto")
+            return `${fmt(Math.ceil(span / UNIT_MS[OPTS.bins]))} bins of 1 ${OPTS.bins}`;
+          const unit = Object.keys(UNIT_MS).find((u) => span / UNIT_MS[u] <= 100) ?? "day";
+          return `auto · ${fmt(Math.ceil(span / UNIT_MS[unit]))} bins of 1 ${unit}`;
+        }
+
+        // ---- Query -----------------------------------------------------------------
+        const TOKEN =
+          /\s*(-?)(?:\/((?:\\.|[^\/\\\s])+)\/([gimsuy]*)(?=\s|$)|([A-Za-z_][\w.-]*):(?:"((?:\\.|[^"\\])*)"|(\S+))|"((?:\\.|[^"\\])*)"|(\S+))/y;
+
+        function fieldTerm(field, value, quoted, neg) {
+          if (!quoted) {
+            const cmp = /^(>=|<=|>|<)(-?\d+(?:\.\d+)?)$/.exec(value);
+            if (cmp) return { kind: "num", field, op: cmp[1], n: Number(cmp[2]), neg };
+            const range = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)$/.exec(value);
+            if (range)
+              return { kind: "range", field, lo: Number(range[1]), hi: Number(range[2]), neg };
+          }
+          const body = value.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+          return { kind: "field", field, re: new RegExp(`^${body}$`, "i"), neg };
+        }
+
+        function parseQuery(text) {
+          const terms = [];
+          let pos = 0;
+          while (pos < text.length) {
+            TOKEN.lastIndex = pos;
+            const m = TOKEN.exec(text);
+            if (!m) break;
+            pos = TOKEN.lastIndex;
+            const neg = m[1] === "-";
+            if (m[2] !== undefined) {
+              try {
+                terms.push({
+                  kind: "re",
+                  re: new RegExp(m[2], (m[3] || "i").replace(/[gy]/g, "")),
+                  neg,
+                });
+              } catch (err) {
+                return { terms: [], error: `Bad regex /${m[2]}/: ${err.message}` };
+              }
+            } else if (m[4] !== undefined) {
+              const quoted = m[5] !== undefined;
+              terms.push(fieldTerm(m[4], quoted ? m[5] : m[6], quoted, neg));
+            } else {
+              terms.push({ kind: "text", value: (m[7] ?? m[8]).toLowerCase(), neg });
+            }
+          }
+          return { terms, error: null };
+        }
+
+        const fieldValue = (ev, field) => {
+          if (field === "pattern") return ev.pattern;
+          const v = ev.row[field];
+          return v === null || v === undefined ? null : String(v);
+        };
+        const numeric = (ev, field) => {
+          const v = ev.row[field];
+          if (typeof v === "number") return v;
+          if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)))
+            return Number(v);
+          return null;
+        };
+        function termHit(term, ev) {
+          let hit;
+          switch (term.kind) {
+            case "text":
+              hit = ev.lc.includes(term.value);
+              break;
+            case "re":
+              hit = term.re.test(ev.text);
+              break;
+            case "num": {
+              const n = numeric(ev, term.field);
+              hit =
+                n !== null &&
+                (term.op === ">="
+                  ? n >= term.n
+                  : term.op === "<="
+                    ? n <= term.n
+                    : term.op === ">"
+                      ? n > term.n
+                      : n < term.n);
+              break;
+            }
+            case "range": {
+              const n = numeric(ev, term.field);
+              hit = n !== null && n >= term.lo && n <= term.hi;
+              break;
+            }
+            default: {
+              const v = fieldValue(ev, term.field);
+              hit = v !== null && term.re.test(v);
+            }
+          }
+          return term.neg ? !hit : hit;
+        }
+
+        // Folds the variable parts of a message so repeated events group: ids, hex, numbers.
+        function fold(msg) {
+          return msg
+            .replace(/\b[0-9a-f]{16,}\b/gi, "<hex>")
+            .replace(/\b[a-z]{2,8}_[0-9a-z]{4,}\b/gi, "<id>")
+            .replace(/\d+(?:\.\d+)?/g, "<n>");
+        }
+        const groupField = () => S.groupBy;
+
+        function patternGroups(rows) {
+          const field = groupField();
+          const map = new Map();
+          for (const ev of rows) {
+            const key = fieldValue(ev, field) ?? "(none)";
+            let g = map.get(key);
+            if (!g) {
+              g = { key, count: 0, first: ev.t, last: ev.t };
+              map.set(key, g);
+            }
+            g.count += 1;
+            if (ev.t < g.first) g.first = ev.t;
+            if (ev.t > g.last) g.last = ev.t;
+          }
+          return [...map.values()].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+        }
+
+        function facetsHit(ev) {
+          for (const [f, vals] of Object.entries(S.include)) {
+            if (vals.length && !vals.includes(fieldValue(ev, f))) return false;
+          }
+          for (const [f, vals] of Object.entries(S.exclude)) {
+            if (vals.length && vals.includes(fieldValue(ev, f))) return false;
+          }
+          return true;
+        }
+
+        // q: query matches (the histogram); b: q inside the brush (facet counts); scope: b after facets, which the
+        // grid then narrows by its own column filters (S.scope).
+        function computeScopes() {
+          if (S.queryError) return { q: [], b: [], scope: [] };
+          const q = S.events.filter((ev) => S.terms.every((t) => termHit(t, ev)));
+          const b = S.brush ? q.filter((ev) => ev.t >= S.brush.from && ev.t <= S.brush.to) : q;
+          return { q, b, scope: b.filter(facetsHit) };
+        }
+
+        // ---- Chrome: grid, histogram, waterfall, runtime ---------------------------
+        const GRID_ROW_PX = 24;
+        const grid = t3kit.datagrid.create($("grid"), {
+          selection: "single",
+          toolbar: false,
+          stats: false,
+          rowHeight: GRID_ROW_PX,
+        });
+        const hist = t3kit.chart.create($("hist-plot"), {
+          type: "histogram",
+          x: "ts",
+          series: "level",
+          stacked: true,
+          bins: OPTS.bins,
+        });
+        const tree = t3kit.spantree.create($("waterfall"), {
+          view: "waterfall",
+          colorBy: "service",
+        });
+        const qInput = $("query");
+
+        function setStatus(text) {
+          $("status").textContent = text;
+        }
+
+        function commit(label) {
+          if (!S.booted) return;
+          historyLink.commit(label);
+          persist();
+        }
+        function persist() {
+          if (!S.booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => {
+            Promise.resolve(
+              ws.setState({ v: 1, key: KEY, history: history.get(), controls: rt.state() }),
+            ).catch((err) => rt.reportError(err));
+          }, 300);
+        }
+        function scheduleRefresh(ms = 40) {
+          clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(refreshAll, ms);
+        }
+        function changed(label) {
+          scheduleRefresh(0);
+          commit(label);
+        }
+
+        // ---- Facets, brush, pins ---------------------------------------------------
+        function setFacet(kind, field, value, on) {
+          const same = kind === "include" ? S.include : S.exclude;
+          const other = kind === "include" ? S.exclude : S.include;
+          const list = same[field] ?? [];
+          if (on && !list.includes(value)) same[field] = [...list, value];
+          if (!on && list.includes(value)) {
+            same[field] = list.filter((v) => v !== value);
+            if (!same[field].length) delete same[field];
+          }
+          if (on && other[field]?.includes(value)) {
+            other[field] = other[field].filter((v) => v !== value);
+            if (!other[field].length) delete other[field];
+          }
+        }
+        function toggleFacet(kind, field, value) {
+          const on = !(kind === "include" ? S.include : S.exclude)[field]?.includes(value);
+          setFacet(kind, field, value, on);
+          const verb = on ? (kind === "include" ? "Include" : "Exclude") : "Clear";
+          changed(`${verb} ${field} ${value}`);
+        }
+        function setBrush(brush, label) {
+          S.brush = brush;
+          changed(label);
+        }
+        function shiftBrush(dir) {
+          if (!S.brush) {
+            setStatus("Brush a range on the histogram first, then [ or ] shifts it.");
+            return;
+          }
+          const w = S.brush.to - S.brush.from;
+          let from = S.brush.from + dir * w;
+          let to = S.brush.to + dir * w;
+          if (from < S.dataMin) {
+            to += S.dataMin - from;
+            from = S.dataMin;
+          }
+          if (to > S.dataMax) {
+            from -= to - S.dataMax;
+            to = S.dataMax;
+          }
+          setBrush({ from, to }, `Shift window ${dir < 0 ? "earlier" : "later"}`);
+        }
+        function togglePin(ev) {
+          if (!ev) return;
+          const at = S.pins.findIndex((p) => p.raw === ev.raw);
+          if (at >= 0) {
+            S.pins = S.pins.filter((_, i) => i !== at);
+            changed(`Unpin ${ev.ts.slice(11, 23)}`);
+          } else {
+            S.pins = [...S.pins, { ts: ev.ts, raw: ev.raw }];
+            changed(`Pin ${ev.ts.slice(11, 23)}`);
+          }
+        }
+
+        function applyQueryText() {
+          const parsed = parseQuery(qInput.value);
+          S.query = qInput.value;
+          S.terms = parsed.terms;
+          S.queryError = parsed.error;
+          $("query-box").classList.toggle("bad", Boolean(parsed.error));
+          $("qerr").textContent = parsed.error ?? "";
+        }
+
+        // ---- Focus and trace -------------------------------------------------------
+        function selectFocus() {
+          if (S.focus !== null && S.scopeSet.has(S.focus)) grid.select([S.focus]);
+        }
+        function setFocus(id) {
+          if (S.focus === id) {
+            selectFocus();
+            return;
+          }
+          S.focus = id;
+          renderDrawer();
+          selectFocus();
+          const ev = id === null ? null : S.events[id];
+          const trace = ev ? ev.traceId : null;
+          if (trace !== S.traceId) loadTrace(trace).catch((err) => rt.reportError(err));
+        }
+        // j and k: step through the grid in its display order, select the row, scroll it into view and focus it.
+        function moveFocus(delta) {
+          const view = grid.view();
+          if (!view.length) return;
+          const at = S.focus === null ? -1 : view.indexOf(S.focus);
+          const pos = Math.min(view.length - 1, Math.max(0, at + delta));
+          const row = view[pos];
+          grid.select([row]);
+          const scroll = $("grid").querySelector(".t3k-datagrid-scroll");
+          if (scroll) scroll.scrollTop = Math.max(0, pos * GRID_ROW_PX - scroll.clientHeight / 2);
+          setFocus(row);
+        }
+        function openTrace() {
+          if (!S.traceId) {
+            setStatus("The focused event has no trace with span records.");
+            return;
+          }
+          $("waterfall").scrollIntoView({ block: "nearest" });
+          $("waterfall").querySelector("canvas")?.focus();
+        }
+
+        async function loadTrace(traceId) {
+          S.traceId = traceId;
+          const seq = ++traceSeq;
+          const spans = traceId === null ? undefined : S.spans.get(traceId);
+          const traceFile = traceId === null || spans ? undefined : S.traceFiles.get(traceId);
+          $("trace-title").textContent = traceId ? `Trace ${traceId.slice(0, 12)}` : "Trace";
+          if (!spans && !traceFile) {
+            S.trace = null;
+            $("waterfall").hidden = true;
+            $("crit").replaceChildren();
+            $("trace-note").textContent = traceId
+              ? "no span records"
+              : "focus an event with a trace id";
+            return;
+          }
+          $("waterfall").hidden = false;
+          let durationMs;
+          if (spans) {
+            const info = await tree.load(spans, { format: "spans" });
+            if (seq !== traceSeq) return;
+            durationMs = info.end - info.start;
+            $("trace-note").textContent = `${fmt(spans.length)} spans`;
+          } else {
+            await tree.load(traceFile.file, { format: "auto" });
+            if (seq !== traceSeq) return;
+            tree.set({ trace: traceId });
+            durationMs = traceFile.durationMs;
+            $("trace-note").textContent = "from trace file";
+          }
+          const path = tree.criticalPath();
+          S.trace = {
+            traceId,
+            durationMs: Math.round(durationMs * 10) / 10,
+            criticalPath: path.map((s) => ({
+              service: s.service ?? "",
+              name: s.name,
+              durMs: Math.round(s.dur * 10) / 10,
+            })),
+          };
+          renderCrit();
+        }
+
+        // ---- Rendering -------------------------------------------------------------
+        function h(tag, attrs = {}, ...kids) {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else if (k === "text") node.textContent = v;
+            else if (k === "data") for (const [dk, dv] of Object.entries(v)) node.dataset[dk] = dv;
+            else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+            else node.setAttribute(k, v === true ? "" : String(v));
+          }
+          node.append(...kids.flat().filter((x) => x !== null && x !== undefined && x !== false));
+          return node;
+        }
+        const levelClass = (level) =>
+          ["error", "fatal", "critical", "crit", "err"].includes(level)
+            ? "err"
+            : level === "warn" || level === "warning"
+              ? "warn"
+              : level === "info" || level === "notice"
+                ? "info"
+                : "dbg";
+
+        function renderFacets(rows) {
+          const rail = $("facets");
+          if (!S.events.length) {
+            rail.replaceChildren(
+              h("p", { class: "empty", text: "Facets appear once events load." }),
+            );
+            return;
+          }
+          rail.replaceChildren(
+            ...OPTS.facets.map((field) => {
+              const counts = new Map();
+              for (const ev of rows) {
+                const v = fieldValue(ev, field);
+                if (v !== null) counts.set(v, (counts.get(v) ?? 0) + 1);
+              }
+              const top = [...counts]
+                .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                .slice(0, 8);
+              const max = top.length ? top[0][1] : 1;
+              const inc = S.include[field] ?? [];
+              const exc = S.exclude[field] ?? [];
+              return h(
+                "section",
+                { class: "facet" },
+                h(
+                  "h3",
+                  { class: "facet-h" },
+                  h("span", { text: field }),
+                  h("span", { text: `${fmt(counts.size)} values` }),
+                ),
+                top.length
+                  ? top.map(([value, n]) => {
+                      const state = inc.includes(value) ? "in" : exc.includes(value) ? "out" : "";
+                      return h(
+                        "button",
+                        {
+                          type: "button",
+                          class: `fv ${state}`.trim(),
+                          data: { field, value },
+                          title: `${field} = ${value}. Click includes, Alt-click excludes`,
+                          "aria-pressed": state === "in",
+                        },
+                        h("span", { class: "fv-name", text: value }),
+                        h("span", { class: "fv-n", text: fmt(n) }),
+                        h("span", {
+                          class: "fv-bar",
+                          style: `width:${((100 * n) / max).toFixed(1)}%`,
+                        }),
+                      );
+                    })
+                  : h("p", { class: "empty", text: `No ${field} values in this view.` }),
+              );
+            }),
+          );
+        }
+
+        function renderChips() {
+          const items = [];
+          for (const kind of ["include", "exclude"]) {
+            for (const [field, values] of Object.entries(S[kind])) {
+              for (const value of values) {
+                items.push(
+                  h(
+                    "span",
+                    { class: kind === "exclude" ? "chip out" : "chip" },
+                    `${field} ${kind === "exclude" ? "≠" : "="} ${value}`,
+                    h("button", {
+                      type: "button",
+                      title: "Remove",
+                      text: "×",
+                      data: { kind, field, value },
+                    }),
+                  ),
+                );
+              }
+            }
+          }
+          $("chips").replaceChildren(...items);
+        }
+
+        function renderPatterns(scope) {
+          const groups = patternGroups(scope);
+          const field = groupField();
+          const on = S.include[field] ?? [];
+          $("pat-note").textContent =
+            `${fmt(groups.length)} ${field === "pattern" ? "patterns" : `${field} values`}`;
+          $("patterns-list").replaceChildren(
+            ...groups.slice(0, 40).map((g) =>
+              h(
+                "button",
+                {
+                  type: "button",
+                  class: on.includes(g.key) ? "pat on" : "pat",
+                  data: { field, value: g.key },
+                  title: `${fmt(g.count)} events, ${hms(g.first)} to ${hms(g.last)}. Click includes, Alt-click excludes`,
+                },
+                h("span", { class: "pat-n", text: fmt(g.count) }),
+                h("span", { class: "pat-msg", text: g.key }),
+                h("span", { class: "pat-t", text: `${hms(g.first)} to ${hms(g.last)}` }),
+              ),
+            ),
+          );
+        }
+
+        function renderPins() {
+          $("pins-count").textContent = fmt(S.pins.length);
+          const rows = S.pins.map((p) =>
+            h(
+              "div",
+              { class: "pin" },
+              h(
+                "button",
+                { type: "button", class: "pin-go", data: { raw: p.raw } },
+                h("span", { class: "pin-t", text: p.ts.slice(11, 23) }),
+                h("span", { class: "pin-msg", text: p.raw.slice(0, 160) }),
+              ),
+              h("button", {
+                type: "button",
+                class: "pin-x",
+                title: "Unpin",
+                text: "×",
+                data: { raw: p.raw, unpin: "1" },
+              }),
+            ),
+          );
+          $("pins").replaceChildren(
+            ...(rows.length
+              ? rows
+              : [h("p", { class: "empty", text: "Press p on a row to pin it." })]),
+          );
+        }
+
+        function renderCrit() {
+          const crit = $("crit");
+          if (!S.trace) {
+            crit.replaceChildren();
+            return;
+          }
+          crit.replaceChildren(
+            h("div", {
+              class: "crit-head",
+              text: `${fmtMs(S.trace.durationMs)} end to end · critical path`,
+            }),
+            ...S.trace.criticalPath.map((s, i) =>
+              h(
+                "div",
+                { class: "crit-step" },
+                h("span", { class: "crit-n", text: String(i + 1) }),
+                h("span", { class: "crit-name", text: `${s.service} ${s.name}` }),
+                h("span", { class: "crit-ms", text: fmtMs(s.durMs) }),
+              ),
+            ),
+          );
+        }
+
+        function renderDrawer() {
+          const drawer = $("drawer");
+          const ev = S.focus === null ? null : S.events[S.focus];
+          if (!ev) {
+            drawer.replaceChildren(
+              h("p", {
+                class: "empty",
+                text: S.events.length
+                  ? "No event in view. Clear a filter or the brush."
+                  : "No events loaded.",
+              }),
+            );
+            return;
+          }
+          const pinned = S.pins.some((p) => p.raw === ev.raw);
+          const fields = Object.entries(ev.row).filter(([, v]) => v !== null);
+          drawer.replaceChildren(
+            h(
+              "div",
+              { class: "drawer-head" },
+              h("span", { class: `lvl ${levelClass(ev.level)}`, text: ev.level ?? "none" }),
+              h("span", { text: ev.ts }),
+              h("span", { text: S.F.service !== null ? (ev.row[S.F.service] ?? "") : "" }),
+            ),
+            h("div", {
+              class: "drawer-msg",
+              text: (S.F.msg !== null ? ev.row[S.F.msg] : null) ?? ev.raw,
+            }),
+            h(
+              "dl",
+              { class: "kv" },
+              ...fields.flatMap(([k, v]) => [
+                h("dt", { text: k }),
+                h(
+                  "dd",
+                  {},
+                  k === S.F.trace
+                    ? h("button", {
+                        type: "button",
+                        class: "linkish",
+                        text: String(v),
+                        data: { trace: String(v) },
+                      })
+                    : String(v),
+                ),
+              ]),
+            ),
+            h("pre", { class: "raw", text: ev.raw }),
+            h(
+              "div",
+              { class: "drawer-actions" },
+              h("button", {
+                type: "button",
+                class: "btn",
+                text: pinned ? "Unpin (p)" : "Pin (p)",
+                onclick: () => togglePin(ev),
+              }),
+              ev.traceId
+                ? h("button", {
+                    type: "button",
+                    class: "btn",
+                    text: "Filter to trace",
+                    onclick: () => {
+                      setFacet("include", S.F.trace, ev.traceId, true);
+                      changed(`Trace ${ev.traceId.slice(0, 8)}`);
+                    },
+                  })
+                : null,
+            ),
+          );
+        }
+
+        function renderBrush(brushed) {
+          $("brush").hidden = !S.brush;
+          if (S.brush)
+            $("brush-text").textContent =
+              `${hms(S.brush.from)} to ${hms(S.brush.to)} · ${fmt(brushed)} events`;
+        }
+
+        function syncHistogram(q) {
+          const rows = q.length === S.events.length ? null : q.map((ev) => ev.id);
+          const brush = S.brush ? { min: S.brush.from, max: S.brush.to } : null;
+          const current = hist.get().brush ?? null;
+          hist.set({ rows }); // set() never emits, so the page's own changes do not echo as brushes
+          if (JSON.stringify(current) !== JSON.stringify(brush)) hist.set({ brush });
+        }
+
+        function renderStatus(scope) {
+          if (!S.events.length) {
+            setStatus(
+              S.lines
+                ? "The attached files have no timestamped events"
+                : "Attach .jsonl, .ndjson, .log or .txt files to explore",
+            );
+            return;
+          }
+          const parts = [
+            `${fmt(S.lines)} lines`,
+            `${fmt(S.events.length)} events`,
+            `${fmt(S.spanCount)} spans in ${fmt(S.spans.size + S.traceFiles.size)} traces`,
+            `${fmt(scope.length)} in view`,
+          ];
+          if (S.noTime) parts.push(`${fmt(S.noTime)} without a time (given the line before)`);
+          if (Object.keys(S.columnFilters).length) parts.push("column filters on");
+          if (S.queryError) parts.push(S.queryError);
+          setStatus(parts.join(" · "));
+        }
+
+        async function refreshAll() {
+          try {
+            if (!S.events.length) {
+              renderFacets([]);
+              renderDrawer();
+              renderStatus([]);
+              return;
+            }
+            const { q, b, scope } = computeScopes();
+            // The grid holds every event; the view is a restriction (source rows, ascending), then its column filters.
+            grid.restrict(Uint32Array.from(scope, (ev) => ev.id));
+            const shown = Uint32Array.from(grid.view()).sort();
+            S.scope = Array.from(shown, (id) => S.events[id]);
+            S.scopeSet = new Set(shown);
+            syncHistogram(q);
+            renderFacets(b);
+            renderChips();
+            renderPatterns(S.scope);
+            renderPins();
+            renderBrush(b.length);
+            $("count").textContent = `${fmt(S.scope.length)} of ${fmt(S.events.length)}`;
+            $("export").disabled = false;
+            $("send").disabled = false;
+            if (!S.scope.length) setFocus(null);
+            else if (S.focus === null || !S.scopeSet.has(S.focus)) setFocus(S.scope[0].id);
+            else selectFocus();
+            renderDrawer();
+            renderStatus(S.scope);
+          } catch (err) {
+            rt.reportError(err);
+          }
+        }
+
+        // ---- Query input, facets, chips, patterns, pins ----------------------------
+        const queryLabel = () => (S.query.trim() ? `Query ${S.query.trim()}` : "Clear query");
+        qInput.addEventListener("input", () => {
+          applyQueryText();
+          scheduleRefresh(120);
+        });
+        qInput.addEventListener("change", () => commit(queryLabel()));
+        qInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(queryLabel());
+            scheduleRefresh(0);
+          } else if (e.key === "Escape") qInput.blur();
+        });
+        const facetClick = (e) => {
+          const btn = e.target.closest("button[data-field][data-value]");
+          if (btn)
+            toggleFacet(e.altKey ? "exclude" : "include", btn.dataset.field, btn.dataset.value);
+        };
+        $("facets").addEventListener("click", facetClick);
+        $("patterns-list").addEventListener("click", facetClick);
+        $("chips").addEventListener("click", (e) => {
+          const btn = e.target.closest("button[data-kind]");
+          if (!btn) return;
+          setFacet(btn.dataset.kind, btn.dataset.field, btn.dataset.value, false);
+          changed(`Remove ${btn.dataset.field} ${btn.dataset.value}`);
+        });
+        $("pins").addEventListener("click", (e) => {
+          const x = e.target.closest("button.pin-x");
+          if (x) {
+            S.pins = S.pins.filter((p) => p.raw !== x.dataset.raw);
+            changed("Unpin");
+            return;
+          }
+          const go = e.target.closest("button.pin-go");
+          if (!go) return;
+          const id = S.rawToId.get(go.dataset.raw);
+          if (id === undefined || !S.scopeSet.has(id)) {
+            setStatus(
+              "That pinned event is outside the current view. Clear a filter or the brush to show it.",
+            );
+            return;
+          }
+          setFocus(id);
+        });
+        $("drawer").addEventListener("click", (e) => {
+          const link = e.target.closest("button.linkish[data-trace]");
+          if (link) loadTrace(link.dataset.trace).catch((err) => rt.reportError(err));
+        });
+        $("brush-clear").addEventListener("click", () => setBrush(null, "Clear brush"));
+        $("export").addEventListener("click", () =>
+          exportAll().catch((err) => rt.reportError(err)),
+        );
+        $("send").addEventListener("click", () =>
+          sendFindings().catch((err) => rt.reportError(err)),
+        );
+        // A span click filters the grid to that trace (the page owns the filters, so gridSpans leaves the grid alone).
+        t3kit.links.gridSpans(grid, tree, {
+          column: null,
+          onSpan(sel) {
+            if (
+              !sel ||
+              !S.traceId ||
+              S.F.trace === null ||
+              S.include[S.F.trace]?.includes(S.traceId)
+            )
+              return;
+            setFacet("include", S.F.trace, S.traceId, true);
+            changed(`Trace ${S.traceId.slice(0, 8)}`);
+          },
+        });
+        grid.on("select", (idx) => {
+          if (idx.length) setFocus(idx[0]);
+        });
+        // Column filters typed in the grid header narrow the view too; a typing burst is one history step.
+        grid.on("filter", ({ filters }) => {
+          S.columnFilters = clone(filters);
+          scheduleRefresh(0);
+          clearTimeout(filterTimer);
+          filterTimer = setTimeout(() => commit("Column filter"), 500);
+        });
+        t3kit.links.chartRange(hist, null, {
+          onBrush(range) {
+            if (!range) setBrush(null, "Clear brush");
+            else
+              setBrush(
+                { from: range.from, to: range.to },
+                `Brush ${hms(range.from)} to ${hms(range.to)}`,
+              );
+          },
+        });
+
+        // ---- Export ----------------------------------------------------------------
+        function buildFiles() {
+          const rows = S.scope.slice(0, WINDOW_MAX);
+          const windowText = rows.map((ev) => ev.raw).join("\n") + (rows.length ? "\n" : "");
+          const findings = {
+            query: S.query,
+            timeRange: S.brush ? { from: iso(S.brush.from), to: iso(S.brush.to) } : null,
+            include: clone(S.include),
+            exclude: clone(S.exclude),
+            matchCount: S.scope.length,
+            totalCount: S.events.length,
+            topPatterns: patternGroups(S.scope)
+              .slice(0, 20)
+              .map((g) => ({
+                pattern: g.key,
+                count: g.count,
+                firstTs: iso(g.first),
+                lastTs: iso(g.last),
+              })),
+            pinned: clone(S.pins),
+            window: {
+              file: "window.jsonl",
+              lines: rows.length,
+              total: S.scope.length,
+              truncated: S.scope.length > WINDOW_MAX,
+              cap: WINDOW_MAX,
+            },
+          };
+          if (Object.keys(S.columnFilters).length) findings.columnFilters = clone(S.columnFilters);
+          if (S.trace) findings.trace = clone(S.trace);
+          const summary = S.trace
+            ? { ...clone(S.trace), spans: S.spans.get(S.trace.traceId)?.length ?? null }
+            : { traceId: null, durationMs: null, criticalPath: [], spans: 0 };
+          return {
+            findings: new File([JSON.stringify(findings, null, 2)], "findings.json", {
+              type: "application/json",
+            }),
+            window: new File([windowText], "window.jsonl", { type: "application/x-ndjson" }),
+            summary: new File([JSON.stringify(summary, null, 2)], "trace-summary.json", {
+              type: "application/json",
+            }),
+          };
+        }
+        // Export: all three files, each attached to the chat and downloaded.
+        async function exportAll() {
+          if (!S.events.length) throw new Error("No events loaded to export.");
+          const built = buildFiles();
+          const files = [built.findings, built.window, built.summary];
+          for (const f of files) {
+            await ws.attach(f);
+            await ws.download(f, f.name);
+          }
+          setStatus(`Exported ${files.map((f) => f.name).join(", ")}`);
+          return files;
+        }
+        // The chat message that goes with Send: what the user narrowed the logs to, in a few lines.
+        function findingsMessage() {
+          const filters = [];
+          if (S.query.trim()) filters.push(`\`${S.query.trim()}\``);
+          for (const [field, values] of Object.entries(S.include))
+            if (values.length) filters.push(`${field} ${values.join(" or ")}`);
+          for (const [field, values] of Object.entries(S.exclude))
+            if (values.length) filters.push(`${field} not ${values.join(" or ")}`);
+          if (Object.keys(S.columnFilters).length) filters.push("column filters");
+          if (S.brush) filters.push(`${hms(S.brush.from)} to ${hms(S.brush.to)}`);
+          const lines = [
+            `Log findings: ${fmt(S.scope.length)} of ${fmt(S.events.length)} events` +
+              (filters.length ? ` match ${filters.join(", ")}.` : " (no filter)."),
+          ];
+          const top = patternGroups(S.scope).slice(0, 3);
+          if (top.length)
+            lines.push(
+              `Top patterns: ${top.map((g) => `"${g.key}" (${fmt(g.count)})`).join(", ")}.`,
+            );
+          if (S.pins.length)
+            lines.push(`${S.pins.length} pinned event${S.pins.length === 1 ? "" : "s"}.`);
+          if (S.trace) {
+            const path = S.trace.criticalPath.map((p) => p.service || p.name).join(" > ");
+            lines.push(
+              `Trace ${S.trace.traceId.slice(0, 8)}: ${fmtMs(S.trace.durationMs)}${path ? `, critical path ${path}` : ""}.`,
+            );
+          }
+          lines.push("Details in findings.json; the raw lines in window.jsonl.");
+          return lines.join("\n");
+        }
+        // Send (s): posts a short summary with findings.json and the window's raw lines to the agent. Called straight
+        // from the click or key press: T3 sends only during the user's gesture.
+        async function sendFindings() {
+          if (!S.events.length) throw new Error("No events loaded to send.");
+          const built = buildFiles();
+          const files = [built.findings, built.window];
+          await ws.send(findingsMessage(), { files });
+          setStatus(
+            `Sent the findings to the agent with ${files.map((f) => f.name).join(" and ")}`,
+          );
+          return files;
+        }
+
+        // ---- Keyboard --------------------------------------------------------------
+        function keyName(e) {
+          const parts = [];
+          if (e.metaKey || e.ctrlKey) parts.push("mod");
+          if (e.shiftKey && /^[a-z]$/i.test(e.key)) parts.push("shift");
+          parts.push(e.key.toLowerCase());
+          return parts.join("+");
+        }
+        document.addEventListener("keydown", (e) => {
+          const target = e.target;
+          const typing =
+            target instanceof HTMLElement &&
+            (target.isContentEditable || target.matches("input, textarea, select"));
+          if (typing) return;
+          switch (keyName(e)) {
+            case "/":
+              e.preventDefault();
+              qInput.focus();
+              qInput.select();
+              break;
+            case "j":
+              moveFocus(1);
+              break;
+            case "k":
+              moveFocus(-1);
+              break;
+            case "p":
+              togglePin(S.focus === null ? null : S.events[S.focus]);
+              break;
+            case "t":
+              openTrace();
+              break;
+            case "e":
+              exportAll().catch((err) => rt.reportError(err));
+              break;
+            case "s":
+              sendFindings().catch((err) => rt.reportError(err));
+              break;
+            case "[":
+              shiftBrush(-1);
+              break;
+            case "]":
+              shiftBrush(1);
+              break;
+            case "escape":
+              if (S.brush) setBrush(null, "Clear brush");
+              break;
+            default:
+          }
+        });
+
+        // ---- Runtime (window.t3template) -------------------------------------------
+        const panelsEl = $("panels");
+        const checkKeys = (partial) => {
+          if (!isPlain(partial))
+            throw new TypeError(
+              `${KEY}: values are an object like { query, timeRange, include, exclude, pins, columnFilters }`,
+            );
+          for (const k of Object.keys(partial)) {
+            if (!STATE_KEYS.includes(k))
+              throw new TypeError(
+                `${KEY}: unknown value "${k}" (it takes ${STATE_KEYS.join(", ")})`,
+              );
+          }
+          return partial;
+        };
+        const rt = t3kit.templateRuntime.create({
+          id: "log-trace",
+          pipeline: "data",
+          // 'top': first in the inspector, below the trace readout (before Patterns). 'bottom': after History.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            if (position === "top") panelsEl.insertBefore(section, panelsEl.firstChild);
+            else panelsEl.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => getState(),
+          setValues(partial, label) {
+            const next = validateState({ ...getState(), ...checkKeys(partial) });
+            applyState(next);
+            commit(label ?? "Set values");
+            return getState();
+          },
+          addPreset: (name, values) =>
+            history.savePreset(name, validateState({ ...getState(), ...checkKeys(values) })),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => exportAll(),
+          reservedKeys: RESERVED,
+          onBoltOnChange() {
+            scheduleRefresh();
+            persist();
+          },
+        });
+
+        // ---- Shared view state (history steps, presets, bolt-on values) ------------
+        function getState() {
+          return {
+            query: S.query,
+            timeRange: S.brush ? { from: iso(S.brush.from), to: iso(S.brush.to) } : null,
+            include: clone(S.include),
+            exclude: clone(S.exclude),
+            pins: clone(S.pins),
+            columnFilters: clone(S.columnFilters),
+          };
+        }
+        // Older steps without columnFilters still load (merged over the empty default).
+        function validateState(state) {
+          if (!isPlain(state)) throw new TypeError(`${KEY}: state must be an object`);
+          const s = { columnFilters: {}, ...state };
+          for (const k of Object.keys(s)) {
+            if (!STATE_KEYS.includes(k))
+              throw new TypeError(
+                `${KEY}: unknown state key "${k}" (it takes ${STATE_KEYS.join(", ")})`,
+              );
+          }
+          if (typeof s.query !== "string") throw new TypeError(`${KEY}: query must be a string`);
+          if (
+            s.timeRange !== null &&
+            (!isPlain(s.timeRange) || !isIso(s.timeRange.from) || !isIso(s.timeRange.to))
+          ) {
+            throw new TypeError(`${KEY}: timeRange must be null or { from, to } ISO times`);
+          }
+          for (const k of ["include", "exclude"]) {
+            if (
+              !isPlain(s[k]) ||
+              !Object.values(s[k]).every(
+                (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
+              )
+            ) {
+              throw new TypeError(`${KEY}: ${k} must map fields to arrays of strings`);
+            }
+          }
+          if (
+            !Array.isArray(s.pins) ||
+            !s.pins.every(
+              (p) => isPlain(p) && typeof p.ts === "string" && typeof p.raw === "string",
+            )
+          ) {
+            throw new TypeError(`${KEY}: pins must be [{ ts, raw }]`);
+          }
+          if (
+            !isPlain(s.columnFilters) ||
+            !Object.values(s.columnFilters).every((v) => typeof v === "string")
+          ) {
+            throw new TypeError(`${KEY}: columnFilters must map grid columns to filter text`);
+          }
+          return s;
+        }
+        function applyState(s) {
+          const v = validateState(s);
+          qInput.value = v.query;
+          applyQueryText();
+          S.brush = v.timeRange
+            ? { from: Date.parse(v.timeRange.from), to: Date.parse(v.timeRange.to) }
+            : null;
+          S.include = clone(v.include);
+          S.exclude = clone(v.exclude);
+          S.pins = clone(v.pins);
+          S.columnFilters = clone(v.columnFilters);
+          if (S.events.length) grid.set({ filters: S.columnFilters });
+          scheduleRefresh(0);
+        }
+
+        // ---- Boot ------------------------------------------------------------------
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) && saved.v === 1 && saved.key === KEY && isPlain(saved.history)
+              ? saved
+              : null;
+          const assets = (ready.assets ?? []).filter(
+            (a) => LOG_FILE.test(a.name) || TRACE_FILE.test(a.name),
+          );
+          const split = await splitAssets(assets);
+          S.files = assets.map((a) => a.name);
+          S.lines = split.lines;
+          indexSpans(split.spans);
+          if (split.logs.length) {
+            await loadEvents(split.logs);
+            await hist.setData(S.events.map((ev) => ({ ts: ev.ts, level: ev.level ?? "none" })));
+            $("hist-meta").textContent = binCaption();
+          } else {
+            $("drawer").replaceChildren();
+            $("empty").hidden = false;
+          }
+          $("title").textContent = OPTS.title;
+          document.title = OPTS.title;
+          if (!restored) {
+            S.query = OPTS.query;
+            qInput.value = OPTS.query;
+            applyQueryText();
+            S.brush = OPTS.timeRange
+              ? { from: Date.parse(OPTS.timeRange.from), to: Date.parse(OPTS.timeRange.to) }
+              : null;
+          }
+          history = t3kit.history.create($("history"), {
+            title: "History",
+            label: "Open",
+            state: getState(),
+            presetPlaceholder: "Name this view",
+          });
+          if (restored) history.set(restored.history);
+          historyLink = rt.linkHistory(history, getState, applyState);
+          history.on("change", () => {
+            persist();
+            rt.emitChange();
+          });
+          rt.publish({
+            instances: { grid, histogram: hist, spantree: tree, history },
+            saved: restored ? restored.controls : undefined,
+          });
+          S.booted = true;
+          persist();
+          await refreshAll();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+
+        boot().catch((err) => rt.reportError(err));
+      })();
+    </script>
+  </body>
+</html>

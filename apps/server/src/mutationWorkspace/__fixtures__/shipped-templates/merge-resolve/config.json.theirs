@@ -1,0 +1,9 @@
+{
+  "name": "kit",
+  "version": "1.0.1",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "license": "Apache-2.0"
+}

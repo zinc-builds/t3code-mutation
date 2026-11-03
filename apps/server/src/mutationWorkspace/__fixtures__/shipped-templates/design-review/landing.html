@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tidepool: Field Notes That Sync</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #14212b;
+        --ink-soft: #4d5b66;
+        --sea: #0f6e78;
+        --sea-dark: #0a4f57;
+        --sand: #f5efe4;
+        --foam: #e3f1ef;
+        --line: #d9d2c4;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        background: var(--sand);
+        color: var(--ink);
+      }
+      a {
+        color: inherit;
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 64px;
+        border-bottom: 1px solid var(--line);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 19px;
+        letter-spacing: 0.01em;
+      }
+      .brand-mark {
+        width: 26px;
+        height: 26px;
+        border-radius: 50% 50% 50% 8px;
+        background: linear-gradient(140deg, #3fb5a8, var(--sea-dark));
+      }
+      .nav-links {
+        display: flex;
+        gap: 30px;
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .nav-links a {
+        text-decoration: none;
+      }
+      .nav-cta {
+        padding: 10px 18px;
+        border-radius: 8px;
+        background: var(--ink);
+        color: var(--sand);
+        font-weight: 600;
+        font-size: 14px;
+        text-decoration: none;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 56px;
+        align-items: center;
+        padding: 84px 64px 72px;
+      }
+      .eyebrow {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--foam);
+        color: var(--sea-dark);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero h1 {
+        margin: 18px 0 18px;
+        font-family: "Iowan Old Style", Georgia, serif;
+        font-size: 58px;
+        line-height: 1.04;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .hero-lede {
+        margin: 0;
+        max-width: 540px;
+        font-size: 19px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 30px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 14px 22px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .btn-primary {
+        background: var(--sea);
+        color: #ffffff;
+      }
+      .btn-ghost {
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+      .fineprint {
+        margin: 14px 0 0;
+        font-size: 11px;
+        color: #9aa3a9;
+      }
+      .device {
+        position: relative;
+        height: 380px;
+        border-radius: 22px;
+        background: linear-gradient(160deg, #3fb5a8 0%, var(--sea) 45%, var(--sea-dark) 100%);
+        box-shadow: 0 30px 60px -30px rgba(10, 79, 87, 0.6);
+        overflow: hidden;
+      }
+      .device-card {
+        position: absolute;
+        left: 34px;
+        right: 34px;
+        padding: 16px 18px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.4);
+      }
+      .device-card b {
+        display: block;
+        font-size: 15px;
+      }
+      .device-card span {
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      .device-card:nth-child(1) {
+        top: 40px;
+      }
+      .device-card:nth-child(2) {
+        top: 136px;
+        left: 70px;
+      }
+      .device-card:nth-child(3) {
+        top: 232px;
+      }
+      .logos {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 26px 64px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        color: #8a9198;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+      .features {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+        padding: 72px 64px;
+      }
+      .features h2 {
+        grid-column: 1 / -1;
+        margin: 0 0 6px;
+        font-family: "Iowan Old Style", Georgia, serif;
+        font-size: 36px;
+      }
+      .feature {
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fbf8f2;
+      }
+      .feature h3 {
+        margin: 14px 0 8px;
+        font-size: 18px;
+      }
+      .feature p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+      }
+      .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--foam);
+        border: 1px solid #bfdeda;
+      }
+      .quote {
+        margin: 0 64px;
+        padding: 48px 56px;
+        border-radius: 18px;
+        background: var(--ink);
+        color: var(--sand);
+      }
+      .quote p {
+        margin: 0;
+        max-width: 760px;
+        font-family: "Iowan Old Style", Georgia, serif;
+        font-size: 26px;
+        line-height: 1.4;
+      }
+      .quote cite {
+        display: block;
+        margin-top: 18px;
+        font-style: normal;
+        font-size: 14px;
+        color: #a9b6bf;
+      }
+      .pricing {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+        padding: 72px 64px;
+      }
+      .pricing h2 {
+        grid-column: 1 / -1;
+        margin: 0;
+        font-family: "Iowan Old Style", Georgia, serif;
+        font-size: 36px;
+      }
+      .plan {
+        padding: 26px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fbf8f2;
+      }
+      .plan-featured {
+        border: 2px solid var(--sea);
+      }
+      .plan h3 {
+        margin: 0;
+        font-size: 16px;
+        color: var(--ink-soft);
+      }
+      .price {
+        margin: 10px 0 14px;
+        font-size: 40px;
+        font-weight: 700;
+      }
+      .price small {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--ink-soft);
+      }
+      .plan ul {
+        margin: 0 0 20px;
+        padding-left: 18px;
+        font-size: 15px;
+        line-height: 1.8;
+        color: var(--ink-soft);
+      }
+      .plan .btn {
+        width: 100%;
+        justify-content: center;
+      }
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 28px 64px 36px;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: #9aa3a9;
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+      }
+
+      @media (max-width: 900px) {
+        .nav {
+          padding: 18px 22px;
+        }
+        .nav-links {
+          display: none;
+        }
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 36px;
+          padding: 48px 22px 40px;
+        }
+        .hero h1 {
+          font-size: 40px;
+        }
+        .hero-lede {
+          font-size: 17px;
+        }
+        .device {
+          height: 320px;
+        }
+        .logos {
+          flex-wrap: wrap;
+          justify-content: center;
+          padding: 20px 22px;
+          font-size: 13px;
+        }
+        .features,
+        .pricing {
+          grid-template-columns: 1fr;
+          padding: 48px 22px;
+        }
+        .quote {
+          margin: 0 22px;
+          padding: 32px 26px;
+        }
+        .quote p {
+          font-size: 21px;
+        }
+        .footer {
+          flex-direction: column;
+          padding: 24px 22px 32px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="brand"><span class="brand-mark"></span>Tidepool</div>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#teams">Teams</a>
+        <a href="#changelog">Changelog</a>
+      </nav>
+      <a class="nav-cta" href="#start">Start free</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <span class="eyebrow">New: offline maps</span>
+          <h1>Field notes that sync when you're back in range.</h1>
+          <p class="hero-lede">
+            Tidepool captures observations, photos and GPS tracks on any phone, works without
+            signal, and merges every teammate's notes into one clean dataset the moment you
+            reconnect.
+          </p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#start">Start a free survey</a>
+            <a class="btn btn-ghost" href="#demo">Watch the 2-minute tour</a>
+          </div>
+          <p class="fineprint">Free for teams up to 3. No credit card required.</p>
+        </div>
+        <div class="device" aria-hidden="true">
+          <div class="device-card">
+            <b>Transect 4 · Low tide</b><span>12 observations · 3 photos</span>
+          </div>
+          <div class="device-card">
+            <b>Pisaster ochraceus</b><span>Count 7 · Zone B · 08:42</span>
+          </div>
+          <div class="device-card">
+            <b>Synced with 4 teammates</b><span>Last merge 2 minutes ago</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="logos" aria-label="Customers">
+        <span>MARINE LAB</span><span>COASTWATCH</span><span>NORTHSHORE U</span><span>REEFCOUNT</span
+        ><span>KELP TRUST</span>
+      </div>
+
+      <section class="features" id="features">
+        <h2>Built for wet hands and no bars</h2>
+        <article class="feature">
+          <div class="icon"></div>
+          <h3>Works offline</h3>
+          <p>Every form, map tile and species list is cached on the device before you leave.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"></div>
+          <h3>Conflict-free merges</h3>
+          <p>
+            Edits from the whole crew merge automatically, with a full history of who changed what.
+          </p>
+        </article>
+        <article class="feature">
+          <div class="icon"></div>
+          <h3>Export anywhere</h3>
+          <p>
+            CSV, GeoJSON and Darwin Core exports, or a live link straight into your analysis
+            notebook.
+          </p>
+        </article>
+      </section>
+
+      <blockquote class="quote">
+        <p>
+          "We used to spend the evening after every survey reconciling clipboards. Now the data is
+          clean before we're back at the truck."
+        </p>
+        <cite>Dr. Ana Ruiz, Coastal Monitoring Program</cite>
+      </blockquote>
+
+      <section class="pricing" id="pricing">
+        <h2>Simple pricing</h2>
+        <div class="plan">
+          <h3>Starter</h3>
+          <div class="price">$0 <small>/ month</small></div>
+          <ul>
+            <li>3 surveyors</li>
+            <li>Offline sync</li>
+            <li>CSV export</li>
+          </ul>
+          <a class="btn btn-ghost" href="#start">Get started</a>
+        </div>
+        <div class="plan plan-featured">
+          <h3>Team</h3>
+          <div class="price">$24 <small>/ seat / month</small></div>
+          <ul>
+            <li>Unlimited surveyors</li>
+            <li>Shared species lists</li>
+            <li>GeoJSON and Darwin Core</li>
+          </ul>
+          <a class="btn btn-primary" href="#start">Start a trial</a>
+        </div>
+        <div class="plan">
+          <h3>Institution</h3>
+          <div class="price">Custom</div>
+          <ul>
+            <li>SSO and audit log</li>
+            <li>Data residency</li>
+            <li>Dedicated support</li>
+          </ul>
+          <a class="btn btn-ghost" href="#contact">Talk to us</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>© 2026 Tidepool Labs. Made on the Oregon coast.</span>
+      <div class="footer-links">
+        <a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="#status">Status</a>
+      </div>
+    </footer>
+  </body>
+</html>

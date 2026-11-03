@@ -10,6 +10,15 @@ import {
   type HtmlRenderReference,
 } from "./htmlRender.ts";
 import { MCP_APP_OUTPUT_KEY, readMcpAppReference, type McpAppReference } from "./mcpApp.ts";
+import {
+  readWorkspaceReference,
+  WORKSPACE_MUTATE_TOOL_NAME,
+  WORKSPACE_OUTPUT_KEY,
+  WORKSPACE_RESTORE_TOOL_NAME,
+  workspaceMutateInputAssetPaths,
+  workspaceMutateInputPreviewUrl,
+  type WorkspaceReference,
+} from "./mutationWorkspace.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 
 const MAX_PARSED_BYTES = 16_384;
@@ -41,8 +50,11 @@ interface CompactToolOutput {
   status?: "rolled_back";
   htmlRender?: HtmlRenderReference;
   [MCP_APP_OUTPUT_KEY]?: McpAppReference;
+  [WORKSPACE_OUTPUT_KEY]?: WorkspaceReference;
   thread?: { threadId: string };
   threads?: Array<{ threadId?: string; status?: "rolled_back" }>;
+  linkedCount?: number;
+  unlinkedCount?: number;
 }
 
 function readResult(value: unknown, budget: ResultReadBudget, depth = 0): ResultEnvelope {
@@ -108,7 +120,6 @@ function boundedId(value: unknown): string | undefined {
   return Array.from(value).join("");
 }
 
-/** Keeps only IDs and failure metadata used by T3's grouped tool summaries. */
 export function compactDynamicToolOutput(value: unknown): CompactToolOutput | undefined {
   const budget: ResultReadBudget = {
     remainingBytes: MAX_PARSED_BYTES,
@@ -124,11 +135,16 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
       if (id !== undefined) output[key] = id;
     }
     if (data.status === "rolled_back") output.status = "rolled_back";
+    for (const key of ["linkedCount", "unlinkedCount"] as const) {
+      const count = data[key];
+      if (typeof count === "number" && Number.isSafeInteger(count)) output[key] = count;
+    }
     const htmlRender = readHtmlRenderReference(data.htmlRender);
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
     const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
-    // Kept under its stored key, so the compact wire output reads back the same way.
     if (mcpApp !== undefined) output[MCP_APP_OUTPUT_KEY] = mcpApp;
+    const workspace = readWorkspaceReference(data[WORKSPACE_OUTPUT_KEY]);
+    if (workspace !== undefined) output[WORKSPACE_OUTPUT_KEY] = workspace;
     const nestedThreadId = Predicate.isObject(data.thread)
       ? boundedId(data.thread.threadId)
       : undefined;
@@ -157,8 +173,7 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
       }
       if (complete) output.threads = threads;
       else {
-        // A partial batch or a top-level ID would turn an unknown creation
-        // count into a confidently wrong one in the existing summary parser.
+        // Partial batches or top-level ids make the summary parser report a false creation count.
         delete output.threadId;
         delete output.status;
       }
@@ -170,9 +185,6 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     delete output.threadId;
     delete output.status;
   }
-  // An app's declared origins are the only unbounded-ish part of its
-  // reference; hosting works without them (the stored document carries its
-  // own policy), so they go before the app does.
   const app = output[MCP_APP_OUTPUT_KEY];
   if (app?.csp !== undefined && oversized()) {
     const { csp: _csp, ...rest } = app;
@@ -182,7 +194,6 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
   return Object.keys(output).length === 0 ? undefined : output;
 }
 
-/** The page a completed `html_render` tool call published, if this item is one. */
 export function htmlRenderFromToolItem(item: {
   readonly toolName: string | null | undefined;
   readonly output?: unknown;
@@ -192,13 +203,75 @@ export function htmlRenderFromToolItem(item: {
   return output?.isError ? undefined : output?.htmlRender;
 }
 
+/** The workspace a completed `workspace_mutate` tool call published, if this item is one. */
+export function workspaceFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): WorkspaceReference | undefined {
+  if (resolveT3McpToolId(item.toolName) !== WORKSPACE_MUTATE_TOOL_NAME) return undefined;
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.[WORKSPACE_OUTPUT_KEY];
+}
+
 /**
- * The MCP App a completed tool call carries, if any. The adapter that captured
- * it put the reference in the output, beside the tool's own result. A tool's
- * result can imitate that shape, so the reference only counts when it names
- * the very server and tool the item records: a server can then only ever
- * point at an app of its own.
+ * The host paths a `workspace_mutate` item hands its workspace: the assets a
+ * completed call published, or the paths a call still running names in its
+ * input, which clients load before it finishes. Any other item hands none.
  */
+export function workspaceToolItemAssetPaths(item: {
+  readonly type: string;
+  readonly status: string;
+  readonly toolName?: string | null | undefined;
+  readonly input?: unknown;
+  readonly output?: unknown;
+}): ReadonlyArray<string> {
+  if (item.type !== "dynamic_tool") return [];
+  if (item.status === "completed") {
+    return (
+      workspaceFromToolItem({ toolName: item.toolName, output: item.output })?.assets.map(
+        (asset) => asset.path,
+      ) ?? []
+    );
+  }
+  if (item.status !== "pending" && item.status !== "running") return [];
+  return resolveT3McpToolId(item.toolName) === WORKSPACE_MUTATE_TOOL_NAME
+    ? workspaceMutateInputAssetPaths(item.input)
+    : [];
+}
+
+/**
+ * The preview URL a `workspace_mutate` item hands its workspace, read like
+ * its asset paths: from a completed call's result, or a running call's input.
+ */
+export function workspaceToolItemPreviewUrl(item: {
+  readonly type: string;
+  readonly status: string;
+  readonly toolName?: string | null | undefined;
+  readonly input?: unknown;
+  readonly output?: unknown;
+}): string | undefined {
+  if (item.type !== "dynamic_tool") return undefined;
+  if (item.status === "completed") {
+    return workspaceFromToolItem({ toolName: item.toolName, output: item.output })?.preview?.url;
+  }
+  if (item.status !== "pending" && item.status !== "running") return undefined;
+  return resolveT3McpToolId(item.toolName) === WORKSPACE_MUTATE_TOOL_NAME
+    ? workspaceMutateInputPreviewUrl(item.input)
+    : undefined;
+}
+
+/** Whether a completed tool call handed the thread back to chat with `workspace_restore`. */
+export function isWorkspaceRestoreToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): boolean {
+  return (
+    resolveT3McpToolId(item.toolName) === WORKSPACE_RESTORE_TOOL_NAME &&
+    compactDynamicToolOutput(item.output)?.isError !== true
+  );
+}
+
+/** Accept app references only when server and tool match the item, so tools cannot impersonate another app source. */
 export function mcpAppFromToolItem(item: {
   readonly toolName: string | null | undefined;
   readonly output?: unknown;
@@ -221,18 +294,12 @@ export function toolOutputIndicatesFailure(text: string): boolean {
   );
 }
 
-/** An image a tool returned inline. `data` is base64; a detail read omits it. */
 export interface ToolOutputImage {
   readonly mimeType: string;
   readonly data?: string;
 }
 
-/**
- * Reads one image block in the MCP `{ data, mimeType }` shape or the Anthropic
- * `{ source: { type: "base64", media_type, data } }` shape Claude stores.
- * Only raster types are recognized, so the server never serves an agent's SVG
- * or HTML inline.
- */
+/** Raster types only, so agent SVG/HTML cannot be served inline. */
 export function readToolOutputImage(block: unknown): ToolOutputImage | null {
   if (!Predicate.isObject(block) || block.type !== "image") return null;
   const source = Predicate.isObject(block.source) ? block.source : undefined;
@@ -246,25 +313,17 @@ export function readToolOutputImage(block: unknown): ToolOutputImage | null {
   return typeof data === "string" ? { ...image, data } : image;
 }
 
-/** Tools return a block, a list of blocks, or an MCP result with a `content` list. */
 function outputBlocks(value: unknown): ReadonlyArray<unknown> {
   if (Array.isArray(value)) return value;
   if (Predicate.isObject(value) && Array.isArray(value.content)) return value.content;
   return [value];
 }
 
-/** A tool returns one screenshot or a few frames; more would only flood the timeline. */
 export const MAX_TOOL_OUTPUT_IMAGES = 8;
 
-/** The largest image a `tool-output-image` asset serves: a provider turn's limit, as base64. */
 export const MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH =
   Math.ceil(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / 3) * 4;
 
-/**
- * The blocks `toolOutputImages` reads, by reference. These hold the only image
- * bytes in a tool output that a `tool-output-image` asset can serve, up to
- * `MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH`.
- */
 export function toolOutputImageBlocks(value: unknown): ReadonlyArray<unknown> {
   const blocks: unknown[] = [];
   for (const block of outputBlocks(value)) {
@@ -275,18 +334,11 @@ export function toolOutputImageBlocks(value: unknown): ReadonlyArray<unknown> {
   return blocks;
 }
 
-/**
- * The first images in a tool output, in order. The order is the
- * `tool-output-image` asset index, so servers and clients agree on it.
- */
+/** Order defines the shared tool-output-image asset index. */
 export function toolOutputImages(value: unknown): ReadonlyArray<ToolOutputImage> {
   return toolOutputImageBlocks(value).flatMap((block) => readToolOutputImage(block) ?? []);
 }
 
-/**
- * Replaces each image's bytes with `{ type: "image", mimeType }` and keeps its
- * position, so detail reads stay small and clients load the bytes as assets.
- */
 export function omitToolOutputImageData(value: unknown): unknown {
   const omit = (block: unknown) => {
     const image = readToolOutputImage(block);

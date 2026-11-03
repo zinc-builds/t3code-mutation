@@ -1,0 +1,107 @@
+{
+  "id": "audio-edit",
+  "title": "Audio Edit",
+  "summary": "Audition-style editor for the sound of an audio or video file: zoomable waveform, region edit list with split, cut, trim, edge-drag trims, per-region gain and fade in/out, markers, selection and edit playback (cuts skipped), undo history with presets, and export of an edit-list JSON plus a runnable ffmpeg script (attached and downloaded). Pick it to cut, trim, fade or re-level the audio of supplied media.",
+  "kit": ["waveform", "history", "links", "template-runtime"],
+  "chrome": false,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Audio Edit",
+      "description": "Header title; its slug also names the exported files."
+    },
+    "selectionStart": {
+      "type": "number",
+      "default": 0,
+      "description": "Initial waveform selection start in seconds."
+    },
+    "selectionEnd": {
+      "type": "number",
+      "default": 0,
+      "description": "Initial selection end in seconds, after selectionStart. 0 means no selection."
+    },
+    "fadeIn": {
+      "type": "number",
+      "default": 0,
+      "description": "Fade-in seconds (0 to 60) on each starting region that does not set its own."
+    },
+    "fadeOut": {
+      "type": "number",
+      "default": 0,
+      "description": "Fade-out seconds (0 to 60) on each starting region that does not set its own."
+    },
+    "regions": {
+      "type": "array",
+      "default": [],
+      "description": "Starting kept regions [{ start, end, gainDb?, fadeIn?, fadeOut? }] in seconds, non-overlapping. Empty keeps the whole file."
+    },
+    "markers": {
+      "type": "array",
+      "default": [],
+      "description": "Starting markers [{ time, label? }] in seconds; ones past the end are skipped."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, export filters, edit-list transforms, panels, buttons and presets. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    { "title": "Trim Intro", "selectionStart": 0, "selectionEnd": 2, "fadeOut": 0.2 },
+    {
+      "title": "Soft Podcast Cut",
+      "selectionStart": 1,
+      "selectionEnd": 6,
+      "fadeIn": 0.5,
+      "fadeOut": 1.5,
+      "markers": [
+        { "time": 2, "label": "Open" },
+        { "time": 9, "label": "Break" }
+      ]
+    },
+    {
+      "title": "Split And Duck",
+      "regions": [
+        { "start": 0, "end": 5, "fadeOut": 0.5 },
+        { "start": 7, "end": 14, "gainDb": -6, "fadeIn": 0.5, "fadeOut": 1 }
+      ],
+      "markers": [{ "time": 6, "label": "Cut point" }]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the media has loaded, the first preview has rendered and the template's panels exist. Add controls, then hooks that read them: addAudioFilter adds EQ, gain, compression or echo that the preview plays live AND the render command applies, addExportNote puts any other ffmpeg audio filter into the render command only (shown live in the Export panel), addEdlTransform rewrites the exported edit list the command is built from. Preview plays the source audio through the addAudioFilter chain; region gain and fades are heard in the render. Control values persist with the edit; options.controls ({ id: value }) sets starting values, and a saved edit wins over it. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows? (text; rows > 1 = multi-line), panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. Labels show about 14 characters. User edits and set() re-run every hook and re-render; onChange runs on edits only, not on load (hooks receive controls on every run, so read them there). Every control edit is one undo step (a slider drag, a typing burst, one toggle or select), named after the control and value; undo, redo, history jumps and presets restore control values with the edit (onChange does not run then).",
+      "info (third argument of every hook) = { phase, selection: { start, end } source seconds or null, playhead }.",
+      "addExportNote((edl, controls, info) => string | { note?, audioFilter? }): render-only ffmpeg audio filter fragments (not heard in the preview; use addAudioFilter when it covers the effect) (e.g. 'agate=threshold=0.01', 'bass=g=4', 'loudnorm=I=-16') chained onto the joined regions, in the order added and returned; the template adds nothing after them. '' or null = nothing. Filter thresholds in dB convert with 10 ** (dB / 20) where ffmpeg wants amplitude (agate, acompressor). A string or note becomes a script comment and render.boltOn.notes. edl.outputDurationSec is the output length.",
+      "addAudioFilter(id, (controls) => filter | [filter] | null): heard live while the waveform plays (Web Audio) and rendered by ffmpeg, chained onto the joined regions together with export notes, in the order added. filter = { type: 'gain', db } | { type: 'highpass'|'lowpass', frequency, q = 0.7071 } | { type: 'bandpass'|'notch', frequency, q = 1 } | { type: 'peaking', frequency, gain, q = 1 } | { type: 'lowshelf'|'highshelf', frequency, gain } | { type: 'compressor', threshold = -24 dB, ratio = 4, attack = 0.003 s, release = 0.25 s, knee = 6 dB, makeup = 0 dB } | { type: 'echo', time = 0.25 s, mix = 0.4 }; Hz, dB, seconds; out-of-range values throw. Add the controls it reads first. audioFilters() -> { filters, ffmpeg, live } shows what plays now.",
+      "addEdlTransform((edl, controls, info) => edl): edit the export (regions[{ startSec, endSec, gainDb, fadeInSec, fadeOutSec }], markers[{ timeSec, label }]) before the ffmpeg command is built from it.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes to it; the same title returns the same panel). 'top' = first in the inspector above Region (bolt-on panels in creation order), so a new panel is in view on load; 'bottom' = above Export.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'b' | 'shift+b' | 'mod+b', title? }) -> button.   refresh() re-renders the preview (only for state a hook reads that is not a control).   export() -> Promise<{ files: [{ name, type, size }], ffmpeg: [command] }>: runs the Export button (files go to t3.workspace.attach and download) and reports the files and the render command; it throws on failure.",
+      "getValues() -> { source, regions, markers, duration, selection, controls }.   setValues({ regions?, markers?, selection?, controls? }, label?) -> values: strict, regions/markers become one undo step.",
+      "addPreset(name, { gainDb?, fadeIn?, fadeOut? } | { regions?, markers? } | { controls }) / applyPreset(name).   on('change', cb(values)) -> off.",
+      "actions: { split(t?), cut(), trim(), removeRegion(), addMarker(t?, label?), selectRegion(index), playEdit() }; buildEditList(), exportEditList(); instances: { waveform, history }."
+    ],
+    "reservedShortcuts": [
+      "s",
+      "t",
+      "x",
+      "m",
+      "p",
+      "j",
+      "k",
+      "delete",
+      "backspace",
+      "space",
+      "mod+e",
+      "mod+z",
+      "mod+shift+z"
+    ],
+    "example": "t3template.addControl({ id: 'lowcut', label: 'Low Cut Hz', type: 'slider', min: 20, max: 300, step: 5, default: 80, panel: 'Master' });\nt3template.addControl({ id: 'bass', label: 'Bass dB', type: 'slider', min: -12, max: 12, step: 0.5, default: 3, panel: 'Master' });\nt3template.addControl({ id: 'gate', label: 'Gate dB', type: 'slider', min: -80, max: -20, step: 1, default: -60, panel: 'Master' });\nt3template.addControl({ id: 'loudness', label: 'Loudness', type: 'select', options: [{ value: 0, label: 'Off' }, { value: -16, label: 'Podcast -16 LUFS' }, { value: -14, label: 'Music -14 LUFS' }], default: -16, panel: 'Master' });\n// Heard while playing AND rendered: a low cut, then a bass shelf.\nt3template.addAudioFilter('tone', (c) => [\n  { type: 'highpass', frequency: c.lowcut },\n  { type: 'lowshelf', frequency: 120, gain: c.bass },\n]);\n// Render only, after the tone filters: a gate, then loudness normalisation last.\nt3template.addExportNote((edl, c) => ({\n  audioFilter: [\n    c.gate > -80 ? `agate=threshold=${(10 ** (c.gate / 20)).toFixed(5)}:ratio=2` : '',\n    c.loudness ? `loudnorm=I=${c.loudness}:TP=-1.5:LRA=11` : '',\n  ].filter(Boolean).join(','),\n  note: `Master: low cut ${c.lowcut} Hz, bass ${c.bass} dB, gate ${c.gate} dB, loudness ${c.loudness || 'off'}`,\n}));\nt3template.addEdlTransform((edl) => ({ ...edl, regions: edl.regions.filter((r) => r.endSec - r.startSec >= 0.25) }));\nt3template.addToolbarButton('Mark Beat', (t) => t.actions.addMarker(undefined, 'Beat'), { shortcut: 'b' });"
+  }
+}

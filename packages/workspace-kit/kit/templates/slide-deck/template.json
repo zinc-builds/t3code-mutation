@@ -1,0 +1,127 @@
+{
+  "id": "slide-deck",
+  "title": "Slide Deck",
+  "summary": "Slide deck editor for a short presentation: a slide list with live thumbnails, a 16:9 canvas where each slide is a layers document (title, body and image layouts; drag, scale, restyle and add text or shapes), an accent from the T3 theme, deck undo history, presenter mode that fills the frame, and export of every slide as a 1920x1080 PNG plus a JSON deck. Pick it for any slides, pitch, review or talk deck, or a presentation built from photos.",
+  "kit": ["layers", "history", "links", "template-runtime"],
+  "chrome": false,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Slide Deck",
+      "description": "Header title and the export file prefix (slug): <title>-01.png ... and <title>.json."
+    },
+    "slides": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "body": { "type": "string", "description": "One point per line (\\n); long lines wrap." },
+          "image": {
+            "type": "string",
+            "description": "File name of an attached image, e.g. horizon.jpg."
+          },
+          "layout": { "type": "string", "enum": ["title", "body", "image"] }
+        }
+      },
+      "default": [
+        {
+          "layout": "title",
+          "title": "Sonoma Spring",
+          "body": "Notes from one week in wine country"
+        },
+        {
+          "title": "What We Saw",
+          "body": "Golden light over the vines\nLong lunches under the oaks\nA hillside at dusk"
+        },
+        { "layout": "image", "title": "The View", "body": "One frame, one idea" }
+      ],
+      "description": "Slides in order: { title, body?, image?, layout? }. Layout when omitted: image if an image is named, body if there is a body, else title. An image layout without an image uses the first attached image; a name that is not attached warns and leaves an empty image slot."
+    },
+    "accent": {
+      "type": "string",
+      "default": "primary",
+      "description": "Accent bar colour: a theme token (primary, chart-1..chart-6, info, success, warning), var(--token), or any CSS colour. Invalid values warn and use primary."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, image stages, panels, buttons and a setValues path. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    {
+      "title": "Lumen Pitch",
+      "accent": "#f97316",
+      "slides": [
+        { "layout": "title", "title": "Lumen", "body": "Light for slow mornings" },
+        {
+          "title": "The Problem",
+          "body": "Mornings run on screens\nLight does not follow us\nAlarms start the day in the dark"
+        },
+        { "title": "The Product", "body": "A lamp that tracks the sun", "image": "horizon.jpg" },
+        { "layout": "title", "title": "Thank You", "body": "hello@lumen.example" }
+      ]
+    },
+    {
+      "title": "Field Notes",
+      "accent": "chart-2",
+      "slides": [
+        { "title": "Field Notes", "body": "Spring survey, Sonoma" },
+        { "layout": "image", "title": "Hillside", "body": "First light on the east ridge" },
+        { "title": "Sites", "body": "Ridge\nValley\nCoast" }
+      ]
+    },
+    {
+      "title": "Agenda",
+      "accent": "var(--success)",
+      "slides": [
+        { "title": "Agenda", "body": "Opening\nDemo\nQuestions" },
+        {
+          "title": "A Long Title That Wraps Onto a Second Line Without Hitting the Accent",
+          "body": "One long point that wraps across the column when there is more room than a single line allows for the copy here."
+        }
+      ]
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the media has loaded, the first slide has rendered and the template's panels exist. Add controls, then image stages: they draw on every rendered slide picture (each exported PNG, the presenter and the slide-list thumbnails) after its layers render, so frames, grain, footers and slide numbers reach every exported file. Image stages do not repaint the editable canvas: check them in a thumbnail, Present (P) or Export. To change the slides themselves use setValues or instances.layers. Control values persist with the edit; options.controls ({ id: value }) sets starting values, and a saved edit wins over it. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner. Arrow, PageUp/PageDown and Home/End keys are also taken (slide list, presenter, layer nudge).",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. Values: slider number, toggle boolean, select the option value, color '#rrggbb', text string. No panel = 'Extras'. User edits and set() re-render the thumbnails and presenter; onChange runs on edits only. Every control edit is one undo step (a slider drag, a typing burst); undo, redo and history jumps restore control values with the deck.",
+      "addImageStage(id, (ctx, controls) => void): edits a rendered slide picture in place with ctx.context (2D; getImageData works). ctx = { canvas, context, width, height, scale, phase, index (0-based slide), count, slide (id), layout, copy(), random(seed?) }. width x height: 1920 x 1080 for export and the presenter, 384 x 216 for thumbnails. scale = width / 1920: multiply pixel sizes by it or size things as fractions of width. copy() -> a snapshot canvas (draw it back blurred for glows; never draw the canvas onto itself). random(seed?) -> seeded () => [0, 1), the same pattern on every render. phase = 'preview' (thumbnails, presenter) | 'export'. Only the 'image' target exists here (default).",
+      "addShaderStage(id, glsl, (controls, { width, height, scale }) => ({ u_name: number | boolean | [x, y(, z, w)] | '#rrggbb' })): GLSL ES 1.0 fragment shader on each rendered slide picture, stages in the order added; u_image, u_resolution, u_scale and varying v_uv (0,0 bottom left) are declared for you, declare your own uniforms.   removeStage(id).",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element (append your own nodes; the same title returns the same panel). 'top' = first in the right inspector, above Slide, in creation order (in view on load); 'bottom' = after Shortcuts.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: 'g' | 'shift+g' | 'mod+g', title? }) -> button, in the header before Undo.   refresh() re-renders thumbnails and presenter (only for state a hook reads that is not a control).",
+      "export() -> Promise<{ files: [{ name, type, size, width?, height? }] }>: renders every slide as a 1920 x 1080 PNG (<slug>-01.png, <slug>-02.png ...) through the image stages plus <slug>.json ({ format: 'slide-deck', version, title, accent, width, height, slides (options.slides shape), scenes (layers documents) }), attaches and downloads each file, reports what it wrote; throws on failure.",
+      "getValues() -> { title, accent, current, slides: [{ layout, title, body, image }], controls }.   setValues({ slides?, current?, accent?, controls? }, label?) -> Promise<values>: strict (unknown keys, unattached image names and bad accents throw). slides replaces the whole deck (layouts rebuilt from content, moves reset) and selects slide 0; current selects a 0-based slide; accent recolours every accent bar. One undo step.",
+      "on('change', cb) -> off.   instances: { layers (the editable canvas of the current slide: get(), update(id, patch), addText(text, props), addShape(kind, props); template layer ids are title, body, accent, image, image-slot; user edits on it are deck undo steps, but programmatic calls are only saved with the next deck step, so follow them with setValues({ current: t3template.getValues().current }, label)), history }."
+    ],
+    "reservedShortcuts": [
+      "n",
+      "p",
+      "l",
+      "e",
+      "shift+d",
+      "alt+1",
+      "alt+2",
+      "alt+3",
+      "mod+e",
+      "mod+z",
+      "mod+shift+z",
+      "mod+y",
+      "mod+d",
+      "escape",
+      "delete",
+      "backspace",
+      "space",
+      "enter"
+    ],
+    "example": "t3template.addControl({ id: 'grain', label: 'Grain', type: 'slider', min: 0, max: 0.4, step: 0.01, default: 0.08, panel: 'Finish' });\nt3template.addControl({ id: 'footer', label: 'Footer', type: 'text', placeholder: 'Footer text', default: 'Sonoma Spring 2026', panel: 'Finish' });\nt3template.addControl({ id: 'numbers', label: 'Slide No.', type: 'toggle', default: true, panel: 'Finish' });\nt3template.addImageStage('grain', ({ context, width, height, random }, c) => {\n  if (c.grain <= 0) return;\n  const rnd = random('grain');\n  const px = context.getImageData(0, 0, width, height);\n  const amount = c.grain * 255;\n  for (let i = 0; i < px.data.length; i += 4) {\n    const n = (rnd() - 0.5) * amount;\n    px.data[i] += n;\n    px.data[i + 1] += n;\n    px.data[i + 2] += n;\n  }\n  context.putImageData(px, 0, 0);\n});\nt3template.addImageStage('footer', ({ context, width, height, index, count }, c) => {\n  context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted-foreground').trim();\n  context.font = `500 ${Math.round(width * 0.016)}px sans-serif`;\n  context.textBaseline = 'middle';\n  const y = height - height * 0.05;\n  if (c.footer) {\n    context.textAlign = 'left';\n    context.fillText(c.footer, width * 0.073, y);\n  }\n  if (c.numbers) {\n    context.textAlign = 'right';\n    context.fillText(`${index + 1} / ${count}`, width - width * 0.073, y);\n  }\n});\nt3template.addToolbarButton('Grain Off', (t) => t.setValues({ controls: { grain: 0 } }), { shortcut: 'shift+g', title: 'Set grain to 0' });"
+  }
+}

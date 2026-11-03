@@ -1,0 +1,254 @@
+{
+  "id": "transcript-cut",
+  "title": "Transcript Cut",
+  "summary": "Text-driven highlight editor (Descript-style) for interviews and talking-head footage: every clip's word-accurate transcript side by side with the program it cuts. Select words to pick or drop them, reorder picks, nudge them a word at a time; the program monitor plays the picks in order from the originals (by asset URL, gapless), with a pick strip and a length meter against a target. Pass your proposed highlights as suggestions: they show as Suggested until the user accepts one (A), all (Shift+A) or edits them. Export attaches a t3-edl/1 EDL (sources by absolute path), an ffmpeg render script that cuts the originals and concatenates to H.264/AAC, and SRT captions timed to the cut; Send posts a summary (picks, length vs target, which suggestions were taken, changed or rejected) with the EDL. Pick it to make a short cut from many clips with speech. Attach each original with its media_prepare transcript (<stem>.transcript.json); clips without speech (B-roll) are listed but have nothing to pick.",
+  "kit": ["player", "history", "links", "template-runtime"],
+  "chrome": true,
+  "options": {
+    "title": {
+      "type": "string",
+      "default": "Transcript Cut",
+      "description": "Header title; also names the export files (slugged)."
+    },
+    "clips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "media": {
+            "type": "string"
+          },
+          "transcript": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": ["transcript"]
+      },
+      "default": [],
+      "description": "Clips in library order: [{ transcript: asset name of the transcript JSON, media?: asset name of the original video or audio (it plays by its URL; omitted = the media asset whose path is the transcript's source; none = the clip edits and exports without a preview), source?: the original's absolute path for the render (default: the media asset's path, else the transcript's source), label? }]. Empty = every attached transcript (media_prepare's <stem>.transcript.json), each paired with the media whose path is its source, else the media of the same base name."
+    },
+    "highlights": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "clip": {
+            "type": "string"
+          },
+          "start": {
+            "type": "number"
+          },
+          "end": {
+            "type": "number"
+          },
+          "note": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
+        },
+        "required": ["clip", "start", "end"]
+      },
+      "default": [],
+      "description": "Your suggested picks, shown as Suggested (not in the cut) until the user accepts or edits them: [{ clip: media name, base name or label, start, end: source seconds (snapped to the words they cover), note?: why it is worth keeping, order?: place in the cut (default: list order) }]. Ids are s1, s2… in list order; Send reports each as taken, changed or rejected."
+    },
+    "accept": {
+      "type": "boolean",
+      "default": false,
+      "description": "true = start with every suggestion already in the cut (still marked as yours, so Send reports it; the user can undo, change or reject each). false = they wait as Suggested."
+    },
+    "targetSeconds": {
+      "type": "number",
+      "minimum": 0,
+      "default": 60,
+      "description": "Goal length of the cut in seconds, shown as a meter (0 = no target)."
+    },
+    "padding": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "default": 0.08,
+      "description": "Handles: seconds kept before a pick's first word and after its last, never into a neighbouring word. Each pick can override it."
+    },
+    "fade": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.02,
+      "description": "Audio fade in and out at every cut in the render, seconds (declicks the joins; 0 = hard cuts)."
+    },
+    "frame": {
+      "type": "string",
+      "enum": ["auto", "9:16", "16:9", "1:1", "4:5"],
+      "default": "auto",
+      "description": "Output aspect ratio. auto = the picture of the first pick's media (iPhone portrait gives 9:16; while the cut is empty, the first suggestion's or clip's); clips of another shape are fitted with black bars."
+    },
+    "resolution": {
+      "type": "integer",
+      "enum": [0, 720, 1080, 1440, 2160],
+      "default": 1080,
+      "description": "Short side of the rendered frame in pixels (1080 = 1080x1920 for 9:16); 0 = the first pick's own size (frame auto only)."
+    },
+    "customScript": {
+      "type": "string",
+      "default": "",
+      "description": "JS run last as (t3template, options) to bolt on controls, audio filters, overlays, export notes, EDL transforms, panels and buttons. See boltOn."
+    },
+    "controls": {
+      "type": "object",
+      "default": {},
+      "description": "Starting values for bolt-on controls, { controlId: value }, applied when customScript adds them (a saved edit wins). An id no control claims is an error."
+    }
+  },
+  "examples": [
+    {
+      "title": "Founder Lessons",
+      "targetSeconds": 30,
+      "highlights": [
+        {
+          "clip": "interview-cleo",
+          "start": 10.3,
+          "end": 12.6,
+          "note": "The thesis in one line: speed is the product.",
+          "order": 1
+        },
+        {
+          "clip": "interview-ana",
+          "start": 1.1,
+          "end": 11.3,
+          "note": "Concrete and quotable; drop the 'Anyway, yeah' tail.",
+          "order": 2
+        },
+        {
+          "clip": "interview-ben",
+          "start": 4.0,
+          "end": 14.8,
+          "note": "Hiring lesson with a clear method.",
+          "order": 3
+        },
+        {
+          "clip": "interview-cleo",
+          "start": 2.6,
+          "end": 10.2,
+          "note": "Optional: the one-second number, if there is room."
+        }
+      ]
+    },
+    {
+      "title": "Hiring Clip",
+      "clips": [
+        {
+          "media": "interview-ben.mp4",
+          "transcript": "interview-ben.transcript.json",
+          "label": "Ben (CTO)"
+        },
+        {
+          "media": "interview-ana.mp4",
+          "transcript": "interview-ana.transcript.json",
+          "label": "Ana (CEO)"
+        }
+      ],
+      "highlights": [
+        {
+          "clip": "Ben (CTO)",
+          "start": 0,
+          "end": 7.2,
+          "note": "The mistake."
+        },
+        {
+          "clip": "Ben (CTO)",
+          "start": 7.2,
+          "end": 14.8,
+          "note": "The fix."
+        }
+      ],
+      "targetSeconds": 15,
+      "padding": 0.15,
+      "fade": 0.04,
+      "frame": "9:16",
+      "resolution": 720
+    },
+    {
+      "title": "Landscape Reel",
+      "frame": "16:9",
+      "targetSeconds": 20
+    }
+  ],
+  "boltOn": {
+    "summary": "options.customScript runs once as new Function('t3template', 'options', code), after the transcripts have loaded, the program monitor exists and the first preview has rendered. The cut is an ordered list of picks (word ranges of a clip, in source seconds); bolt-ons read it with getValues() and change it with setValues (one undo step). Add controls, then hooks that read them: addAudioFilter adds EQ, gain or compression that the monitor plays live and the render applies; addOverlay draws pictures and text over the cut (monitor and render); addPreviewFilter tints the monitor; addExportNote puts any other ffmpeg filter into the render; addEdlTransform rewrites the exported EDL (export only). Control values persist with the cut; options.controls sets starting values. To propose picks, pass options.highlights instead of a customScript. Errors log \"[t3template] customScript error: ...\" and show in a dismissible banner.",
+    "api": [
+      "addControl({ id, label?, type: 'slider'|'toggle'|'select'|'color'|'text'|'button', min = 0, max = 1, step?, default?, options?: ['a', { value, label }], placeholder?, rows?, panel?: 'Title' | element from addPanel, onChange?(value, t3template), onClick?(t3template) }) -> { id, element, get(), set(value), setLabel(text) }. No panel = 'Extras'. User edits and set() re-run every hook; every control edit is one undo step, and undo, redo and history jumps restore control values with the cut.",
+      "getValues() -> { title, duration (the cut, s), targetSeconds, mode: 'program'|'source', playhead, selection: { clip, start, end, text } | null, clips: [{ key, label, media, source, duration, words (count), speech: { start, end } of its words | null (no speech) }], picks: [{ id, clip, start, end (first word start, last word end), in, out (with handles), duration, programStart, text, note, padIn, padOut, suggestion }], suggestions: [{ id, clip, start, end, text, note, status: 'pending'|'taken'|'changed'|'rejected' }], controls }. clip = the clip key (its media name).",
+      "setValues({ picks?: [{ clip, start, end, note?, padIn?, padOut?, suggestion?, id? }] (replaces the cut in this order; times snap to the words they cover; pending suggestions stay unless a pick names them), accept?: ['s1', ...] | 'all', reject?: [...] | 'all', playhead? }, label?) -> values. Strict (a bad key or a range with no words throws), one undo step.",
+      "EDL (t3-edl/1): { width, height, duration, targetSeconds, sources: { [absolute path]: { label, media, transcript, duration } }, tracks[0].clips[{ id, label, source (absolute path of the original), media, in, out (source s, handles included), start, duration, words: [first, last], text, note?, suggestion?: { id, status } }], captions, render: { command, ... } }. Clips play end to end in order; start and duration are recomputed after transforms.",
+      "info (third argument of every EDL hook) = { phase, pickId: the selected pick or null, playhead }.",
+      "addEdlTransform((edl, controls, info) => edl): edit the export (drop, split or retime picks; every clip keeps its own id) before the render command and captions are built.",
+      "addExportNote((edl, controls, info) => string | { note?, videoFilter?, audioFilter? }): ffmpeg fragments chained onto the whole cut after overlays, in the order added; t is cut seconds. A string or note becomes a script comment and render.boltOn.notes.",
+      "addPreviewFilter((controls, { time, pick }) => CSS filter): re-run on every frame; pick = { id, start, duration, in, out, clip } under the playhead (null when empty). Applied to the program monitor; pair it with an addExportNote videoFilter.",
+      "addOverlay(id, ({ canvas, context, width, height, scale, phase }, controls) => void, timing?(controls, { duration }) -> { start, end } | null): draw at the output frame size (scale = 1 on export); shown on the monitor in that cut-seconds range (no timing = the whole cut, null = hidden) and exported as <title>-overlay-<id>.png composited by the render.",
+      "addAudioFilter(id, (controls) => filter | [filter] | null): heard live on the program monitor (Web Audio) and rendered by ffmpeg on the whole cut. filter = { type: 'gain', db } | { type: 'highpass'|'lowpass', frequency, q = 0.7071 } | { type: 'bandpass'|'notch', frequency, q = 1 } | { type: 'peaking', frequency, gain, q = 1 } | { type: 'lowshelf'|'highshelf', frequency, gain } | { type: 'compressor', threshold = -24, ratio = 4, attack = 0.003, release = 0.25, knee = 6, makeup = 0 } | { type: 'echo', time = 0.25, mix = 0.4 }. Add the controls it reads first. audioFilters() -> { filters, ffmpeg, live }.",
+      "addPanel(title | { title, open = true, position = 'top' }) -> the panel body element. 'top' = under the length meter, above Picks; 'bottom' = under Picks and History, above the composer slot.",
+      "addToolbarButton(label, onClick(t3template), { shortcut?: e.g. 'shift+s' (not in reservedShortcuts), title? }) -> button (also in T3's native toolbar).   refresh() re-renders after state a hook reads that is not a control.   export() -> Promise<{ files: [{ name, type, size }], ffmpeg: [command] }>: runs Export (attach + download of <title>.edl.json, .render.sh and .srt) and throws on failure.   on('change', cb(values)) -> off.   buildEdl() -> { edl, script, srt, overlays }.",
+      "instances: { player (t3kit.player: the program monitor), history (t3kit.history) }; links: { history }."
+    ],
+    "reservedShortcuts": [
+      "space",
+      "enter",
+      "backspace",
+      "delete",
+      "escape",
+      "a",
+      "shift+a",
+      "x",
+      "s",
+      "[",
+      "]",
+      "{",
+      "}",
+      "n",
+      "shift+n",
+      "m",
+      "d",
+      "f",
+      "e",
+      "/",
+      "mod+enter",
+      "mod+z",
+      "mod+shift+z",
+      "mod+y"
+    ],
+    "example": "// A rough cut to refine: the first seconds of speech in every clip that has any, when the cut starts empty.\nconst roughCut = (t) => t.setValues({ picks: t.getValues().clips.filter((k) => k.speech).map((k) => ({ clip: k.key, start: k.speech.start, end: Math.min(k.speech.end, k.speech.start + 6) })) }, 'Rough cut');\nt3template.addToolbarButton('Rough Cut', roughCut, { shortcut: 'shift+r' });\nif (!t3template.getValues().picks.length && !t3template.getValues().suggestions.length) roughCut(t3template);\nt3template.addControl({ id: 'voice', label: 'Voice Polish', type: 'toggle', default: true, panel: 'Finish' });\nt3template.addControl({ id: 'name', label: 'Lower Third', type: 'text', default: 'Founder Lessons', panel: 'Finish' });\nt3template.addControl({ id: 'nameSec', label: 'Title (s)', type: 'slider', min: 0, max: 8, step: 0.5, default: 3, panel: 'Finish' });\n// Sound: heard on the program monitor and rendered by ffmpeg on the whole cut.\nt3template.addAudioFilter('voice', (c) => (c.voice ? [{ type: 'highpass', frequency: 90 }, { type: 'compressor', threshold: -22, ratio: 3, makeup: 4 }] : null));\n// A lower third over the first seconds, drawn at the output size.\nt3template.addOverlay('lower-third', ({ context, width, height }, c) => {\n  const h = Math.round(height * 0.07);\n  context.fillStyle = 'rgba(0, 0, 0, 0.6)';\n  context.fillRect(0, height * 0.78, width, h);\n  context.fillStyle = '#ffffff';\n  context.font = `600 ${Math.round(h * 0.5)}px sans-serif`;\n  context.textBaseline = 'middle';\n  context.fillText(c.name, width * 0.06, height * 0.78 + h / 2);\n}, (c) => (c.name && c.nameSec ? { start: 0, end: c.nameSec } : null));\n// Keep only short suggestions: accept the pending ones under 8 seconds in one undo step.\nt3template.addToolbarButton('Accept Short', (t) => {\n  const ids = t.getValues().suggestions.filter((s) => s.status === 'pending' && s.end - s.start < 8).map((s) => s.id);\n  return t.setValues({ accept: ids }, 'Accept short suggestions');\n}, { shortcut: 'shift+s' });\n// Export drops picks shorter than a second (the cut on screen keeps them).\nt3template.addEdlTransform((edl) => {\n  edl.tracks[0].clips = edl.tracks[0].clips.filter((k) => k.duration >= 1);\n  return edl;\n});"
+  },
+  "verifyAssets": "interview-ana.mp4,interview-ana.transcript.json,interview-ben.mp4,interview-ben.transcript.json,interview-cleo.mov,interview-cleo.transcript.json",
+  "verifyMediaUrl": true,
+  "verifyOptions": {
+    "highlights": [
+      {
+        "clip": "interview-cleo",
+        "start": 10.3,
+        "end": 12.6,
+        "note": "The thesis in one line."
+      },
+      {
+        "clip": "interview-ana",
+        "start": 1.1,
+        "end": 11.3,
+        "note": "Concrete and quotable."
+      },
+      {
+        "clip": "interview-ben",
+        "start": 4.0,
+        "end": 9.9,
+        "note": "The hiring method."
+      }
+    ],
+    "accept": true
+  }
+}

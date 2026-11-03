@@ -1,0 +1,1881 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Component Props Playground</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn kbd {
+        color: inherit;
+        opacity: 0.7;
+      }
+
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 40px minmax(0, 1fr) 24px;
+        grid-template-columns: 312px minmax(0, 1fr) 328px;
+      }
+      .status {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .status-keys {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        overflow: hidden;
+      }
+      .status-keys span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .status-keys kbd {
+        padding: 1px 3px;
+      }
+      .onion {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted-foreground);
+      }
+      .onion input[type="range"] {
+        width: 90px;
+        accent-color: var(--ring);
+      }
+      .btn[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .snippet-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .snippet-head .hint {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 10px;
+      }
+      @media (max-width: 900px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          min-height: 100vh;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto auto minmax(420px, auto) auto 24px;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 16px;
+        }
+        .bar .meta,
+        .bar .spacer {
+          display: none;
+        }
+        .toolbar,
+        .matrix-bar {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .props,
+        .inspector {
+          border: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .inspector {
+          min-width: 0;
+        }
+        .composer {
+          min-width: 0;
+        }
+        .status-keys {
+          display: none;
+        }
+      }
+      .bar {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0 6px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .comp {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .meta {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .spacer {
+        flex: 1;
+        min-width: 0;
+      }
+      .sep {
+        width: 1px;
+        height: 18px;
+        background: var(--border);
+        margin: 0 4px;
+        flex: none;
+      }
+      .tools {
+        display: flex;
+        gap: 6px;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 9px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--card-foreground);
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+        background: var(--card);
+        color: var(--card-foreground);
+      }
+      .btn-primary,
+      .btn-primary:hover {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: transparent;
+      }
+      .btn-primary:disabled {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .btn.sm {
+        height: 22px;
+        padding: 0 6px;
+        font-size: 11px;
+      }
+      .link {
+        border: 0;
+        background: none;
+        padding: 0;
+        color: var(--primary);
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .link:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .btn:focus-visible,
+      .link:focus-visible,
+      .seg button:focus-visible,
+      .pin-cell:focus-visible,
+      summary:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
+
+      .seg {
+        display: inline-flex;
+        flex: none;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--card);
+      }
+      .seg button {
+        height: 24px;
+        padding: 0 9px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 0;
+        border-right: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted-foreground);
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .seg button:last-child {
+        border-right: 0;
+      }
+      .seg button:hover {
+        color: var(--foreground);
+      }
+      .seg button[aria-pressed="true"],
+      .seg button[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+
+      .props,
+      .inspector,
+      .center {
+        min-width: 0;
+        min-height: 0;
+      }
+      .props {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        border-right: 1px solid var(--border);
+      }
+      .inspector {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto auto;
+        border-left: 1px solid var(--border);
+      }
+      .pane-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 32px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .pane-head strong {
+        font-weight: 600;
+      }
+      .count {
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .pane-body {
+        overflow: auto;
+        min-height: 0;
+        padding-bottom: 12px;
+      }
+      .hint {
+        color: var(--muted-foreground);
+        font-size: 11px;
+        margin: 0;
+      }
+
+      .center {
+        display: flex;
+        flex-direction: column;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        min-height: 36px;
+        box-sizing: border-box;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+        flex: none;
+      }
+      .matrix-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        flex: none;
+      }
+      .matrix-bar label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted-foreground);
+      }
+      .matrix-bar select {
+        height: 24px;
+        min-width: 120px;
+        padding: 0 6px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--card-foreground);
+      }
+      .stage-hint {
+        margin: 0;
+        padding: 6px 10px;
+        color: var(--muted-foreground);
+        border-bottom: 1px solid var(--border);
+        flex: none;
+      }
+      .stage-host {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        overflow: auto;
+        padding: 12px;
+      }
+      .empty-state {
+        flex: 1 1 auto;
+        display: grid;
+        place-content: center;
+        text-align: center;
+        gap: 8px;
+        padding: 24px;
+        color: var(--muted-foreground);
+        max-width: 520px;
+        margin: 0 auto;
+      }
+      .empty-state strong {
+        color: var(--foreground);
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .empty-state code {
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+
+      .panels {
+        overflow: auto;
+        min-height: 0;
+      }
+      details {
+        border-bottom: 1px solid var(--border);
+      }
+      summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 32px;
+        padding: 0 10px;
+        font-weight: 600;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        margin: 0 3px 0 1px;
+        border-right: 1.5px solid var(--muted-foreground);
+        border-bottom: 1.5px solid var(--muted-foreground);
+        transform: rotate(-45deg);
+        flex: none;
+      }
+      details[open] > summary::before {
+        transform: translateY(-2px) rotate(45deg);
+      }
+      .sec-body {
+        padding: 0 10px 12px;
+        min-width: 0;
+      }
+      .history-body {
+        height: 260px;
+        min-height: 200px;
+      }
+      .pins {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 6px;
+      }
+      .pin {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      .pin label {
+        min-width: 0;
+        display: grid;
+        cursor: pointer;
+      }
+      .pin-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+      }
+      .pin-meta {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--muted-foreground);
+      }
+      .pins .empty {
+        color: var(--muted-foreground);
+        padding: 4px 0;
+      }
+      .readout {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr);
+        gap: 4px 8px;
+        margin: 0;
+      }
+      .readout dt {
+        color: var(--muted-foreground);
+      }
+      .readout dd {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .readout .bad {
+        color: var(--destructive);
+      }
+      .snippet {
+        margin: 8px 0 0;
+        padding: 8px;
+        max-height: 220px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--muted);
+        font: 11px/1.5 var(--font-mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .note {
+        margin: 0;
+        padding: 6px 10px;
+        border-top: 1px solid var(--border);
+        border-left: 3px solid var(--warning);
+        font-size: 11px;
+      }
+      .composer {
+        min-width: 320px;
+        min-height: 0;
+        border-top: 1px solid var(--border);
+      }
+
+      /* The stage's own bar (background, overlay opacity) and per-cell state select are replaced by the toolbar;
+         the pin sits in the cell head. */
+      .t3k-stage-bar,
+      .t3k-stage-state {
+        display: none !important;
+      }
+      .pin-cell {
+        height: 20px;
+        margin-left: auto;
+        padding: 0 6px;
+        flex: none;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--card);
+        color: var(--card-foreground);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .pin-cell:hover {
+        background: var(--accent);
+        color: var(--accent-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="bar">
+        <h1 class="title" id="title">Component Props Playground</h1>
+        <span class="comp" id="comp"></span>
+        <span class="meta" id="meta"></span>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="undo" disabled>Undo</button>
+        <button type="button" class="btn" id="redo" disabled>Redo</button>
+        <span class="sep"></span>
+        <div class="tools" id="extra-tools"></div>
+        <button type="button" class="btn" id="pin" data-needs-component>Pin <kbd>P</kbd></button>
+        <button type="button" class="btn" id="export" data-needs-component>
+          Export <kbd>E</kbd>
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          id="send"
+          data-needs-component
+          title="Send these props to the agent: a short summary with props.json, the usage snippet and matrix.png"
+        >
+          Send to Agent
+        </button>
+      </header>
+
+      <aside class="props">
+        <div class="pane-head">
+          <strong>Props</strong>
+          <span class="count" id="changed"></span>
+          <button type="button" class="link" id="reset-all" data-needs-component>Reset All</button>
+        </div>
+        <div class="pane-body">
+          <div id="form"></div>
+          <p class="hint" id="form-empty">Attach a component file to set its props here.</p>
+        </div>
+      </aside>
+
+      <main class="center">
+        <div class="toolbar">
+          <div class="seg" role="tablist" aria-label="View">
+            <button
+              type="button"
+              role="tab"
+              data-tab="single"
+              aria-selected="true"
+              title="Single (S)"
+            >
+              Single
+            </button>
+            <button
+              type="button"
+              role="tab"
+              data-tab="matrix"
+              aria-selected="false"
+              title="Matrix (M)"
+            >
+              Matrix
+            </button>
+            <button
+              type="button"
+              role="tab"
+              data-tab="compare"
+              aria-selected="false"
+              title="Compare (C)"
+            >
+              Compare
+            </button>
+          </div>
+          <span class="sep"></span>
+          <div class="seg" role="group" aria-label="Width">
+            <button type="button" data-width="320" aria-pressed="false">320</button>
+            <button type="button" data-width="375" aria-pressed="false">375</button>
+            <button type="button" data-width="768" aria-pressed="false">768</button>
+            <button type="button" data-width="1024" aria-pressed="false">1024</button>
+            <button type="button" data-width="1440" aria-pressed="false">1440</button>
+          </div>
+          <div class="seg" role="group" aria-label="Forced State" title="Step with [ and ]">
+            <button type="button" data-state="default" aria-pressed="true">Default</button>
+            <button type="button" data-state="hover" aria-pressed="false">Hover</button>
+            <button type="button" data-state="focus" aria-pressed="false">Focus</button>
+            <button type="button" data-state="active" aria-pressed="false">Active</button>
+            <button type="button" data-state="disabled" aria-pressed="false">Disabled</button>
+          </div>
+          <div class="seg" role="group" aria-label="Background" title="Cycle with B">
+            <button type="button" data-bg="canvas" aria-pressed="false">Canvas</button>
+            <button type="button" data-bg="card" aria-pressed="false">Card</button>
+            <button type="button" data-bg="checker" aria-pressed="false">Checker</button>
+          </div>
+          <div class="onion" id="onion" hidden>
+            <button
+              type="button"
+              class="btn sm"
+              id="onion-toggle"
+              aria-pressed="true"
+              title="Show the reference image over every cell (O)"
+            >
+              Onion <kbd>O</kbd>
+            </button>
+            <input
+              type="range"
+              id="onion-opacity"
+              min="0"
+              max="1"
+              step="0.01"
+              value="0.5"
+              aria-label="Onion Opacity"
+            />
+          </div>
+        </div>
+        <div class="matrix-bar" id="matrix-bar" hidden>
+          <label
+            >Rows
+            <select id="ax-rows"></select
+          ></label>
+          <label
+            >Columns
+            <select id="ax-cols"></select
+          ></label>
+          <div class="seg" role="group" aria-label="State Axis" id="ax-states"></div>
+          <span class="hint" id="matrix-hint"></span>
+        </div>
+        <p class="stage-hint" id="stage-hint" hidden></p>
+        <div class="stage-host" id="stage" hidden></div>
+        <div class="empty-state" id="empty-stage" hidden>
+          <strong>No Component Attached</strong>
+          <span
+            >Attach a JavaScript file that sets <code>window.t3component</code> with
+            <code>name</code>, <code>props</code>, <code>mount(el, props)</code> and an optional
+            <code>usage(props)</code>.</span
+          >
+          <span
+            >CSS, font and image files attach alongside it. An image named
+            <code>ref-*.png</code> shows as the onion-skin reference.</span
+          >
+        </div>
+      </main>
+
+      <aside class="inspector">
+        <div class="panels" id="panels">
+          <details open id="sec-pins">
+            <summary>Pinned Combinations <span class="count" id="pin-count"></span></summary>
+            <div class="sec-body">
+              <ul class="pins" id="pins"></ul>
+              <p class="hint" id="compare-hint" style="margin-top: 8px"></p>
+            </div>
+          </details>
+          <details open id="sec-snippet">
+            <summary>Usage Snippet</summary>
+            <div class="sec-body">
+              <div class="snippet-head">
+                <div class="seg" role="group" aria-label="Snippet Format">
+                  <button type="button" data-snippet="jsx" aria-pressed="true">JSX</button>
+                  <button type="button" data-snippet="html" aria-pressed="false">HTML</button>
+                </div>
+                <span class="hint" id="snippet-source"></span>
+              </div>
+              <pre class="snippet" id="snippet"></pre>
+            </div>
+          </details>
+          <details open id="sec-measure">
+            <summary>Measure</summary>
+            <div class="sec-body" id="measure"></div>
+          </details>
+          <details open id="sec-history">
+            <summary>History</summary>
+            <div class="sec-body">
+              <div class="history-body" id="history"></div>
+            </div>
+          </details>
+        </div>
+        <p class="note" id="note" hidden></p>
+        <div class="composer" data-t3-composer></div>
+      </aside>
+
+      <footer class="status">
+        <span id="status-text"></span>
+        <span class="status-keys" aria-hidden="true">
+          <span><kbd>S</kbd><kbd>M</kbd><kbd>C</kbd> view</span>
+          <span><kbd>1</kbd>–<kbd>5</kbd> width</span>
+          <span><kbd>[</kbd><kbd>]</kbd> state</span>
+          <span><kbd>B</kbd> background</span>
+          <span><kbd>O</kbd> onion</span>
+          <span><kbd>P</kbd> pin</span>
+          <span><kbd>E</kbd> export</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> step a number</span>
+        </span>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+        const t3kit = window.t3kit;
+        const ws = window.t3.workspace;
+        const $ = (id) => document.getElementById(id);
+        const TEMPLATE = "component-playground";
+        const WIDTHS = [320, 375, 768, 1024, 1440];
+        const STATES = ["default", "hover", "focus", "active", "disabled"];
+        const BACKGROUNDS = ["canvas", "card", "checker"];
+        const SNIPPETS = ["jsx", "html"];
+        const MODES = ["shadow", "frame"];
+        const TABS = ["single", "matrix", "compare"];
+        const TAB_LABEL = { single: "Single", matrix: "Matrix", compare: "Compare" };
+        const MAX_CELLS = 64;
+        const PERSIST_MS = 300;
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const uniq = (list) => [...new Set(list)];
+        const kebab = (s) => s.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+
+        // ---- Options ---------------------------------------------------------------
+        const SPEC = {
+          title: {
+            default: "Component Props Playground",
+            ok: (v) => typeof v === "string" && v.trim() !== "",
+          },
+          props: { default: {}, ok: isPlain },
+          matrix: {
+            default: { rows: null, cols: null, states: [] },
+            ok: (v) =>
+              isPlain(v) &&
+              [v.rows, v.cols].every(
+                (x) => x === undefined || x === null || typeof x === "string",
+              ) &&
+              (v.states === undefined ||
+                (Array.isArray(v.states) && v.states.every((s) => STATES.includes(s)))),
+          },
+          width: { default: 375, ok: (v) => WIDTHS.includes(v) },
+          background: { default: "canvas", ok: (v) => BACKGROUNDS.includes(v) },
+          state: { default: "default", ok: (v) => STATES.includes(v) },
+          snippet: { default: "jsx", ok: (v) => SNIPPETS.includes(v) },
+          mode: { default: "shadow", ok: (v) => MODES.includes(v) },
+          customScript: { default: "", ok: (v) => typeof v === "string" },
+          controls: { default: {}, ok: isPlain },
+        };
+        function readOptions() {
+          const text = document.getElementById("t3-template-options")?.textContent || "{}";
+          let raw;
+          try {
+            raw = JSON.parse(text);
+          } catch (err) {
+            console.warn(`${TEMPLATE}: options are not valid JSON; using defaults. ${err.message}`);
+            raw = {};
+          }
+          if (!isPlain(raw)) raw = {};
+          const out = {};
+          for (const [key, spec] of Object.entries(SPEC)) {
+            const v = raw[key];
+            if (v === undefined) out[key] = clone(spec.default);
+            else if (spec.ok(v)) out[key] = clone(v);
+            else {
+              console.warn(
+                `${TEMPLATE}: option "${key}" = ${JSON.stringify(v)} is not valid; using ${JSON.stringify(spec.default)}.`,
+              );
+              out[key] = clone(spec.default);
+            }
+          }
+          out.matrix = {
+            rows: out.matrix.rows ?? null,
+            cols: out.matrix.cols ?? null,
+            states: [...(out.matrix.states ?? [])],
+          };
+          return out;
+        }
+        const OPTS = readOptions();
+
+        // ---- Model -----------------------------------------------------------------
+        let component = null; // { name }
+        let schema = {}; // the component's props schema
+        let pf = null; // t3kit.propsform
+        let stage = null; // t3kit.stage
+        let history = null; // t3kit.history
+        let link = null; // history link from the runtime
+        let assetName = null;
+        let referenceBlob = null; // the onion-skin reference image, when one is attached
+        const onion = { on: true, opacity: 0.5 };
+        const view = {
+          tab: "single",
+          width: OPTS.width,
+          state: OPTS.state,
+          matrix: {
+            rows: OPTS.matrix.rows,
+            cols: OPTS.matrix.cols,
+            states: [...OPTS.matrix.states],
+          },
+          snippet: OPTS.snippet,
+        };
+        let pins = [];
+        let pinSeq = 0;
+        let compareIds = [];
+        let selectedId = null;
+        let cellsById = new Map();
+        let matrixTotal = 0;
+        let lastStageError = null;
+        let renderFrame = 0;
+        let renderSeq = 0;
+        let inspectSeq = 0;
+        let persistTimer = 0;
+        let booted = false;
+        let busy = false;
+
+        const currentProps = () => (pf ? pf.get().values : {});
+        const snapshot = () => ({ props: currentProps(), width: view.width, state: view.state });
+        const showError = (err) => rt.reportError(err);
+        const requireComponent = (where) => {
+          if (!component)
+            throw new Error(
+              `${TEMPLATE}: ${where} needs a component; attach a .js file that sets window.t3component`,
+            );
+        };
+        const formatValue = (v) => (typeof v === "string" ? v : String(v));
+
+        // The stage reads enum choices from `options`, propsform from `enum`. A component may use either, so the
+        // component source gets an adapter that gives every enum spec `options` before the stage validates it, and the
+        // form gets its own copy of the schema with `enum` only.
+        const STAGE_SCHEMA_ADAPTER = `
+;(function () {
+  var c = window.t3component;
+  if (!c || !c.props) return;
+  Object.keys(c.props).forEach(function (k) {
+    var s = c.props[k];
+    if (s && s.type === 'enum' && !Array.isArray(s.options) && Array.isArray(s.enum)) s.options = s.enum.slice();
+  });
+})();`;
+        function formSchema(props) {
+          const out = {};
+          for (const [key, spec] of Object.entries(props)) {
+            const { options, ...rest } = spec;
+            out[key] = rest.type === "enum" ? { ...rest, enum: rest.enum ?? options } : rest;
+          }
+          return out;
+        }
+
+        // ---- Validation ------------------------------------------------------------
+        function checkProps(props, where) {
+          if (!isPlain(props))
+            throw new TypeError(`${where}: props must be an object like { variant: 'ghost' }`);
+          for (const key of Object.keys(props)) {
+            if (!hasOwn(schema, key))
+              throw new Error(
+                `${where}: "${key}" is not a prop of ${component ? component.name : "the component"}; props are ${Object.keys(schema).join(", ")}`,
+              );
+          }
+          return props;
+        }
+        function checkWidth(w, where = "setValues") {
+          if (!WIDTHS.includes(w))
+            throw new RangeError(
+              `${where}: ${JSON.stringify(w)} is not a width preset; use ${WIDTHS.join(", ")}`,
+            );
+          return w;
+        }
+        function checkState(s, where = "setValues") {
+          if (!STATES.includes(s))
+            throw new RangeError(
+              `${where}: ${JSON.stringify(s)} is not a forced state; use ${STATES.join(", ")}`,
+            );
+          return s;
+        }
+        function mergeSnapshot(partial = {}) {
+          requireComponent("setting values");
+          return {
+            props: { ...currentProps(), ...checkProps(partial.props ?? {}, "setValues") },
+            width: checkWidth(partial.width ?? view.width),
+            state: checkState(partial.state ?? view.state),
+          };
+        }
+        function validProp(spec, v) {
+          if (spec.type === "enum") return spec.enum.includes(v);
+          if (spec.type === "boolean") return typeof v === "boolean";
+          if (spec.type === "number" || spec.type === "integer")
+            return typeof v === "number" && Number.isFinite(v);
+          if (spec.type === "string") return typeof v === "string";
+          return true;
+        }
+        // Starting props from options or a saved edit: unknown names and bad values are dropped with a warning.
+        function startingProps(raw) {
+          const out = {};
+          for (const [key, value] of Object.entries(raw)) {
+            if (!hasOwn(schema, key)) {
+              console.warn(
+                `${TEMPLATE}: props.${key} is not a prop of ${component.name}; ignored.`,
+              );
+              continue;
+            }
+            if (!validProp(schema[key], value)) {
+              console.warn(
+                `${TEMPLATE}: props.${key} = ${JSON.stringify(value)} is not valid; using its default.`,
+              );
+              continue;
+            }
+            out[key] = value;
+          }
+          return out;
+        }
+
+        // ---- Axes, cells and labels ------------------------------------------------
+        function axisValues(key) {
+          if (!hasOwn(schema, key)) return null;
+          const spec = schema[key];
+          if (spec.type === "enum") return [...spec.enum];
+          if (spec.type === "boolean") return [false, true];
+          if (spec.type === "number" || spec.type === "integer") {
+            const lo = spec.min ?? 0;
+            const hi = spec.max ?? Math.max(100, spec.default * 2);
+            return uniq([lo, spec.default, hi]).sort((a, b) => a - b);
+          }
+          return null;
+        }
+        const axisKeys = () => Object.keys(schema).filter((k) => axisValues(k) !== null);
+        function matrixAxes() {
+          const keys = axisKeys();
+          const rows = keys.includes(view.matrix.rows) ? view.matrix.rows : null;
+          const cols =
+            keys.includes(view.matrix.cols) && view.matrix.cols !== rows ? view.matrix.cols : null;
+          return { rows, cols, states: view.matrix.states };
+        }
+        function axisEntries(key) {
+          if (!key) return [{ key: null, value: null, text: null }];
+          return axisValues(key).map((value) => ({ key, value, text: `${key}=${value}` }));
+        }
+        function summaryOf(props) {
+          const changed = Object.keys(schema).filter((k) => props[k] !== schema[k].default);
+          return changed.length ? changed.map((k) => `${k}=${props[k]}`).join(", ") : "defaults";
+        }
+        const labelFor = (props, state) => `${summaryOf(props)} · ${state}`;
+
+        function buildMatrix() {
+          const axes = matrixAxes();
+          const rows = axisEntries(axes.rows);
+          const cols = axisEntries(axes.cols);
+          const states = axes.states.length ? axes.states : [view.state];
+          const base = currentProps();
+          const combos = [];
+          for (const state of states)
+            for (const r of rows) for (const c of cols) combos.push({ state, r, c });
+          matrixTotal = combos.length;
+          return combos.slice(0, MAX_CELLS).map((x, i) => {
+            const props = { ...base };
+            if (x.r.key) props[x.r.key] = x.r.value;
+            if (x.c.key) props[x.c.key] = x.c.value;
+            const parts = [x.r.text, x.c.text, axes.states.length ? x.state : null].filter(Boolean);
+            return {
+              id: `m${i}`,
+              props,
+              state: x.state,
+              width: view.width,
+              label: parts.length ? parts.join(" · ") : labelFor(props, x.state),
+            };
+          });
+        }
+        function buildCompare() {
+          const picked = compareIds.map((id) => pins.find((p) => p.id === id)).filter(Boolean);
+          return picked.map((p, i) => ({
+            id: `cmp${i}`,
+            props: clone(p.props),
+            state: p.state,
+            width: p.width,
+            label: `${"AB"[i]} · ${p.label}`,
+          }));
+        }
+        function buildCells() {
+          if (!component) return [];
+          if (view.tab === "compare") return buildCompare();
+          if (view.tab === "matrix") return buildMatrix();
+          const props = currentProps();
+          return [
+            {
+              id: "single",
+              props,
+              state: view.state,
+              width: view.width,
+              label: labelFor(props, view.state),
+            },
+          ];
+        }
+        function layoutCols() {
+          // Compare always sits side by side, even when two fixed widths are wider than the stage (each well scrolls).
+          if (view.tab === "compare") return cellsById.size === 2 ? 2 : "auto";
+          if (view.tab !== "matrix") return "auto";
+          const { cols } = matrixAxes();
+          return cols ? axisValues(cols).length : "auto";
+        }
+
+        // ---- Rendering -------------------------------------------------------------
+        function scheduleRender() {
+          if (!stage || renderFrame) return;
+          renderFrame = requestAnimationFrame(() => {
+            renderFrame = 0;
+            renderCells().catch(showError);
+          });
+        }
+        async function renderCells() {
+          if (!stage) return;
+          const seq = ++renderSeq;
+          const cells = buildCells();
+          cellsById = new Map(cells.map((c) => [c.id, c]));
+          if (!cellsById.has(selectedId)) selectedId = cells.length ? cells[0].id : null;
+          stage.set({ layout: { cols: layoutCols(), gap: 16 } });
+          await stage.setCells(cells);
+          if (seq !== renderSeq) return;
+          decorateCells();
+          stage.set({ selected: selectedId });
+          updateMatrixHint();
+          updateStageHint();
+          updateHeader();
+          inspect().catch(showError);
+        }
+        // Each cell head gets a Pin button; the stage reuses cell figures by id, so the button is added once.
+        function decorateCells() {
+          const host = $("stage");
+          for (const id of cellsById.keys()) {
+            const head = host.querySelector(
+              `figure[data-cell-id="${CSS.escape(id)}"] .t3k-stage-head`,
+            );
+            if (!head || head.querySelector(".pin-cell")) continue;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "pin-cell";
+            button.textContent = "Pin";
+            button.title = "Pin this combination";
+            button.addEventListener("click", (event) => {
+              event.stopPropagation();
+              pinCell(id);
+            });
+            head.append(button);
+          }
+        }
+
+        // ---- Inspector: measure, usage snippet ----------------------------------------
+        function serialize(props, format) {
+          const name = component.name;
+          const hasLabel = hasOwn(schema, "label") && typeof props.label === "string";
+          const attrs = Object.keys(schema)
+            .filter((k) => props[k] !== schema[k].default && !(hasLabel && k === "label"))
+            .map((k) => attrOf(k, props[k], format));
+          const list = attrs.map((a) => ` ${a}`).join("");
+          if (format === "html") {
+            const tag = kebab(name);
+            return `<${tag}${list}>${hasLabel ? props.label : ""}</${tag}>`;
+          }
+          return hasLabel ? `<${name}${list}>${props.label}</${name}>` : `<${name}${list} />`;
+        }
+        function attrOf(key, value, format) {
+          const spec = schema[key];
+          if (spec.type === "boolean")
+            return value ? key : `${key}=${format === "html" ? '"false"' : "{false}"}`;
+          if (spec.type === "number" || spec.type === "integer")
+            return format === "html" ? `${key}="${value}"` : `${key}={${value}}`;
+          return `${key}="${value}"`;
+        }
+        // The active cell is the one the stage shows selected; the Single tab's cell is the form values.
+        function activeCell() {
+          const cell = cellsById.get(selectedId);
+          if (cell) return { props: cell.props, state: cell.state, width: cell.width, id: cell.id };
+          return { props: currentProps(), state: view.state, width: view.width, id: null };
+        }
+        // -> { text, from }: the component's own usage(props) wins; otherwise the default serializer in view.snippet.
+        async function snippetFor(active) {
+          const usage = active.id && stage ? await stage.usage(active.id) : null;
+          if (usage !== null && usage !== undefined)
+            return { text: usage, from: "component.usage()" };
+          return {
+            text: serialize(active.props, view.snippet),
+            from: `Serializer · ${view.snippet.toUpperCase()}`,
+          };
+        }
+        async function inspect() {
+          const seq = ++inspectSeq;
+          if (!component) {
+            renderMeasure(null);
+            $("snippet").textContent = "";
+            $("snippet-source").textContent = "";
+            return;
+          }
+          const active = activeCell();
+          if (!active.id) {
+            renderMeasure(null);
+            $("snippet").textContent = serialize(active.props, view.snippet);
+            $("snippet-source").textContent = `Serializer · ${view.snippet.toUpperCase()}`;
+            return;
+          }
+          const [measure, snippet] = await Promise.all([
+            stage.measure(active.id),
+            snippetFor(active),
+          ]);
+          if (seq !== inspectSeq) return;
+          renderMeasure(measure);
+          $("snippet").textContent = snippet.text;
+          $("snippet-source").textContent = snippet.from;
+        }
+        function renderMeasure(m) {
+          const box = $("measure");
+          box.replaceChildren();
+          if (!m) {
+            box.append(
+              textNode(
+                component ? "Select a cell to measure it." : "Attach a component to measure it.",
+                "hint",
+              ),
+            );
+            return;
+          }
+          const overflow = m.overflowX
+            ? `Horizontal${m.overflowing.length ? `: ${m.overflowing.join(", ")}` : ""}`
+            : "None";
+          const dl = document.createElement("dl");
+          dl.className = "readout";
+          const rows = [
+            ["Size", `${Math.round(m.width)} × ${Math.round(m.height)} px`],
+            ["Overflow", overflow],
+            ["Errors", m.errors.length ? m.errors.join("; ") : "None"],
+          ];
+          for (const [label, value] of rows) {
+            const dt = document.createElement("dt");
+            dt.textContent = label;
+            const dd = document.createElement("dd");
+            dd.textContent = value;
+            if (label === "Errors" && m.errors.length) dd.className = "bad";
+            dl.append(dt, dd);
+          }
+          box.append(dl);
+        }
+        function textNode(text, className) {
+          const p = document.createElement("p");
+          p.className = className;
+          p.textContent = text;
+          return p;
+        }
+        function setNote(text) {
+          const note = $("note");
+          note.textContent = text;
+          note.hidden = !text;
+        }
+
+        // ---- Pins ------------------------------------------------------------------
+        function addPin(partial = {}) {
+          requireComponent("pinning");
+          const props = checkProps(partial.props ?? currentProps(), "pin");
+          const state = checkState(partial.state ?? view.state, "pin");
+          const width = checkWidth(partial.width ?? view.width, "pin");
+          pinSeq += 1;
+          const label =
+            typeof partial.label === "string" && partial.label.trim()
+              ? partial.label.trim()
+              : labelFor(props, state);
+          const pin = { id: `p${pinSeq}`, label, props: clone(props), state, width };
+          pins = [...pins, pin];
+          renderPins();
+          if (view.tab === "compare") scheduleRender();
+          persist();
+          return clone(pin);
+        }
+        function pinCell(id) {
+          const cell = cellsById.get(id);
+          if (!cell) throw new Error(`${TEMPLATE}: cell "${id}" is not on the stage`);
+          addPin({ props: cell.props, state: cell.state, width: cell.width, label: cell.label });
+        }
+        function removePin(id) {
+          if (!pins.some((p) => p.id === id)) throw new Error(`${TEMPLATE}: no pin "${id}"`);
+          pins = pins.filter((p) => p.id !== id);
+          compareIds = compareIds.filter((x) => x !== id);
+          renderPins();
+          if (view.tab === "compare") scheduleRender();
+          persist();
+        }
+        function loadPin(id) {
+          const pin = pins.find((p) => p.id === id);
+          if (!pin) throw new Error(`${TEMPLATE}: no pin "${id}"`);
+          applySnapshot({ props: pin.props, width: pin.width, state: pin.state });
+          commitView(`Load ${pin.label}`);
+          persist();
+        }
+        function toggleCompare(id) {
+          compareIds = compareIds.includes(id)
+            ? compareIds.filter((x) => x !== id)
+            : [...compareIds, id].slice(-2);
+          renderPins();
+          updateStageHint();
+          if (view.tab === "compare") scheduleRender();
+          persist();
+        }
+        function renderPins() {
+          const list = $("pins");
+          list.replaceChildren();
+          if (!pins.length) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = "Pin a combination with P, or a cell's Pin button.";
+            list.append(li);
+          }
+          for (const pin of pins) {
+            const li = document.createElement("li");
+            li.className = "pin";
+            const check = document.createElement("input");
+            check.type = "checkbox";
+            check.id = `cmp-${pin.id}`;
+            check.checked = compareIds.includes(pin.id);
+            check.title = "Compare (two at most)";
+            check.addEventListener("change", () => toggleCompare(pin.id));
+            const text = document.createElement("label");
+            text.htmlFor = check.id;
+            const name = document.createElement("span");
+            name.className = "pin-name";
+            name.textContent = pin.label;
+            const meta = document.createElement("span");
+            meta.className = "pin-meta";
+            meta.textContent = `${pin.state} · ${pin.width}px`;
+            text.append(name, meta);
+            const load = document.createElement("button");
+            load.type = "button";
+            load.className = "btn sm";
+            load.textContent = "Load";
+            load.setAttribute("aria-label", `Load ${pin.label}`);
+            load.addEventListener("click", () => loadPin(pin.id));
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn sm";
+            remove.textContent = "×";
+            remove.setAttribute("aria-label", `Remove ${pin.label}`);
+            remove.addEventListener("click", () => removePin(pin.id));
+            li.append(check, text, load, remove);
+            list.append(li);
+          }
+          $("pin-count").textContent = pins.length ? String(pins.length) : "";
+          const picked = compareIds.length;
+          $("compare-hint").textContent = pins.length
+            ? `Compare: ${picked} of 2 checked. Checked pins show side by side on the Compare tab.`
+            : "";
+          updateHeader();
+        }
+
+        // ---- Export and send -------------------------------------------------------
+        async function buildFiles() {
+          requireComponent("export");
+          const active = activeCell();
+          lastStageError = null;
+          const { text } = await snippetFor(active);
+          const doc = {
+            component: component.name,
+            props: active.props,
+            state: active.state,
+            width: active.width,
+            pinned: pins.map((p) => ({ props: p.props, state: p.state, width: p.width })),
+          };
+          const files = [
+            new File([`${JSON.stringify(doc, null, 2)}\n`], "props.json", {
+              type: "application/json",
+            }),
+            new File([`${text}\n`], view.snippet === "html" ? "usage.html" : "usage.jsx", {
+              type: "text/plain",
+            }),
+          ];
+          const png = await stage.exportPng({ scale: 2 });
+          if (png) {
+            files.push(new File([png], "matrix.png", { type: "image/png" }));
+            setNote("");
+          } else {
+            setNote(`matrix.png skipped: ${lastStageError ?? "the stage returned no image"}.`);
+          }
+          return files;
+        }
+        async function runOnce(action) {
+          if (busy) throw new Error(`${TEMPLATE}: an export or send is already running`);
+          busy = true;
+          try {
+            const files = await buildFiles();
+            for (const file of files) await action(file);
+            return files;
+          } finally {
+            busy = false;
+          }
+        }
+        const exportAll = () => runOnce((file) => ws.download(file, file.name));
+        // The chat message that goes with Send: the props the user settled on, in a few lines.
+        function propsMessage(active, files) {
+          const where = [
+            active.state !== "default" ? `${active.state} state` : "",
+            `${active.width}px wide`,
+          ].filter(Boolean);
+          const lines = [
+            `Props for ${component.name}: ${summaryOf(active.props)} (${where.join(", ")}).`,
+          ];
+          if (pins.length) {
+            const shown = pins.slice(0, 3).map((p) => summaryOf(p.props));
+            lines.push(
+              `${pins.length} pinned variant${pins.length === 1 ? "" : "s"}: ${shown.join("; ")}${pins.length > 3 ? "; and more" : ""}.`,
+            );
+          }
+          lines.push(`Files: ${files.map((f) => f.name).join(", ")}.`);
+          return lines.join("\n");
+        }
+        // Send to Agent: posts the summary with the files. Starts from the user's click (T3 sends only during the
+        // user's gesture), so it builds the files and sends at once.
+        async function sendAll() {
+          if (busy) throw new Error(`${TEMPLATE}: an export or send is already running`);
+          busy = true;
+          try {
+            const files = await buildFiles();
+            await ws.send(propsMessage(activeCell(), files), { files });
+            return files;
+          } finally {
+            busy = false;
+          }
+        }
+
+        // ---- Edits, history and state --------------------------------------------------
+        function applySnapshot(s) {
+          if (pf) {
+            const values = { ...currentProps() };
+            for (const [key, value] of Object.entries(isPlain(s.props) ? s.props : {})) {
+              if (hasOwn(schema, key)) values[key] = value;
+            }
+            pf.set({ values });
+          }
+          if (WIDTHS.includes(s.width)) view.width = s.width;
+          if (STATES.includes(s.state)) view.state = s.state;
+          syncSegments();
+          updateChanged();
+          updateHeader();
+          scheduleRender();
+        }
+        function commitView(label) {
+          if (link) link.commit(label);
+        }
+        function setWidth(w, { commit = true } = {}) {
+          view.width = checkWidth(w);
+          syncSegments();
+          updateHeader();
+          scheduleRender();
+          if (commit) commitView(`Width ${w}px`);
+          persist();
+        }
+        function setForcedState(s, { commit = true } = {}) {
+          view.state = checkState(s);
+          syncSegments();
+          updateHeader();
+          scheduleRender();
+          if (commit) commitView(`State ${STATE_LABEL[s]}`);
+          persist();
+        }
+        function setTab(tab) {
+          if (!TABS.includes(tab) || view.tab === tab) return;
+          view.tab = tab;
+          syncSegments();
+          updateStageHint();
+          scheduleRender();
+          persist();
+        }
+        function setSnippetFormat(format) {
+          view.snippet = format;
+          syncSegments();
+          inspect().catch(showError);
+          persist();
+        }
+        function setBackground(bg) {
+          if (!BACKGROUNDS.includes(bg))
+            throw new RangeError(
+              `${TEMPLATE}: ${JSON.stringify(bg)} is not a background; use ${BACKGROUNDS.join(", ")}`,
+            );
+          stage.set({ background: bg });
+          syncSegments();
+          updateHeader();
+          persist();
+        }
+        function applyOnion() {
+          if (!referenceBlob) return;
+          if (onion.on) stage.setOverlay({ src: referenceBlob, opacity: onion.opacity });
+          else stage.setOverlay(null);
+          syncSegments();
+        }
+        function toggleOnion() {
+          if (!referenceBlob) return;
+          onion.on = !onion.on;
+          applyOnion();
+          persist();
+        }
+        function setOnionOpacity(value) {
+          onion.opacity = Math.min(1, Math.max(0, value));
+          if (onion.on) stage.setOverlay({ opacity: onion.opacity });
+          persist();
+        }
+        const STATE_LABEL = {
+          default: "Default",
+          hover: "Hover",
+          focus: "Focus",
+          active: "Active",
+          disabled: "Disabled",
+        };
+
+        function syncSegments() {
+          for (const b of document.querySelectorAll("[data-width]"))
+            b.setAttribute("aria-pressed", String(Number(b.dataset.width) === view.width));
+          for (const b of document.querySelectorAll("[data-state]"))
+            b.setAttribute("aria-pressed", String(b.dataset.state === view.state));
+          for (const b of document.querySelectorAll("[data-tab]"))
+            b.setAttribute("aria-selected", String(b.dataset.tab === view.tab));
+          for (const b of document.querySelectorAll("[data-snippet]"))
+            b.setAttribute("aria-pressed", String(b.dataset.snippet === view.snippet));
+          const bg = stage ? stage.get().background : OPTS.background;
+          for (const b of document.querySelectorAll("[data-bg]"))
+            b.setAttribute("aria-pressed", String(b.dataset.bg === bg));
+          $("onion").hidden = !referenceBlob;
+          $("onion-toggle").setAttribute("aria-pressed", String(onion.on));
+          $("onion-opacity").value = String(onion.opacity);
+          $("onion-opacity").disabled = !onion.on;
+          $("matrix-bar").hidden = view.tab !== "matrix" || !component;
+        }
+        function populateMatrixBar() {
+          const axes = matrixAxes();
+          for (const [id, which] of [
+            ["ax-rows", "rows"],
+            ["ax-cols", "cols"],
+          ]) {
+            const select = $(id);
+            select.replaceChildren(new Option("None", ""));
+            for (const key of axisKeys()) select.append(new Option(key, key));
+            select.value = axes[which] ?? "";
+          }
+          const states = $("ax-states");
+          states.replaceChildren();
+          for (const s of STATES) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.textContent = STATE_LABEL[s];
+            b.setAttribute("aria-pressed", String(view.matrix.states.includes(s)));
+            b.addEventListener("click", () => toggleAxisState(s));
+            states.append(b);
+          }
+        }
+        function setAxis(which, key) {
+          const other = which === "rows" ? "cols" : "rows";
+          view.matrix[which] = key || null;
+          if (view.matrix[which] && view.matrix[which] === view.matrix[other])
+            view.matrix[other] = null;
+          populateMatrixBar();
+          scheduleRender();
+          persist();
+        }
+        function toggleAxisState(s) {
+          const on = view.matrix.states.includes(s);
+          view.matrix.states = STATES.filter((x) =>
+            x === s ? !on : view.matrix.states.includes(x),
+          );
+          populateMatrixBar();
+          scheduleRender();
+          persist();
+        }
+        function updateMatrixHint() {
+          if (view.tab !== "matrix") {
+            $("matrix-hint").textContent = "";
+            return;
+          }
+          $("matrix-hint").textContent =
+            matrixTotal > MAX_CELLS
+              ? `Showing ${MAX_CELLS} of ${matrixTotal} cells`
+              : `${matrixTotal} ${matrixTotal === 1 ? "cell" : "cells"}`;
+        }
+        function updateStageHint() {
+          let text = "";
+          if (view.tab === "compare" && compareIds.length < 2)
+            text = "Check two pins in Pinned Combinations to compare them side by side.";
+          if (view.tab === "matrix" && !matrixAxesActive())
+            text = "Choose a row or column prop, or one or more forced states, to build the grid.";
+          const hint = $("stage-hint");
+          hint.hidden = !text;
+          hint.textContent = text;
+        }
+        function matrixAxesActive() {
+          const axes = matrixAxes();
+          return Boolean(axes.rows || axes.cols || view.matrix.states.length);
+        }
+        function updateChanged() {
+          if (!pf) return;
+          const { changed } = pf.get();
+          $("changed").textContent = changed.length ? `${changed.length} changed` : "Defaults";
+          $("reset-all").disabled = changed.length === 0;
+        }
+        function updateHeader() {
+          $("meta").textContent = component
+            ? `${TAB_LABEL[view.tab]} · ${view.width}px · ${view.state}`
+            : "No component attached";
+          const bg = stage ? stage.get().background : OPTS.background;
+          const cells = cellsById.size;
+          $("status-text").textContent = component
+            ? [
+                TAB_LABEL[view.tab],
+                `${cells} ${cells === 1 ? "cell" : "cells"}`,
+                `${view.width} px`,
+                STATE_LABEL[view.state],
+                bg[0].toUpperCase() + bg.slice(1),
+                `${pins.length} pinned`,
+              ].join(" · ")
+            : "No component attached";
+        }
+        function updateHistoryButtons() {
+          if (!history) return;
+          $("undo").disabled = !history.canUndo();
+          $("redo").disabled = !history.canRedo();
+        }
+
+        function persistState() {
+          return {
+            v: 1,
+            asset: assetName,
+            values: snapshot(),
+            tab: view.tab,
+            matrix: view.matrix,
+            snippet: view.snippet,
+            background: stage ? stage.get().background : OPTS.background,
+            pins,
+            compare: compareIds,
+            onion: { ...onion },
+            history: history.get(),
+            controls: rt.state(),
+          };
+        }
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => ws.setState(persistState()), PERSIST_MS);
+        }
+
+        // ---- Bolt-on surface (window.t3template) ----------------------------------
+        const panelsEl = $("panels");
+        const rt = t3kit.templateRuntime.create({
+          id: TEMPLATE,
+          pipeline: "data",
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.open = open;
+            section.dataset.bolt = title;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "sec-body";
+            section.append(summary, body);
+            if (position === "top") panelsEl.insertBefore(section, $("sec-pins"));
+            else panelsEl.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues: () => snapshot(),
+          setValues(partial, label) {
+            const extra = Object.keys(partial).filter(
+              (k) => k !== "props" && k !== "width" && k !== "state",
+            );
+            if (extra.length)
+              throw new TypeError(
+                `t3template.setValues: unknown key ${extra.map((k) => `"${k}"`).join(", ")}; use props, width, state or controls`,
+              );
+            const next = mergeSnapshot(partial);
+            applySnapshot(next);
+            commitView(label);
+            return snapshot();
+          },
+          addPreset: (name, values) => history.savePreset(name, mergeSnapshot(values)),
+          applyPreset: (name) => history.applyPreset(name),
+          export: () => exportAll(),
+          reservedKeys: [
+            "m",
+            "s",
+            "c",
+            "p",
+            "b",
+            "o",
+            "e",
+            "w",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "[",
+            "]",
+            "mod+z",
+            "mod+shift+z",
+          ],
+          onBoltOnChange() {
+            scheduleRender();
+            persist();
+          },
+        });
+
+        // ---- Boot ------------------------------------------------------------------
+        const isComponentAsset = (a) =>
+          /\.js$/i.test(a.name) || /javascript/.test(a.mimeType ?? "");
+        async function assetBlob(asset) {
+          if (asset.file instanceof Blob) return asset.file;
+          const response = await fetch(asset.url);
+          if (!response.ok)
+            throw new Error(`${TEMPLATE}: could not read ${asset.name} (HTTP ${response.status})`);
+          return response.blob();
+        }
+        function restoreView(saved) {
+          if (TABS.includes(saved.tab)) view.tab = saved.tab;
+          if (isPlain(saved.matrix)) {
+            view.matrix = {
+              rows: typeof saved.matrix.rows === "string" ? saved.matrix.rows : null,
+              cols: typeof saved.matrix.cols === "string" ? saved.matrix.cols : null,
+              states: Array.isArray(saved.matrix.states)
+                ? saved.matrix.states.filter((s) => STATES.includes(s))
+                : [],
+            };
+          }
+          if (SNIPPETS.includes(saved.snippet)) view.snippet = saved.snippet;
+          if (isPlain(saved.values)) {
+            if (WIDTHS.includes(saved.values.width)) view.width = saved.values.width;
+            if (STATES.includes(saved.values.state)) view.state = saved.values.state;
+          }
+          if (Array.isArray(saved.pins)) {
+            pins = saved.pins.filter(
+              (p) =>
+                isPlain(p) &&
+                isPlain(p.props) &&
+                WIDTHS.includes(p.width) &&
+                STATES.includes(p.state),
+            );
+            for (const p of pins) pinSeq = Math.max(pinSeq, Number(String(p.id).slice(1)) || 0);
+          }
+          if (Array.isArray(saved.compare))
+            compareIds = saved.compare.filter((id) => pins.some((p) => p.id === id));
+          if (isPlain(saved.onion)) {
+            if (typeof saved.onion.on === "boolean") onion.on = saved.onion.on;
+            if (
+              Number.isFinite(saved.onion.opacity) &&
+              saved.onion.opacity >= 0 &&
+              saved.onion.opacity <= 1
+            )
+              onion.opacity = saved.onion.opacity;
+          }
+        }
+        async function loadComponent(assets, jsAsset, restored) {
+          stage = t3kit.stage.create($("stage"), {
+            mode: OPTS.mode,
+            background:
+              restored && BACKGROUNDS.includes(restored.background)
+                ? restored.background
+                : OPTS.background,
+            layout: { cols: "auto", gap: 16 },
+          });
+          stage.on("error", (e) => {
+            lastStageError = e.message;
+          });
+          stage.on("select", (id) => {
+            selectedId = id;
+            inspect().catch(showError);
+          });
+          stage.on("change", () => {
+            syncSegments();
+            persist();
+          });
+
+          const others = assets.filter((a) => a !== jsAsset);
+          const blobs = {};
+          for (const a of others) blobs[a.name] = await assetBlob(a);
+          const js = await (await assetBlob(jsAsset)).text();
+          const cssAsset = others.find((a) => /\.css$/i.test(a.name));
+          const css = cssAsset ? await (await assetBlob(cssAsset)).text() : undefined;
+          const loaded = await stage.load({
+            js: `${js}\n${STAGE_SCHEMA_ADAPTER}`,
+            css,
+            assets: blobs,
+          });
+          component = { name: loaded.name };
+          schema = formSchema(loaded.props);
+
+          const reference = others.find(
+            (a) =>
+              /^image\//.test(a.mimeType ?? "") &&
+              /(^|[-_.])(ref|reference|overlay|mock)/i.test(a.name),
+          );
+          if (reference) {
+            referenceBlob = blobs[reference.name];
+            applyOnion();
+          }
+
+          const start = restored ? restored.values.props : OPTS.props;
+          pf = t3kit.propsform.create($("form"), { schema, value: startingProps(start) });
+          $("comp").textContent = component.name;
+          $("stage").hidden = false;
+          $("form-empty").hidden = true;
+          $("empty-stage").hidden = true;
+        }
+        function showEmpty() {
+          $("empty-stage").hidden = false;
+          for (const el of document.querySelectorAll("[data-needs-component]")) el.disabled = true;
+        }
+        function wireEvents() {
+          if (pf) {
+            pf.on("change", () => {
+              updateChanged();
+              scheduleRender();
+            });
+            pf.on("commit", ({ key, value }) => {
+              updateChanged();
+              commitView(`${key}: ${formatValue(value)}`);
+              persist();
+            });
+          }
+          for (const b of document.querySelectorAll("[data-tab]"))
+            b.addEventListener("click", () => setTab(b.dataset.tab));
+          for (const b of document.querySelectorAll("[data-width]"))
+            b.addEventListener("click", () => setWidth(Number(b.dataset.width)));
+          for (const b of document.querySelectorAll("[data-state]"))
+            b.addEventListener("click", () => setForcedState(b.dataset.state));
+          for (const b of document.querySelectorAll("[data-snippet]"))
+            b.addEventListener("click", () => setSnippetFormat(b.dataset.snippet));
+          for (const b of document.querySelectorAll("[data-bg]"))
+            b.addEventListener("click", () => setBackground(b.dataset.bg));
+          $("onion-toggle").addEventListener("click", () => toggleOnion());
+          $("onion-opacity").addEventListener("input", (e) =>
+            setOnionOpacity(Number(e.target.value)),
+          );
+          $("ax-rows").addEventListener("change", (e) => setAxis("rows", e.target.value));
+          $("ax-cols").addEventListener("change", (e) => setAxis("cols", e.target.value));
+          $("undo").addEventListener("click", () => history.undo());
+          $("redo").addEventListener("click", () => history.redo());
+          $("reset-all").addEventListener("click", () => {
+            pf.reset();
+            updateChanged();
+            scheduleRender();
+            commitView("Reset Props");
+            persist();
+          });
+          $("pin").addEventListener("click", () => pinActive());
+          $("export").addEventListener("click", () => exportAll().catch(showError));
+          $("send").addEventListener("click", () => sendAll().catch(showError));
+          window.addEventListener("keydown", onKey);
+        }
+        function pinActive() {
+          const cell = cellsById.get(selectedId);
+          if (cell) pinCell(cell.id);
+          else addPin({});
+        }
+        function isTyping(el) {
+          return (
+            Boolean(el) && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName))
+          );
+        }
+        function cycle(list, current, step) {
+          return list[(list.indexOf(current) + step + list.length) % list.length];
+        }
+        function onKey(event) {
+          if (
+            !component ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.altKey ||
+            event.shiftKey ||
+            isTyping(event.target)
+          )
+            return;
+          const actions = {
+            m: () => setTab("matrix"),
+            s: () => setTab("single"),
+            c: () => setTab("compare"),
+            p: () => pinActive(),
+            b: () => setBackground(cycle(BACKGROUNDS, stage.get().background, 1)),
+            o: () => toggleOnion(),
+            w: () => setWidth(cycle(WIDTHS, view.width, 1)),
+            1: () => setWidth(WIDTHS[0]),
+            2: () => setWidth(WIDTHS[1]),
+            3: () => setWidth(WIDTHS[2]),
+            4: () => setWidth(WIDTHS[3]),
+            5: () => setWidth(WIDTHS[4]),
+            "[": () => setForcedState(cycle(STATES, view.state, -1)),
+            "]": () => setForcedState(cycle(STATES, view.state, 1)),
+            e: () => exportAll().catch(showError),
+          };
+          const run = actions[event.key];
+          if (!run) return;
+          event.preventDefault();
+          run();
+        }
+
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const assets = ready.assets ?? [];
+          const jsAsset = assets.find(isComponentAsset) ?? null;
+          const restored =
+            isPlain(saved) && saved.v === 1 && jsAsset && saved.asset === jsAsset.name
+              ? saved
+              : null;
+          if (restored) restoreView(restored);
+          if (jsAsset) {
+            assetName = jsAsset.name;
+            await loadComponent(assets, jsAsset, restored);
+            if (!restored && (view.matrix.rows || view.matrix.cols || view.matrix.states.length))
+              view.tab = "matrix";
+          } else {
+            showEmpty();
+          }
+          $("title").textContent = OPTS.title;
+          document.title = OPTS.title;
+          $("app").classList.toggle("has-component", Boolean(component));
+
+          history = t3kit.history.create($("history"), {
+            title: "Steps",
+            label: "Start",
+            state: snapshot(),
+            presetPlaceholder: "Name this view",
+          });
+          if (restored && isPlain(restored.history)) history.set(restored.history);
+          link = rt.linkHistory(history, snapshot, applySnapshot);
+          history.on("change", () => {
+            updateHistoryButtons();
+            persist();
+            rt.emitChange();
+          });
+          rt.publish({
+            instances: { propsform: pf, stage, history, pins: pinsApi },
+            saved: restored ? restored.controls : undefined,
+          });
+          wireEvents();
+          populateMatrixBar();
+          syncSegments();
+          renderPins();
+          updateChanged();
+          updateHeader();
+          updateHistoryButtons();
+          updateStageHint();
+          booted = true;
+          scheduleRender();
+          persist();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+        const pinsApi = {
+          list: () => clone(pins),
+          add: (partial) => addPin(partial ?? {}),
+          remove: (id) => removePin(id),
+        };
+        boot().catch(showError);
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,2876 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Design Review</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font: 12px/1.4 var(--font-sans);
+        overflow: hidden;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--muted-foreground);
+      }
+      .btn-primary kbd {
+        color: var(--primary-foreground);
+        border-color: var(--primary-foreground);
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+
+      /* ---- Frame ---- */
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 40px minmax(0, 1fr);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+      .title {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .mode {
+        flex: 0 0 auto;
+        padding: 2px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .mode[data-mode="live"] {
+        color: var(--success);
+        border-color: color-mix(in srgb, var(--success) 45%, transparent);
+      }
+      .meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .sep {
+        width: 1px;
+        height: 18px;
+        background: var(--border);
+        margin: 0 2px;
+        flex: 0 0 auto;
+      }
+      .btn {
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover {
+        background: var(--muted);
+        border-color: var(--input);
+      }
+      .btn[aria-pressed="true"] {
+        border-color: var(--primary);
+        background: color-mix(in srgb, var(--primary) 14%, var(--card));
+      }
+      .btn-primary,
+      .btn-primary:hover {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .seg {
+        display: grid;
+        grid-auto-flow: column;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+      }
+      .seg button {
+        height: 22px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: calc(var(--radius) - 6px);
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .seg button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .seg kbd {
+        padding: 1px 3px;
+      }
+
+      .work {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+
+      /* ---- Stage ---- */
+      .stage {
+        display: grid;
+        grid-template-rows: 36px minmax(0, 1fr) 24px;
+        min-width: 0;
+        min-height: 0;
+      }
+      .strip {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .strip .seg button {
+        height: 24px;
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+      .view {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background: color-mix(in oklab, var(--background), #777 9%);
+      }
+      #annotator {
+        position: absolute;
+        inset: 0;
+      }
+      #annotator .t3k-annotator-root {
+        gap: 0;
+      }
+      #annotator .t3k-annotator-bar {
+        display: none;
+      }
+      #annotator .t3k-annotator-view {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      #annotator .t3k-annotator-root:focus-visible {
+        box-shadow: inset 0 0 0 2px var(--ring);
+        border-radius: 0;
+      }
+      /* Snapshot @media width rules become container queries on the page box, so presets reflow the page. */
+      #annotator .t3k-annotator-page {
+        container: t3-review-page / inline-size;
+      }
+      .live-layer {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      .live-hover {
+        position: absolute;
+        box-sizing: border-box;
+        border: 1.5px solid var(--info);
+        background: color-mix(in srgb, var(--info) 14%, transparent);
+        pointer-events: none;
+      }
+      .live-chip {
+        position: absolute;
+        max-width: 60%;
+        padding: 2px 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--popover);
+        color: var(--foreground);
+        font: 500 11px/1.4 var(--font-mono);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        pointer-events: none;
+      }
+      .live-chip span {
+        color: var(--muted-foreground);
+      }
+      .stage-empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        color: var(--muted-foreground);
+      }
+      .stage-empty p {
+        max-width: 460px;
+        margin: 0;
+        line-height: 1.6;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .status .grow {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* ---- Inspector ---- */
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        border-left: 1px solid var(--border);
+      }
+      .panels {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .panel {
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 10px;
+        cursor: pointer;
+        font-weight: 600;
+        user-select: none;
+      }
+      .panel > summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel > summary::after {
+        content: "+";
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+      }
+      .panel[open] > summary::after {
+        content: "\2212";
+      }
+      .panel-body {
+        padding: 2px 10px 10px;
+        min-width: 0;
+      }
+      .count {
+        color: var(--muted-foreground);
+        font-weight: 400;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .hint {
+        margin: 4px 0 0;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .list-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .list-head .tally {
+        flex: 1 1 auto;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .chip-btn {
+        height: 22px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: transparent;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .chip-btn:hover {
+        color: var(--foreground);
+      }
+      .chip-btn[aria-pressed="true"] {
+        color: var(--foreground);
+        background: var(--accent);
+      }
+      .changes {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        max-height: 46vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+      .change {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--card-foreground);
+        cursor: pointer;
+      }
+      .change[aria-selected="true"] {
+        border-color: var(--ring);
+        box-shadow: 0 0 0 1px var(--ring);
+      }
+      .change[data-status="resolved"] {
+        opacity: 0.66;
+      }
+      .num {
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font: 600 11px/20px var(--font-sans);
+        text-align: center;
+      }
+      .change[data-status="resolved"] .num {
+        background: var(--success);
+      }
+      .change[data-missing="true"] .num {
+        background: var(--destructive);
+      }
+      .change-body {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+      }
+      .change-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .kind {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tag {
+        flex: 0 0 auto;
+        color: var(--muted-foreground);
+        font-size: 10px;
+      }
+      .prio {
+        flex: 0 0 auto;
+        height: 22px;
+        padding: 0 4px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        font-size: 11px;
+      }
+      .change[data-priority="high"] .prio {
+        border-color: var(--destructive);
+        color: var(--destructive);
+      }
+      .change[data-priority="low"] .prio {
+        color: var(--muted-foreground);
+      }
+      .where {
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+        font-size: 10px;
+      }
+      .warn {
+        color: var(--destructive);
+        font-size: 11px;
+      }
+      .note {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 40px;
+        padding: 5px 7px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--background);
+        resize: vertical;
+      }
+      .note:focus,
+      .tweak input[type="text"]:focus {
+        outline: none;
+        border-color: var(--ring);
+      }
+      .diff {
+        margin: 0;
+        padding: 5px 7px;
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--muted);
+        font: 10.5px/1.5 var(--font-mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .diff .del {
+        color: var(--destructive);
+      }
+      .diff .add {
+        color: var(--success);
+      }
+      .diff .ctx {
+        color: var(--muted-foreground);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .row button {
+        height: 22px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: transparent;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .row button:hover {
+        color: var(--foreground);
+      }
+      .row button[aria-pressed="true"] {
+        color: var(--success);
+        border-color: color-mix(in srgb, var(--success) 45%, transparent);
+      }
+      .empty-list {
+        padding: 14px 8px;
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+        color: var(--muted-foreground);
+        text-align: center;
+        line-height: 1.6;
+      }
+
+      .sel-head {
+        display: grid;
+        gap: 3px;
+        margin-bottom: 8px;
+      }
+      .sel-title {
+        font-weight: 600;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 58px minmax(0, 1fr);
+        gap: 3px 8px;
+        margin: 0 0 8px;
+      }
+      .facts dt {
+        color: var(--muted-foreground);
+      }
+      .facts dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .tweaks {
+        display: grid;
+        gap: 4px;
+        margin: 4px 0 8px;
+      }
+      .tweak {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 0.9fr) minmax(0, 1.1fr);
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+      }
+      .tweak > span:first-child {
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .tweak .cur {
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tweak .edit {
+        display: flex;
+        gap: 4px;
+        min-width: 0;
+      }
+      .tweak input[type="text"] {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 24px;
+        box-sizing: border-box;
+        padding: 0 6px;
+        border: 1px solid var(--input);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .tweak input[type="text"][aria-invalid="true"] {
+        border-color: var(--destructive);
+      }
+      .tweak input[type="text"].changed {
+        border-color: var(--success);
+      }
+      .tweak input[type="color"] {
+        flex: 0 0 26px;
+        width: 26px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--card);
+      }
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 6px 0;
+        color: var(--muted-foreground);
+      }
+      .check input {
+        accent-color: var(--primary);
+        margin: 0;
+      }
+      .keys {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 4px 12px;
+        margin: 4px 0 0;
+      }
+      .keys dt {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .keys dd {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+      .history-body {
+        position: relative;
+        height: 260px;
+        padding: 0;
+      }
+      #history {
+        position: absolute;
+        inset: 0;
+      }
+      .composer {
+        flex: 0 0 auto;
+        min-width: 320px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .composer:empty {
+        padding: 0;
+        border-top: 0;
+      }
+
+      @media (max-width: 1100px) {
+        .work {
+          grid-template-columns: minmax(0, 1fr) 300px;
+        }
+        .hide-md {
+          display: none;
+        }
+      }
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          height: auto;
+          grid-template-rows: auto auto;
+        }
+        .bar {
+          flex-wrap: wrap;
+          padding: 6px 10px;
+          row-gap: 6px;
+        }
+        .meta {
+          flex-basis: 100%;
+          order: 9;
+        }
+        .tools {
+          flex-wrap: wrap;
+        }
+        .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .stage {
+          height: 72vh;
+        }
+        .inspector {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .panels {
+          overflow: visible;
+        }
+        .changes {
+          max-height: none;
+        }
+        .composer {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="bar">
+        <h1 class="title" id="title">Design Review</h1>
+        <span class="mode" id="mode">Opening</span>
+        <span class="meta" id="meta"></span>
+        <div class="tools">
+          <div class="seg" id="viewports" role="group" aria-label="Viewport"></div>
+          <button
+            class="btn"
+            id="refresh"
+            type="button"
+            hidden
+            title="Capture the live page again (L)"
+          >
+            Refresh <kbd class="hide-md">L</kbd>
+          </button>
+          <div class="tools" id="extra-tools"></div>
+          <button
+            class="btn"
+            id="export"
+            type="button"
+            title="Download the change list, notes and crops (Mod+E)"
+          >
+            Export <kbd class="hide-md">⌘E</kbd>
+          </button>
+          <button
+            class="btn btn-primary"
+            id="send"
+            type="button"
+            title="Send the open changes to the agent (Mod+Enter)"
+          >
+            <span id="send-label">Send to Agent</span> <kbd class="hide-md">⌘↵</kbd>
+          </button>
+        </div>
+      </header>
+      <div class="work">
+        <section class="stage" aria-label="Page under review">
+          <div class="strip" role="toolbar" aria-label="Annotation tools">
+            <div class="seg" id="tools" role="group" aria-label="Tool"></div>
+            <span class="sep"></span>
+            <button class="btn" id="undo" type="button" title="Undo (Mod+Z)">Undo</button>
+            <button class="btn" id="redo" type="button" title="Redo (Shift+Mod+Z)">Redo</button>
+            <span class="sep"></span>
+            <button
+              class="btn"
+              id="resolve"
+              type="button"
+              title="Resolve or reopen the selected change (X)"
+            >
+              Resolve <kbd class="hide-md">X</kbd>
+            </button>
+            <button class="btn" id="delete" type="button" title="Delete the selected change (Del)">
+              Delete <kbd class="hide-md">Del</kbd>
+            </button>
+            <span class="spacer"></span>
+          </div>
+          <div class="view" id="view">
+            <div id="annotator"></div>
+            <div class="live-layer" id="live-layer" hidden>
+              <div class="live-hover" id="live-hover" hidden></div>
+              <div class="live-chip" id="live-chip" hidden></div>
+            </div>
+            <div class="stage-empty" id="stage-empty">
+              <p id="stage-empty-text">Opening the page</p>
+            </div>
+          </div>
+          <div class="status" role="status">
+            <span class="grow" id="status-left"></span>
+            <span id="status-right"></span>
+          </div>
+        </section>
+        <aside class="inspector" aria-label="Review inspector">
+          <div class="panels" id="panels">
+            <details class="panel" data-panel="changes" open>
+              <summary>Changes <span class="count" id="changes-count"></span></summary>
+              <div class="panel-body">
+                <div class="list-head">
+                  <span class="tally" id="tally"></span>
+                  <button
+                    class="chip-btn"
+                    id="hide-resolved"
+                    type="button"
+                    aria-pressed="false"
+                    title="Hide resolved changes (H)"
+                  >
+                    Hide Resolved
+                  </button>
+                </div>
+                <ol class="changes" id="changes" aria-label="Change list"></ol>
+              </div>
+            </details>
+            <details class="panel" data-panel="selected" open>
+              <summary>Selected Change</summary>
+              <div class="panel-body" id="selected"></div>
+            </details>
+            <details class="panel" data-panel="history">
+              <summary>History</summary>
+              <div class="panel-body history-body"><div id="history"></div></div>
+            </details>
+            <details class="panel" data-panel="keys">
+              <summary>Keys</summary>
+              <div class="panel-body">
+                <dl class="keys">
+                  <dt>V E P R O A F</dt>
+                  <dd>Select, Element, Pin, Box, Ellipse, Arrow, Draw</dd>
+                  <dt>Up Down Enter</dt>
+                  <dd>Element tool: parent, child, pick</dd>
+                  <dt>M T D</dt>
+                  <dd>Mobile, Tablet, Desktop viewport</dd>
+                  <dt>1 2 3</dt>
+                  <dd>Priority High, Medium, Low on the selection</dd>
+                  <dt>X, Del</dt>
+                  <dd>Resolve or reopen, delete the selection</dd>
+                  <dt>H</dt>
+                  <dd>Hide resolved changes</dd>
+                  <dt>L</dt>
+                  <dd>Capture the live page again</dd>
+                  <dt>Mod Z</dt>
+                  <dd>Undo; Shift+Mod Z or Mod Y redo</dd>
+                  <dt>Mod Enter</dt>
+                  <dd>Send the open changes to the agent</dd>
+                  <dt>Mod E</dt>
+                  <dd>Export the change list, notes and crops</dd>
+                  <dt>Esc</dt>
+                  <dd>Back to Select, then deselect</dd>
+                </dl>
+              </div>
+            </details>
+          </div>
+          <div class="composer" data-t3-composer></div>
+        </aside>
+      </div>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        const $ = (id) => document.getElementById(id);
+        const ws = window.t3.workspace;
+        const ID = "design-review";
+        const VIEWPORTS = {
+          mobile: { label: "Mobile", width: 390, height: 844, key: "m" },
+          tablet: { label: "Tablet", width: 834, height: 1112, key: "t" },
+          desktop: { label: "Desktop", width: 1440, height: 900, key: "d" },
+        };
+        const PRIORITIES = { high: "High", medium: "Medium", low: "Low" };
+        const PRIORITY_KEYS = { 1: "high", 2: "medium", 3: "low" };
+        const TOOLS = [
+          ["select", "Select", "v"],
+          ["element", "Element", "e"],
+          ["pin", "Pin", "p"],
+          ["rect", "Box", "r"],
+          ["ellipse", "Ellipse", "o"],
+          ["arrow", "Arrow", "a"],
+          ["freehand", "Draw", "f"],
+        ];
+        const TOOL_FOR_KEY = Object.fromEntries(TOOLS.map(([name, , key]) => [key, name]));
+        const TOOL_HINT = {
+          select: "Select: click a mark to select it, drag to move it",
+          element: "Element: hover to inspect, click to pick, Up for the parent",
+          pin: "Pin: click to drop a numbered comment",
+          rect: "Box: drag around a region",
+          ellipse: "Ellipse: drag around a region",
+          arrow: "Arrow: drag from the problem to where it should go",
+          freehand: "Draw: sketch freely",
+        };
+        const KIND_LABEL = {
+          pin: "Pin",
+          rect: "Box",
+          ellipse: "Ellipse",
+          arrow: "Arrow",
+          freehand: "Sketch",
+          element: "Element",
+        };
+        // Proposed CSS a reviewer can type on a picked element: [property, label].
+        const TWEAKS = [
+          ["padding", "Padding"],
+          ["margin", "Margin"],
+          ["font-size", "Font Size"],
+          ["color", "Color"],
+          ["background-color", "Background"],
+          ["border-radius", "Radius"],
+        ];
+        const TWEAK_PROPS = new Set(TWEAKS.map(([p]) => p));
+        const COLOR_PROPS = new Set(["color", "background-color"]);
+        const CONTEXT_STYLES = ["font-family", "font-weight", "line-height", "display"];
+        const MAX_CROPS = 24;
+        const RESERVED_KEYS = [
+          "v",
+          "e",
+          "p",
+          "r",
+          "o",
+          "a",
+          "f",
+          "m",
+          "t",
+          "d",
+          "l",
+          "h",
+          "x",
+          "1",
+          "2",
+          "3",
+          "delete",
+          "backspace",
+          "escape",
+          "enter",
+          "mod+z",
+          "mod+shift+z",
+          "mod+y",
+          "mod+enter",
+          "mod+e",
+        ];
+        const DEFAULTS = {
+          title: "Design Review",
+          mode: "auto",
+          url: "",
+          snapshot: "",
+          screenshot: "",
+          viewport: "desktop",
+          notes: [],
+          tool: "auto",
+          customScript: "",
+          controls: {},
+        };
+        const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+        const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+        const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+        const clone = (v) => JSON.parse(JSON.stringify(v));
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const round = (v) => Math.round(v);
+        const slug = (s) =>
+          String(s)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "") || "design-review";
+        const fileBase = (title) =>
+          /review$/.test(slug(title)) ? slug(title) : `${slug(title)}-review`;
+        const isHtmlAsset = (a) => /html/.test(a.mimeType || "") || /\.html?$/i.test(a.name || "");
+        const isImageAsset = (a) =>
+          (a.mimeType || "").startsWith("image/") ||
+          /\.(png|jpe?g|webp|gif|avif)$/i.test(a.name || "");
+        const viewportOk = (v) =>
+          (typeof v === "string" && hasOwn(VIEWPORTS, v)) ||
+          (isPlain(v) &&
+            Number.isInteger(v.width) &&
+            Number.isInteger(v.height) &&
+            v.width >= 240 &&
+            v.width <= 3840 &&
+            v.height >= 240 &&
+            v.height <= 4000);
+        const noteOk = (n) =>
+          isPlain(n) &&
+          typeof n.note === "string" &&
+          (n.priority === undefined || hasOwn(PRIORITIES, n.priority)) &&
+          ((typeof n.selector === "string" && n.selector.trim() !== "") ||
+            (isNum(n.x) && isNum(n.y)) ||
+            (isPlain(n.rect) && [n.rect.x, n.rect.y, n.rect.width, n.rect.height].every(isNum)));
+
+        // ---- Options (lenient: a bad value falls back to its default with a warning) ----------------------
+        const raw = JSON.parse(document.getElementById("t3-template-options")?.textContent || "{}");
+        if (!isPlain(raw)) throw new Error(`${ID}: the template options must be a JSON object`);
+        function pick(key, ok) {
+          if (!hasOwn(raw, key)) return DEFAULTS[key];
+          if (ok(raw[key])) return raw[key];
+          console.warn(
+            `${ID}: option "${key}" is not valid (${JSON.stringify(raw[key])}); using ${JSON.stringify(DEFAULTS[key])}.`,
+          );
+          return DEFAULTS[key];
+        }
+        const OPTS = {
+          title: pick("title", (v) => typeof v === "string" && v.trim() !== ""),
+          mode: pick("mode", (v) => v === "auto" || v === "live" || v === "snapshot"),
+          url: pick("url", (v) => typeof v === "string" && (v === "" || /^https?:\/\//i.test(v))),
+          snapshot: pick("snapshot", (v) => typeof v === "string"),
+          screenshot: pick("screenshot", (v) => typeof v === "string"),
+          viewport: pick("viewport", viewportOk),
+          notes: pick("notes", Array.isArray),
+          tool: pick("tool", (v) => v === "auto" || TOOLS.some(([name]) => name === v)),
+          customScript: pick("customScript", (v) => typeof v === "string"),
+          controls: pick("controls", isPlain),
+        };
+        OPTS.notes = OPTS.notes.filter((n, i) => {
+          if (noteOk(n)) return true;
+          console.warn(
+            `${ID}: notes[${i}] needs { note, and selector | x, y | rect, priority?: high|medium|low }; skipped.`,
+          );
+          return false;
+        });
+
+        // ---- State -------------------------------------------------------------------------------------------
+        let rt = null; // template runtime
+        let api = null; // window.t3template
+        let annotator = null;
+        let historyObj = null;
+        let link = null;
+        let booted = false;
+        let mode = null; // 'live' | 'page' | 'image'
+        let notice = ""; // why live review fell back to the snapshot, shown in the meta line
+        let meta = {}; // annotation id -> { priority, viewport, url?, tweaks, element? (live picks), found? }
+        let lastAnnotations = [];
+        let selectedId = null;
+        let hideResolved = false;
+        let tweakPreview = true;
+        let vpKey = "desktop";
+        let vp = { ...VIEWPORTS.desktop };
+        let htmlAsset = null;
+        let imageAsset = null;
+        let snapshotDoc = null; // the parsed snapshot, container-query rewritten
+        let pageShot = null; // { bitmap, cssWidth, scale } the screenshot asset, for page crops
+        let sending = false;
+        let persistTimer = 0;
+        let noteTimer = 0;
+        let lastSent = "";
+        const items = new Map(); // id -> <li>
+        const touched = new Map(); // snapshot node -> its style attribute before a tweak preview
+        const live = {
+          session: null,
+          shot: null, // { bitmap, url, width, height, scale }
+          seq: 0,
+          timer: 0,
+          closed: false,
+          agentWorking: false,
+          css: "", // T3's stylesheet on the live page: the tweak preview
+          styling: Promise.resolve(),
+          pick: false,
+          point: null,
+          client: null,
+          inflight: false,
+          hover: null, // { stack: elements innermost first, index }
+          trail: [],
+        };
+
+        // ---- Viewports -----------------------------------------------------------------------------------
+        function viewportFrom(v) {
+          if (typeof v === "string") return { key: v, size: { ...VIEWPORTS[v] } };
+          return { key: "custom", size: { label: "Custom", width: v.width, height: v.height } };
+        }
+        const vpText = (size = vp) => `${size.label} ${size.width} × ${size.height}`;
+
+        // ---- Snapshot pages --------------------------------------------------------------------------------
+        // The annotator renders a snapshot inside a shadow root sized to the viewport, but @media and vw follow the
+        // workspace window. Width-only @media rules become container queries on the page box and vw becomes cqw,
+        // so the Mobile, Tablet and Desktop presets reflow the snapshot the way the real site would.
+        const WIDTH_QUERY =
+          /^\(\s*(min|max)-width\s*:\s*[\d.]+(px|em|rem)\s*\)(\s+and\s+\(\s*(min|max)-width\s*:\s*[\d.]+(px|em|rem)\s*\))*$/i;
+        function toContainerQueries(css) {
+          return css
+            .replace(/@media\s+([^{]+)\{/g, (whole, condition) => {
+              const c = condition.trim().replace(/^(only\s+)?(screen|all)\s+and\s+/i, "");
+              return WIDTH_QUERY.test(c) ? `@container t3-review-page ${c} {` : whole;
+            })
+            .replace(/(\d)vw\b/g, "$1cqw");
+        }
+        function parseSnapshot(html) {
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          for (const style of doc.querySelectorAll("style"))
+            style.textContent = toContainerQueries(style.textContent);
+          return doc;
+        }
+        const pageHost = () => $("annotator").querySelector(".t3k-annotator-page");
+        const pageRoot = () => (mode === "page" ? (pageHost()?.shadowRoot ?? null) : null);
+
+        // ---- Change records: the annotator's list joined with this template's priority, tweaks and live picks ---
+        function annotations() {
+          return annotator ? annotator.get().annotations : [];
+        }
+        function metaFor(id) {
+          if (!meta[id]) meta[id] = { priority: "medium", viewport: vpText(), tweaks: {} };
+          return meta[id];
+        }
+        function records() {
+          if (!annotator || !mode) return [];
+          const json = annotator.exportChangeList().json;
+          return json.annotations.map((r) => {
+            const m = metaFor(r.id);
+            const el = r.element ?? m.element ?? null;
+            const tweaks = Object.entries(m.tweaks).map(([property, to]) => ({
+              property,
+              from: el && el.styles ? (el.styles[property] ?? "") : "",
+              to,
+            }));
+            return {
+              number: r.number,
+              id: r.id,
+              kind: el ? "element" : r.kind,
+              status: r.status,
+              priority: m.priority,
+              note: r.note,
+              viewport: m.viewport,
+              url: m.url ?? null,
+              selector: el ? el.selector : null,
+              element: el
+                ? {
+                    tag: el.tag,
+                    classes: el.classes ?? [],
+                    text: el.text ?? "",
+                    styles: el.styles ?? {},
+                  }
+                : null,
+              found: el ? (r.found ?? m.found ?? true) : true,
+              bounds: r.bounds,
+              points: r.points ?? null,
+              tweaks,
+            };
+          });
+        }
+        function kindLabel(r) {
+          if (r.kind !== "element") return KIND_LABEL[r.kind];
+          const cls = r.element.classes.length ? `.${r.element.classes[0]}` : "";
+          return `<${r.element.tag}${cls}>`;
+        }
+        const boundsText = (b) => `${b.x}, ${b.y} · ${b.width} × ${b.height}`;
+        const placeText = (r) =>
+          r.kind === "pin" ? `At ${r.bounds.x}, ${r.bounds.y}` : `Region ${boundsText(r.bounds)}`;
+
+        // ---- History state ----------------------------------------------------------------------------------
+        function getState() {
+          const anns = annotations();
+          const ids = new Set(anns.map((a) => a.id));
+          const kept = {};
+          for (const [id, m] of Object.entries(meta)) if (ids.has(id)) kept[id] = clone(m);
+          return { annotations: anns, meta: kept };
+        }
+        function applyState(s) {
+          meta = clone(s.meta ?? {});
+          annotator.set({ annotations: s.annotations ?? [] });
+          lastAnnotations = annotations();
+          if (selectedId !== null && !lastAnnotations.some((a) => a.id === selectedId))
+            selectedId = null;
+          applyTweakPreview();
+          renderAll();
+          persist();
+        }
+        function edited(label) {
+          lastAnnotations = annotations();
+          applyTweakPreview();
+          renderAll();
+          persist();
+          if (link) link.commit(label);
+          if (booted) rt.emitChange();
+        }
+        // The annotator's own edits (draw, drag, pick, X, Del, reorder) arrive here, named after what changed.
+        function describeEdit(before, after) {
+          const num = (id) => after.findIndex((a) => a.id === id) + 1;
+          if (after.length > before.length) {
+            const added = after.find((a) => !before.some((b) => b.id === a.id));
+            if (!added) return "Add";
+            return `Add ${KIND_LABEL[added.kind]} ${num(added.id)}`;
+          }
+          if (after.length < before.length) {
+            const index = before.findIndex((b) => !after.some((a) => a.id === b.id));
+            return `Delete ${index + 1}`;
+          }
+          if (before.some((b, i) => b.id !== after[i].id)) return "Reorder";
+          for (let i = 0; i < after.length; i++) {
+            if (after[i].status !== before[i].status)
+              return `${after[i].status === "resolved" ? "Resolve" : "Reopen"} ${i + 1}`;
+          }
+          for (let i = 0; i < after.length; i++) {
+            if (JSON.stringify(after[i]) !== JSON.stringify(before[i])) return `Move ${i + 1}`;
+          }
+          return "Edit";
+        }
+        function onAnnotatorChange(value) {
+          for (const a of value.annotations) {
+            if (!meta[a.id]) {
+              meta[a.id] = { priority: "medium", viewport: vpText(), tweaks: {} };
+              if (mode === "live") meta[a.id].url = live.session.url;
+            }
+          }
+          const label = describeEdit(lastAnnotations, value.annotations);
+          edited(label);
+        }
+
+        // ---- Tweak preview: on the snapshot's nodes, or as T3's stylesheet in the live page (never the site's files)
+        function tweakCss() {
+          if (!tweakPreview) return "";
+          const rules = [];
+          for (const a of annotations()) {
+            const m = meta[a.id];
+            if (!m || !m.element || !Object.keys(m.tweaks).length) continue;
+            const decls = Object.entries(m.tweaks).map(
+              ([prop, value]) => `${prop}: ${value} !important;`,
+            );
+            rules.push(`${m.element.selector} { ${decls.join(" ")} }`);
+          }
+          return rules.join("\n");
+        }
+        function applyLiveTweaks() {
+          const css = tweakCss();
+          if (css === live.css || !live.session || live.closed) return;
+          live.css = css;
+          live.styling = live.styling
+            .then(() => ws.preview.setStyles(css))
+            .then(queueLiveCapture, showError);
+        }
+        function applyTweakPreview() {
+          if (mode === "live") {
+            applyLiveTweaks();
+            return;
+          }
+          for (const [node, before] of touched) {
+            if (before === null) node.removeAttribute("style");
+            else node.setAttribute("style", before);
+          }
+          touched.clear();
+          const root = pageRoot();
+          if (!root || !tweakPreview) return;
+          for (const a of annotations()) {
+            const m = meta[a.id];
+            if (a.kind !== "element" || !m || !Object.keys(m.tweaks).length) continue;
+            const node = root.querySelector(a.element.selector);
+            if (!node) continue;
+            if (!touched.has(node)) touched.set(node, node.getAttribute("style"));
+            for (const [prop, value] of Object.entries(m.tweaks))
+              node.style.setProperty(prop, value, "important");
+          }
+          annotator.refresh();
+        }
+
+        // ---- Edits from the list, the inspector and scripts ---------------------------------------------------
+        function patchAnnotation(id, patch) {
+          const anns = annotations();
+          const a = anns.find((x) => x.id === id);
+          if (!a) throw new Error(`No change with id "${id}"`);
+          Object.assign(a, patch);
+          annotator.set({ annotations: anns });
+          if (selectedId === id) annotator.select(id);
+        }
+        const numberOf = (id) => annotations().findIndex((a) => a.id === id) + 1;
+        let pendingNote = null;
+        // A note burst still waiting for its undo step becomes one before any other edit is made.
+        function flushNote() {
+          if (noteTimer) commitNote(pendingNote);
+        }
+        function setNote(id, text) {
+          if (pendingNote !== id) flushNote();
+          pendingNote = id;
+          patchAnnotation(id, { note: text });
+          lastAnnotations = annotations();
+          persist();
+          clearTimeout(noteTimer);
+          noteTimer = setTimeout(() => commitNote(id), 700);
+        }
+        function commitNote(id) {
+          clearTimeout(noteTimer);
+          noteTimer = 0;
+          if (link && numberOf(id) > 0) link.commit(`Note ${numberOf(id)}`);
+          if (booted) rt.emitChange();
+        }
+        function setPriority(id, priority) {
+          flushNote();
+          if (!hasOwn(PRIORITIES, priority))
+            throw new RangeError(`priority must be ${Object.keys(PRIORITIES).join(", ")}`);
+          metaFor(id).priority = priority;
+          edited(`Priority ${PRIORITIES[priority]} ${numberOf(id)}`);
+        }
+        function toggleResolved(id) {
+          flushNote();
+          const a = annotations().find((x) => x.id === id);
+          patchAnnotation(id, { status: a.status === "open" ? "resolved" : "open" });
+          edited(`${a.status === "open" ? "Resolve" : "Reopen"} ${numberOf(id)}`);
+        }
+        function removeChange(id) {
+          flushNote();
+          const n = numberOf(id);
+          annotator.set({ annotations: annotations().filter((a) => a.id !== id) });
+          if (selectedId === id) selectedId = null;
+          delete meta[id];
+          edited(`Delete ${n}`);
+        }
+        function validTweak(prop, value) {
+          return (
+            typeof value === "string" && value.trim() !== "" && CSS.supports(prop, value.trim())
+          );
+        }
+        function setTweak(id, prop, value) {
+          flushNote();
+          const m = metaFor(id);
+          const text = value.trim();
+          if (text === "") delete m.tweaks[prop];
+          else m.tweaks[prop] = text;
+          edited(`Tweak ${prop} ${numberOf(id)}`);
+        }
+        function nextId() {
+          let max = 0;
+          for (const a of annotations()) {
+            const match = /^a(\d+)$/.exec(a.id);
+            if (match) max = Math.max(max, Number(match[1]));
+          }
+          return `a${max + 1}`;
+        }
+        // A live pick is a box annotation (the review page is an image) plus the element it names in meta.
+        function classesOf(html) {
+          const m = /^<[^>]*?\sclass="([^"]*)"/i.exec(html || "");
+          return m ? m[1].split(/\s+/).filter(Boolean).slice(0, 4) : [];
+        }
+        function liveElement(found) {
+          return {
+            selector: found.selector,
+            tag: found.tag,
+            classes: classesOf(found.html),
+            text: (found.text || "").slice(0, 140),
+            box: {
+              x: round(found.box.x),
+              y: round(found.box.y),
+              width: round(found.box.width),
+              height: round(found.box.height),
+            },
+            styles: found.styles,
+          };
+        }
+        function addLivePick(found, extra = {}) {
+          const id = nextId();
+          const el = liveElement(found);
+          const anns = annotations();
+          anns.push({
+            id,
+            kind: "rect",
+            rect: { ...el.box },
+            note: extra.note ?? "",
+            status: "open",
+          });
+          annotator.set({ annotations: anns });
+          meta[id] = {
+            priority: extra.priority ?? "medium",
+            viewport: vpText(),
+            url: live.session.url,
+            tweaks: {},
+            element: el,
+            found: true,
+          };
+          return id;
+        }
+
+        // ---- Rendering: the change list ---------------------------------------------------------------------------
+        function renderAll() {
+          renderList();
+          renderSelected();
+          renderChrome();
+        }
+        function buildItem(id) {
+          const li = document.createElement("li");
+          li.className = "change";
+          li.dataset.id = id;
+          li.innerHTML = `<span class="num"></span><div class="change-body">
+            <div class="change-head"><span class="kind"></span><span class="tag"></span>
+              <select class="prio" aria-label="Priority">${Object.entries(PRIORITIES)
+                .map(([k, v]) => `<option value="${k}">${v}</option>`)
+                .join("")}</select></div>
+            <div class="where mono"></div><div class="warn" hidden>Not found on the page any more</div>
+            <textarea class="note" rows="2" placeholder="What should change? e.g. Tighten to 16px, match the nav"></textarea>
+            <pre class="diff" hidden></pre>
+            <div class="row"><button type="button" data-act="resolve">Resolve</button><button type="button" data-act="delete">Delete</button></div>
+          </div>`;
+          li.addEventListener("click", (e) => {
+            if (!booted || e.target.closest("textarea, select, button")) return;
+            selectChange(id, true);
+          });
+          const note = li.querySelector(".note");
+          note.addEventListener("focus", () => {
+            if (selectedId !== id) selectChange(id, true);
+          });
+          note.addEventListener(
+            "input",
+            guard(() => setNote(id, note.value)),
+          );
+          note.addEventListener("blur", () => flushNote());
+          note.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") note.blur();
+          });
+          li.querySelector(".prio").addEventListener(
+            "change",
+            guard((e) => setPriority(id, e.target.value)),
+          );
+          li.querySelector('[data-act="resolve"]').addEventListener(
+            "click",
+            guard(() => toggleResolved(id)),
+          );
+          li.querySelector('[data-act="delete"]').addEventListener(
+            "click",
+            guard(() => removeChange(id)),
+          );
+          return li;
+        }
+        function diffText(r) {
+          if (!r.tweaks.length || !r.selector) return null;
+          const lines = [`<span class="ctx">${escapeHtml(r.selector)} {</span>`];
+          for (const t of r.tweaks) {
+            if (t.from)
+              lines.push(
+                `<span class="del">-  ${escapeHtml(t.property)}: ${escapeHtml(t.from)};</span>`,
+              );
+            lines.push(
+              `<span class="add">+  ${escapeHtml(t.property)}: ${escapeHtml(t.to)};</span>`,
+            );
+          }
+          lines.push('<span class="ctx">}</span>');
+          return lines.join("\n");
+        }
+        function escapeHtml(s) {
+          return String(s).replace(
+            /[&<>"]/g,
+            (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+          );
+        }
+        function updateItem(li, r) {
+          li.dataset.status = r.status;
+          li.dataset.priority = r.priority;
+          li.dataset.missing = String(!r.found);
+          li.setAttribute("aria-selected", String(r.id === selectedId));
+          li.querySelector(".num").textContent = String(r.number);
+          li.querySelector(".kind").textContent = kindLabel(r);
+          li.querySelector(".tag").textContent = r.viewport.split(" ")[0];
+          const prio = li.querySelector(".prio");
+          if (document.activeElement !== prio) prio.value = r.priority;
+          li.querySelector(".where").textContent = r.selector ?? placeText(r);
+          li.querySelector(".warn").hidden = r.found;
+          const note = li.querySelector(".note");
+          if (document.activeElement !== note && note.value !== r.note) note.value = r.note;
+          const diff = li.querySelector(".diff");
+          const text = diffText(r);
+          diff.hidden = !text;
+          if (text && diff.innerHTML !== text) diff.innerHTML = text;
+          const resolve = li.querySelector('[data-act="resolve"]');
+          resolve.textContent = r.status === "resolved" ? "Reopen" : "Resolve";
+          resolve.setAttribute("aria-pressed", String(r.status === "resolved"));
+        }
+        function renderList() {
+          const recs = records();
+          const open = recs.filter((r) => r.status === "open");
+          const high = open.filter((r) => r.priority === "high").length;
+          $("changes-count").textContent = recs.length ? `${open.length} open` : "";
+          $("tally").textContent = recs.length
+            ? `${recs.length} total · ${open.length} open${high ? ` · ${high} high` : ""}`
+            : "No changes yet";
+          const shown = hideResolved ? open : recs;
+          const ol = $("changes");
+          const keep = new Set();
+          let prev = null;
+          for (const r of shown) {
+            let li = items.get(r.id);
+            if (!li) {
+              li = buildItem(r.id);
+              items.set(r.id, li);
+            }
+            updateItem(li, r);
+            keep.add(r.id);
+            const want = prev ? prev.nextSibling : ol.firstChild;
+            if (want !== li) ol.insertBefore(li, want);
+            prev = li;
+          }
+          for (const [id, li] of items) {
+            if (!keep.has(id)) {
+              li.remove();
+              items.delete(id);
+            }
+          }
+          let empty = ol.querySelector(".empty-list");
+          if (!shown.length) {
+            if (!empty) {
+              empty = document.createElement("li");
+              empty.className = "empty-list";
+              ol.append(empty);
+            }
+            empty.textContent = recs.length
+              ? "Every change is resolved. Show them with Hide Resolved (H)."
+              : mode === "image"
+                ? "Drop a pin (P) or draw a box (R) on the screenshot, then say what should change."
+                : "Pick an element (E), drop a pin (P) or draw a box (R), then say what should change.";
+          } else if (empty) empty.remove();
+        }
+
+        // ---- Rendering: the selected change and its tweaks -------------------------------------------------------
+        let selectedKey = null;
+        function renderSelected() {
+          const box = $("selected");
+          const r = records().find((x) => x.id === selectedId) ?? null;
+          const key = r ? `${r.id}|${r.selector ?? ""}|${mode}` : "";
+          if (key !== selectedKey) {
+            selectedKey = key;
+            box.replaceChildren(r ? buildSelected(r) : selectedHint());
+          }
+          if (r) updateSelected(r);
+        }
+        function selectedHint() {
+          const p = document.createElement("p");
+          p.className = "hint";
+          p.textContent =
+            mode === "image"
+              ? "Select a change to see it here. Screenshots have no elements to inspect; attach an HTML snapshot or review the live page to pick elements and propose exact CSS."
+              : "Select a change to see it here. Pick an element (E) to inspect its styles and propose exact CSS values for the agent.";
+          return p;
+        }
+        function buildSelected(r) {
+          const frag = document.createElement("div");
+          frag.innerHTML = `<div class="sel-head"><span class="sel-title"></span><span class="where mono" data-f="selector"></span></div>
+            <dl class="facts"><dt>Where</dt><dd class="mono" data-f="bounds"></dd><dt>Viewport</dt><dd data-f="viewport"></dd></dl>`;
+          frag.querySelector(".sel-title").textContent = `${r.number} · ${kindLabel(r)}`;
+          if (r.kind !== "element") {
+            frag.append(
+              Object.assign(document.createElement("p"), {
+                className: "hint",
+                textContent:
+                  "Region changes carry their note and a crop. Pick an element (E) to propose exact CSS values.",
+              }),
+            );
+            return frag;
+          }
+          const facts = frag.querySelector(".facts");
+          for (const [label, f] of [
+            ["Text", "text"],
+            ["Type", "type"],
+          ]) {
+            const dt = document.createElement("dt");
+            dt.textContent = label;
+            const dd = document.createElement("dd");
+            dd.dataset.f = f;
+            facts.append(dt, dd);
+          }
+          const heading = document.createElement("p");
+          heading.className = "hint";
+          heading.textContent =
+            "Proposed values go to the agent as a CSS diff; the site itself is not changed.";
+          const grid = document.createElement("div");
+          grid.className = "tweaks";
+          for (const [prop, label] of TWEAKS) {
+            const row = document.createElement("label");
+            row.className = "tweak";
+            row.innerHTML = `<span></span><span class="cur mono"></span><span class="edit"><input type="text" spellcheck="false" /></span>`;
+            row.firstElementChild.textContent = label;
+            const input = row.querySelector("input");
+            input.dataset.prop = prop;
+            input.setAttribute("aria-label", `Proposed ${label}`);
+            input.addEventListener(
+              "change",
+              guard(() => commitTweakInput(r.id, prop, input)),
+            );
+            input.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") input.blur();
+              if (e.key === "Escape") {
+                input.value = metaFor(r.id).tweaks[prop] ?? "";
+                input.removeAttribute("aria-invalid");
+                input.blur();
+              }
+            });
+            if (COLOR_PROPS.has(prop)) {
+              const swatch = document.createElement("input");
+              swatch.type = "color";
+              swatch.dataset.swatch = prop;
+              swatch.setAttribute("aria-label", `Pick ${label}`);
+              swatch.addEventListener("input", () => {
+                input.value = swatch.value;
+              });
+              swatch.addEventListener(
+                "change",
+                guard(() => commitTweakInput(r.id, prop, input)),
+              );
+              row.querySelector(".edit").append(swatch);
+            }
+            grid.append(row);
+          }
+          const diff = document.createElement("pre");
+          diff.className = "diff";
+          diff.dataset.f = "diff";
+          const tools = document.createElement("div");
+          tools.className = "row";
+          const clear = document.createElement("button");
+          clear.type = "button";
+          clear.textContent = "Clear Tweaks";
+          clear.dataset.f = "clear";
+          clear.addEventListener(
+            "click",
+            guard(() => {
+              metaFor(r.id).tweaks = {};
+              edited(`Clear Tweaks ${numberOf(r.id)}`);
+            }),
+          );
+          tools.append(clear);
+          frag.append(heading, grid, diff, tools);
+          if (mode === "page" || mode === "live") {
+            const check = document.createElement("label");
+            check.className = "check";
+            check.innerHTML = `<input type="checkbox" data-f="preview" /> Preview tweaks on the ${mode === "live" ? "live page" : "snapshot"}`;
+            check.querySelector("input").addEventListener(
+              "change",
+              guard((e) => {
+                tweakPreview = e.target.checked;
+                applyTweakPreview();
+                persist();
+              }),
+            );
+            frag.append(check);
+          }
+          return frag;
+        }
+        function commitTweakInput(id, prop, input) {
+          const value = input.value.trim();
+          if (value !== "" && !validTweak(prop, value)) {
+            input.setAttribute("aria-invalid", "true");
+            input.title = `"${value}" is not a valid ${prop} value`;
+            setStatus(`"${value}" is not a valid ${prop} value`);
+            return;
+          }
+          input.removeAttribute("aria-invalid");
+          input.title = "";
+          if ((metaFor(id).tweaks[prop] ?? "") === value) return;
+          setTweak(id, prop, value);
+        }
+        function toHex(color) {
+          const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(color || "");
+          if (m)
+            return `#${[m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, "0")).join("")}`;
+          return /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#000000";
+        }
+        function updateSelected(r) {
+          const box = $("selected");
+          const set = (f, text) => {
+            const node = box.querySelector(`[data-f="${f}"]`);
+            if (node) node.textContent = text;
+          };
+          set("selector", r.selector ?? "");
+          set(
+            "bounds",
+            `${r.kind === "pin" ? `${r.bounds.x}, ${r.bounds.y}` : boundsText(r.bounds)} px${r.found ? "" : " (not found now)"}`,
+          );
+          set("viewport", r.url ? `${r.viewport} · ${r.url}` : r.viewport);
+          if (r.kind !== "element") return;
+          set("text", r.element.text || "(no text)");
+          const s = r.element.styles;
+          set(
+            "type",
+            [s["font-family"], s["font-weight"], s["line-height"]]
+              .filter(Boolean)
+              .join(" · ")
+              .slice(0, 120),
+          );
+          const tweaks = metaFor(r.id).tweaks;
+          for (const input of box.querySelectorAll("input[data-prop]")) {
+            const prop = input.dataset.prop;
+            const cur = input.closest(".tweak").querySelector(".cur");
+            const shown = s[prop] === "rgba(0, 0, 0, 0)" ? "transparent" : (s[prop] ?? "");
+            cur.textContent = shown;
+            cur.title = shown;
+            input.placeholder = "New value";
+            if (document.activeElement !== input && input.getAttribute("aria-invalid") !== "true")
+              input.value = tweaks[prop] ?? "";
+            input.classList.toggle("changed", hasOwn(tweaks, prop));
+            const swatch = box.querySelector(`input[data-swatch="${prop}"]`);
+            if (swatch && document.activeElement !== swatch)
+              swatch.value = toHex(tweaks[prop] ?? s[prop]);
+          }
+          const diff = box.querySelector('[data-f="diff"]');
+          const text = diffText(r);
+          diff.hidden = !text;
+          if (text) diff.innerHTML = text;
+          box.querySelector('[data-f="clear"]').disabled = !r.tweaks.length;
+          const preview = box.querySelector('[data-f="preview"]');
+          if (preview) preview.checked = tweakPreview;
+        }
+
+        // ---- Rendering: header, tools, status --------------------------------------------------------------------
+        function currentTool() {
+          if (!annotator) return "select";
+          return live.pick ? "element" : annotator.getTool();
+        }
+        function renderChrome() {
+          const recs = records();
+          const open = recs.filter((r) => r.status === "open").length;
+          $("send-label").textContent = open ? `Send ${open} to Agent` : "Send to Agent";
+          $("send").disabled = !booted || sending || open === 0;
+          $("export").disabled = !booted || recs.length === 0;
+          const tool = currentTool();
+          for (const b of $("tools").querySelectorAll("button")) {
+            b.setAttribute("aria-pressed", String(b.dataset.tool === tool));
+            if (b.dataset.tool === "element") b.disabled = mode === "image" || !mode;
+          }
+          for (const b of $("viewports").querySelectorAll("button")) {
+            b.setAttribute("aria-pressed", String(b.dataset.vp === vpKey));
+            b.disabled = mode === "image" || !mode;
+            b.title =
+              mode === "image"
+                ? "A screenshot has one viewport; attach an HTML snapshot or review the live page to switch"
+                : `${VIEWPORTS[b.dataset.vp].label} ${VIEWPORTS[b.dataset.vp].width} × ${VIEWPORTS[b.dataset.vp].height} (${VIEWPORTS[b.dataset.vp].key.toUpperCase()})`;
+          }
+          $("undo").disabled = !historyObj || !historyObj.canUndo();
+          $("redo").disabled = !historyObj || !historyObj.canRedo();
+          const sel = recs.find((r) => r.id === selectedId);
+          $("resolve").disabled = !sel;
+          $("delete").disabled = !sel;
+          $("resolve").firstChild.textContent =
+            sel && sel.status === "resolved" ? "Reopen " : "Resolve ";
+          $("hide-resolved").setAttribute("aria-pressed", String(hideResolved));
+          $("refresh").hidden = mode !== "live";
+          const m = $("mode");
+          m.dataset.mode = mode ?? "";
+          m.textContent = mode === "live" ? "Live" : mode ? "Snapshot" : "Opening";
+          $("meta").textContent = metaLine();
+          $("status-right").textContent =
+            mode && mode !== "image"
+              ? `${vpText()} · ${zoomText()}`
+              : mode === "image"
+                ? imageText()
+                : "";
+          if (!statusHold) $("status-left").textContent = mode ? TOOL_HINT[tool] : "";
+        }
+        let statusHold = 0;
+        function setStatus(text) {
+          $("status-left").textContent = text;
+          clearTimeout(statusHold);
+          statusHold = setTimeout(() => {
+            statusHold = 0;
+            renderChrome();
+          }, 4000);
+        }
+        function zoomText() {
+          const host = pageHost();
+          if (!host) return "";
+          const w = mode === "live" && live.shot ? live.shot.width : vp.width;
+          return `${Math.round((host.getBoundingClientRect().width / w) * 100)}%`;
+        }
+        function imageText() {
+          return imageAsset ? imageAsset.name : "";
+        }
+        function metaLine() {
+          if (mode === "live") return `${live.session.title || "Untitled"} · ${live.session.url}`;
+          const parts = [];
+          if (mode === "page") parts.push(htmlAsset.name);
+          if (imageAsset)
+            parts.push(mode === "page" ? `crops from ${imageAsset.name}` : imageAsset.name);
+          if (notice) parts.push(notice);
+          if (lastSent) parts.push(lastSent);
+          return parts.join(" · ");
+        }
+
+        // ---- Tools ------------------------------------------------------------------------------------------------
+        function setTool(name) {
+          if (name === "element" && mode === "image") return;
+          endLivePick();
+          if (name === "element" && mode === "live") {
+            annotator.setTool("select");
+            live.pick = true;
+            $("live-layer").hidden = false;
+          } else annotator.setTool(name);
+          renderChrome();
+        }
+        function endLivePick() {
+          live.pick = false;
+          live.hover = null;
+          live.trail = [];
+          $("live-layer").hidden = true;
+          $("live-hover").hidden = true;
+          $("live-chip").hidden = true;
+        }
+        function selectChange(id, reveal) {
+          annotator.select(id);
+          if (reveal) revealOnStage(id);
+        }
+        // Scroll a page or live review so the selected change is in view.
+        function revealOnStage(id) {
+          const host = pageHost();
+          const r = records().find((x) => x.id === id);
+          if (!host || !r) return;
+          const view = mode === "live" ? vp.height : host.clientHeight;
+          const top = host.scrollTop;
+          if (r.bounds.y < top || r.bounds.y + Math.min(r.bounds.height, view) > top + view) {
+            host.scrollTop = Math.max(0, r.bounds.y - view * 0.25);
+          }
+        }
+        function onSelect(id) {
+          selectedId = id;
+          for (const [itemId, li] of items) li.setAttribute("aria-selected", String(itemId === id));
+          const li = id ? items.get(id) : null;
+          if (li) li.scrollIntoView({ block: "nearest" });
+          renderSelected();
+          renderChrome();
+        }
+
+        // ---- Live review (t3.workspace.preview) ---------------------------------------------------------------------
+        // The site renders in T3's headless browser. Each capture is a full-page PNG at 1 px per CSS px, shown as a
+        // scrollable page of the viewport's height, so marks sit in document coordinates and follow scrolling.
+        async function liveCapture() {
+          const seq = ++live.seq;
+          setStatus("Capturing the live page");
+          const shot = await ws.preview.screenshot({ fullPage: true });
+          if (seq !== live.seq) return;
+          const bitmap = await createImageBitmap(shot.file);
+          const url = URL.createObjectURL(shot.file);
+          const host = pageHost();
+          const keepScroll = host ? host.scrollTop : 0;
+          const previous = live.shot;
+          live.shot = {
+            bitmap,
+            url,
+            width: shot.width,
+            height: shot.height,
+            scale: bitmap.width / shot.width,
+          };
+          const html = `<!doctype html><html><head><style>html,body{margin:0}img{display:block}</style></head><body><img src="${url}" width="${shot.width}" height="${shot.height}" alt="Live capture"></body></html>`;
+          await annotator.setPage(html, { viewport: { width: shot.width, height: vp.height } });
+          if (previous) {
+            previous.bitmap.close();
+            URL.revokeObjectURL(previous.url);
+          }
+          pageHost().scrollTop = keepScroll;
+          await reanchorLive();
+          setStatus(
+            `Captured ${shot.width} × ${shot.height} at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`,
+          );
+          renderAll();
+        }
+        // A pick whose selector broke (e.g. the agent renamed a class) is found again by position among the same
+        // parent's children of its tag, kept only when its text is unchanged.
+        async function refindLive(element) {
+          if (!element.text) return null;
+          const parts = element.selector.split(" > ");
+          const tag = /^[a-z][a-z0-9-]*/i.exec(parts[parts.length - 1]);
+          if (!tag) return null;
+          const prefix = parts.length > 1 ? `${parts.slice(0, -1).join(" > ")} > ` : "";
+          for (let k = 1; k <= 12; k++) {
+            const selector = `${prefix}${tag[0]}:nth-of-type(${k})`;
+            const found = await ws.preview.inspect(selector);
+            if (!found) return null;
+            if ((found.text || "").slice(0, 140) === element.text) return found;
+          }
+          return null;
+        }
+        // Live picks follow their element: re-inspect each selector after a capture.
+        async function reanchorLive() {
+          const anns = annotations();
+          let moved = false;
+          await Promise.all(
+            anns.map(async (a) => {
+              const m = meta[a.id];
+              if (!m || !m.element || (m.url && m.url !== live.session.url)) return;
+              const found =
+                (await ws.preview.inspect(m.element.selector)) ?? (await refindLive(m.element));
+              m.found = !!found;
+              if (!found) return;
+              const el = liveElement(found);
+              // With the tweak preview on, the page shows tweaked values: keep the real ones for the diff.
+              const real = {};
+              if (live.css) {
+                for (const prop of Object.keys(m.tweaks)) {
+                  if (m.element.styles && prop in m.element.styles)
+                    real[prop] = m.element.styles[prop];
+                }
+              }
+              m.element = {
+                ...m.element,
+                selector: el.selector,
+                classes: el.classes,
+                box: el.box,
+                styles: { ...el.styles, ...real },
+                text: el.text,
+              };
+              if (JSON.stringify(a.rect) !== JSON.stringify(el.box)) {
+                a.rect = { ...el.box };
+                moved = true;
+              }
+            }),
+          );
+          if (moved) {
+            annotator.set({ annotations: anns });
+            lastAnnotations = annotations();
+            if (selectedId) annotator.select(selectedId);
+          }
+        }
+        // Refresh: loads the site again (its source may have changed, e.g. after the agent's edit) and captures it.
+        // A preview T3 closed opens again.
+        async function reloadLive() {
+          clearTimeout(live.timer);
+          if (live.closed) {
+            setStatus("Opening the live page again");
+            const r = await openLive();
+            if (r.error) {
+              throw new Error(
+                `Live preview of ${OPTS.url || "the declared page"} failed: ${r.error}.`,
+              );
+            }
+            live.session = r.session;
+            live.closed = false;
+            // A new page has no stylesheet: send the tweak preview again.
+            live.css = "";
+            applyLiveTweaks();
+            await live.styling;
+          } else {
+            setStatus("Reloading the live page");
+            await ws.preview.reload();
+          }
+          clearTimeout(live.timer);
+          await liveCapture();
+        }
+        function queueLiveCapture() {
+          clearTimeout(live.timer);
+          live.timer = setTimeout(() => liveCapture().catch(showError), 400);
+        }
+        function liveGeometry() {
+          const host = pageHost();
+          const r = host.getBoundingClientRect();
+          return { host, r, s: r.width / live.shot.width, scroll: host.scrollTop };
+        }
+        function docPoint(clientX, clientY) {
+          const g = liveGeometry();
+          return { x: (clientX - g.r.left) / g.s, y: (clientY - g.r.top) / g.s + g.scroll };
+        }
+        async function liveProbe() {
+          const p = live.point;
+          if (!p || live.inflight || !live.pick) return;
+          live.inflight = true;
+          const found = await ws.preview.elementsAt(round(p.x), round(p.y)).finally(() => {
+            live.inflight = false;
+          });
+          if (!live.pick) return;
+          live.hover = found.length ? { stack: found, index: 0 } : null;
+          live.trail = [];
+          drawLiveHover();
+          if (live.point !== p) await liveProbe();
+        }
+        function drawLiveHover() {
+          const hover = $("live-hover");
+          const chip = $("live-chip");
+          const el = live.hover ? live.hover.stack[live.hover.index] : null;
+          if (!el) {
+            hover.hidden = true;
+            chip.hidden = true;
+            return;
+          }
+          const g = liveGeometry();
+          const layer = $("live-layer").getBoundingClientRect();
+          const left = g.r.left - layer.left + el.box.x * g.s;
+          const top = g.r.top - layer.top + (el.box.y - g.scroll) * g.s;
+          Object.assign(hover.style, {
+            left: `${left}px`,
+            top: `${top}px`,
+            width: `${el.box.width * g.s}px`,
+            height: `${el.box.height * g.s}px`,
+          });
+          hover.hidden = false;
+          const cls = classesOf(el.html);
+          chip.innerHTML = `${escapeHtml(el.tag)}${cls.length ? escapeHtml("." + cls.slice(0, 2).join(".")) : ""} <span>${round(el.box.width)} × ${round(el.box.height)}</span>`;
+          chip.style.left = `${Math.max(4, left)}px`;
+          chip.style.top = `${top > 26 ? top - 24 : top + el.box.height * g.s + 4}px`;
+          chip.hidden = false;
+        }
+        function pickLive(found) {
+          flushNote();
+          const id = addLivePick(found);
+          edited(`Pick ${numberOf(id)} <${found.tag}>`);
+          selectChange(id, false);
+          const li = items.get(id);
+          if (li) li.querySelector(".note").focus();
+        }
+        function wireLiveLayer() {
+          const layer = $("live-layer");
+          layer.addEventListener("pointermove", (e) => {
+            live.client = { x: e.clientX, y: e.clientY };
+            live.point = docPoint(e.clientX, e.clientY);
+            liveProbe().catch(showError);
+          });
+          layer.addEventListener("pointerleave", () => {
+            live.point = null;
+            live.hover = null;
+            drawLiveHover();
+          });
+          layer.addEventListener(
+            "pointerdown",
+            guard(async (e) => {
+              if (e.button !== 0) return;
+              $("annotator").querySelector(".t3k-annotator-root").focus({ preventScroll: true });
+              let el = live.hover ? live.hover.stack[live.hover.index] : null;
+              if (!el) {
+                const p = docPoint(e.clientX, e.clientY);
+                const found = await ws.preview.elementsAt(round(p.x), round(p.y));
+                el = found[0] ?? null;
+              }
+              if (el) pickLive(el);
+            }),
+          );
+          layer.addEventListener(
+            "wheel",
+            (e) => {
+              e.preventDefault();
+              const g = liveGeometry();
+              g.host.scrollBy({ left: e.deltaX / g.s, top: e.deltaY / g.s });
+              if (live.client) {
+                live.point = docPoint(live.client.x, live.client.y);
+                liveProbe().catch(showError);
+              }
+            },
+            { passive: false },
+          );
+        }
+        function livePickKey(e) {
+          if (!live.hover) return false;
+          const h = live.hover;
+          if (e.key === "ArrowUp" && h.index < h.stack.length - 1) h.index++;
+          else if (e.key === "ArrowDown" && h.index > 0) h.index--;
+          else if (e.key === "Enter") pickLive(h.stack[h.index]);
+          else return false;
+          drawLiveHover();
+          return true;
+        }
+
+        // ---- Viewport switching --------------------------------------------------------------------------------------
+        async function setViewport(v) {
+          const next = viewportFrom(v);
+          if (mode === "image")
+            throw new Error(
+              "A screenshot has one viewport; attach an HTML snapshot or review the live page to switch.",
+            );
+          vpKey = next.key;
+          vp = next.size;
+          renderChrome();
+          if (mode === "live") {
+            await ws.preview.setViewport({ width: vp.width, height: vp.height });
+            await liveCapture();
+          } else if (mode === "page") {
+            touched.clear();
+            await annotator.setPage(snapshotDoc, {
+              viewport: { width: vp.width, height: vp.height },
+            });
+            applyTweakPreview();
+          }
+          persist();
+          renderAll();
+        }
+
+        // ---- Crops ---------------------------------------------------------------------------------------------------
+        // Why crops cannot be made right now, or null when they can.
+        function cropBlocker() {
+          if (mode === "image") return null;
+          if (mode === "live") return live.shot ? null : "the live page has not been captured yet";
+          if (!pageShot) return "no screenshot was attached with the HTML snapshot";
+          if (pageShot.cssWidth !== vp.width)
+            return `the screenshot is ${pageShot.cssWidth} px wide; switch back to that viewport for crops`;
+          return null;
+        }
+        async function cropRegion(rect) {
+          const src = mode === "live" ? live.shot : pageShot;
+          const blocker = cropBlocker();
+          if (blocker) throw new Error(`No crop: ${blocker}`);
+          const s = src.scale;
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(rect.width * s));
+          canvas.height = Math.max(1, Math.round(rect.height * s));
+          canvas
+            .getContext("2d")
+            .drawImage(
+              src.bitmap,
+              rect.x * s,
+              rect.y * s,
+              rect.width * s,
+              rect.height * s,
+              0,
+              0,
+              canvas.width,
+              canvas.height,
+            );
+          return canvas;
+        }
+
+        // ---- The hand-off: JSON + Markdown + crops --------------------------------------------------------------------
+        function sourceInfo() {
+          if (mode === "live")
+            return { kind: "live", url: live.session.url, title: live.session.title };
+          return {
+            kind: mode === "page" ? "html-snapshot" : "screenshot",
+            snapshot: htmlAsset ? htmlAsset.name : null,
+            screenshot: imageAsset ? imageAsset.name : null,
+          };
+        }
+        function publicRecord(r) {
+          const out = {
+            number: r.number,
+            id: r.id,
+            kind: r.kind,
+            status: r.status,
+            priority: r.priority,
+            note: r.note,
+            viewport: r.viewport,
+          };
+          if (r.url) out.url = r.url;
+          if (r.selector) {
+            out.selector = r.selector;
+            out.found = r.found;
+            const keep = {};
+            for (const p of [...TWEAK_PROPS, ...CONTEXT_STYLES])
+              if (r.element.styles[p] !== undefined) keep[p] = r.element.styles[p];
+            out.element = {
+              tag: r.element.tag,
+              classes: r.element.classes,
+              text: r.element.text,
+              styles: keep,
+            };
+          }
+          out.bounds = r.bounds;
+          if (r.points && r.kind !== "element")
+            out.points = r.points.map((p) => ({ x: round(p.x), y: round(p.y) }));
+          if (r.tweaks.length) {
+            out.proposedCss = r.tweaks.map((t) => ({
+              property: t.property,
+              from: t.from,
+              to: t.to,
+            }));
+          }
+          if (r.crop) out.crop = r.crop;
+          return out;
+        }
+        function markdownFor(review, blocker) {
+          const src = review.source;
+          const size = `${review.viewport.width} × ${review.viewport.height}`;
+          const where =
+            src.kind === "live"
+              ? `the live page ${src.url} at ${review.viewport.label} ${size}`
+              : src.kind === "html-snapshot"
+                ? `the HTML snapshot ${src.snapshot} at ${review.viewport.label} ${size}`
+                : `the screenshot ${src.screenshot} (${size} px)`;
+          const open = review.changes.filter((c) => c.status === "open");
+          const byPriority = Object.keys(PRIORITIES)
+            .map((p) => [p, open.filter((c) => c.priority === p).length])
+            .filter(([, n]) => n)
+            .map(([p, n]) => `${n} ${p}`)
+            .join(", ");
+          const lines = [
+            `## Design Review: ${review.title}`,
+            "",
+            `Reviewed ${where}. ${open.length} open change${open.length === 1 ? "" : "s"}${byPriority ? ` (${byPriority})` : ""}${review.counts.resolved ? `; ${review.counts.resolved} resolved` : ""}.`,
+            src.kind === "screenshot"
+              ? "Boxes are screenshot px from the top left."
+              : "Boxes are CSS px from the top of the document.",
+            "",
+          ];
+          for (const c of review.changes) {
+            const what = c.selector
+              ? `\`${c.selector}\``
+              : c.kind === "pin"
+                ? `Pin at ${c.bounds.x}, ${c.bounds.y} px`
+                : `${KIND_LABEL[c.kind]} at ${boundsText(c.bounds)} px`;
+            const status = c.status === "resolved" ? " (resolved)" : "";
+            lines.push(
+              `${c.number}. **[${PRIORITIES[c.priority]}]** ${what}${status}: ${c.note.trim() || "No note; see the crop."}`,
+            );
+            if (c.element && c.element.text)
+              lines.push(`   - Text: "${c.element.text.slice(0, 80)}"`);
+            if (c.selector)
+              lines.push(
+                `   - Box: ${boundsText(c.bounds)} px${c.found ? "" : " (not found on the page any more)"}`,
+              );
+            if (c.proposedCss) {
+              lines.push(
+                `   - Proposed CSS: ${c.proposedCss.map((t) => `\`${t.property}: ${t.from ? `${t.from} → ` : ""}${t.to}\``).join(", ")}`,
+              );
+            }
+            if (
+              c.viewport !==
+              `${review.viewport.label} ${review.viewport.width} × ${review.viewport.height}`
+            )
+              lines.push(`   - Marked at ${c.viewport}`);
+            if (c.url && src.kind === "live" && c.url !== src.url) lines.push(`   - On ${c.url}`);
+            if (c.crop) lines.push(`   - Crop: ${c.crop}`);
+          }
+          const extras = Object.entries(review.controls ?? {});
+          if (extras.length)
+            lines.push(
+              "",
+              `Review fields: ${extras.map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(", ")}.`,
+            );
+          lines.push(
+            "",
+            `${review.file} has every change with its selector, box, computed styles and proposed CSS${blocker ? "" : ", and each crop is attached"}.${blocker ? ` No crops: ${blocker}.` : ""}`,
+          );
+          return `${lines.join("\n")}\n`;
+        }
+        // Crops and boxes describe the page as it is: lift the tweak preview while the hand-off is built.
+        async function withoutPreview(fn) {
+          if (mode === "live") {
+            if (!live.css) return fn();
+            await live.styling;
+            await ws.preview.setStyles("");
+            await liveCapture();
+            try {
+              return await fn();
+            } finally {
+              await ws.preview.setStyles(live.css);
+              await liveCapture();
+            }
+          }
+          if (mode !== "page" || !tweakPreview || touched.size === 0) return fn();
+          tweakPreview = false;
+          applyTweakPreview();
+          try {
+            return await fn();
+          } finally {
+            tweakPreview = true;
+            applyTweakPreview();
+          }
+        }
+        function buildPackage(opts) {
+          return withoutPreview(() => packageNow(opts));
+        }
+        async function packageNow({ onlyOpen }) {
+          const all = records();
+          const recs = onlyOpen ? all.filter((r) => r.status === "open") : all;
+          let blocker = cropBlocker();
+          if (!blocker && recs.length > MAX_CROPS)
+            blocker = `more than ${MAX_CROPS} changes; select fewer or resolve some`;
+          const crops = [];
+          if (!blocker) {
+            for (const r of recs) {
+              const blob = await annotator.cropImage(r.id, { pad: 16, pinSize: 0.16 });
+              r.crop = `change-${pad2(r.number)}.png`;
+              crops.push(new File([blob], r.crop, { type: "image/png" }));
+            }
+          }
+          const name = `${fileBase(OPTS.title)}.json`;
+          const review = {
+            v: 1,
+            kind: "design-review",
+            title: OPTS.title,
+            file: name,
+            source: sourceInfo(),
+            viewport: { label: vp.label, width: vp.width, height: vp.height },
+            createdAt: new Date().toISOString(),
+            counts: {
+              open: all.filter((r) => r.status === "open").length,
+              resolved: all.filter((r) => r.status === "resolved").length,
+            },
+            changes: recs.map(publicRecord),
+            controls: rt.state(),
+          };
+          if (blocker) review.crops = { omitted: blocker };
+          const json = new File([JSON.stringify(review, null, 2)], name, {
+            type: "application/json",
+          });
+          return { review, json, markdown: markdownFor(review, blocker), crops };
+        }
+        // Called from the Send button's click (and Mod+Enter): the user's own hand-off to the agent.
+        async function sendToAgent() {
+          const open = records().filter((r) => r.status === "open");
+          if (!open.length) {
+            setStatus("Nothing open to send: add a change or reopen one");
+            return null;
+          }
+          flushNote();
+          sending = true;
+          renderChrome();
+          setStatus(`Preparing ${open.length} change${open.length === 1 ? "" : "s"}`);
+          const pkg = await buildPackage({ onlyOpen: true }).finally(() => {
+            sending = false;
+          });
+          sending = true;
+          await ws.send(pkg.markdown, { files: [pkg.json, ...pkg.crops] }).finally(() => {
+            sending = false;
+            renderChrome();
+          });
+          lastSent = `sent ${open.length} at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+          setStatus(
+            `Sent ${open.length} change${open.length === 1 ? "" : "s"} to the agent with ${pkg.crops.length} crop${pkg.crops.length === 1 ? "" : "s"}`,
+          );
+          renderChrome();
+          return { text: pkg.markdown, files: [pkg.json, ...pkg.crops].map((f) => f.name) };
+        }
+        async function exportReview() {
+          if (!annotator || !mode) throw new Error(`${ID}: the review is not ready yet`);
+          if (!annotations().length) throw new Error(`${ID}: there are no changes to export`);
+          const pkg = await buildPackage({ onlyOpen: false });
+          const md = new File([pkg.markdown], `${fileBase(OPTS.title)}.md`, {
+            type: "text/markdown",
+          });
+          const files = [pkg.json, md, ...pkg.crops];
+          for (const f of files) {
+            await ws.attach(f);
+            await ws.download(f, f.name);
+          }
+          setStatus(`Exported ${files.length} files`);
+          return files;
+        }
+
+        // ---- Changes from options and scripts ----------------------------------------------------------------------
+        // Adds one change: { selector | node | x, y | rect, note, priority?, tweaks? } -> id. No history step.
+        async function addChangeRaw(spec) {
+          const priority = spec.priority ?? "medium";
+          if (!hasOwn(PRIORITIES, priority))
+            throw new RangeError(`priority must be ${Object.keys(PRIORITIES).join(", ")}`);
+          let selector = spec.selector;
+          if (spec.node !== undefined) {
+            const root = pageRoot();
+            if (!root || !(spec.node instanceof Element) || !root.contains(spec.node))
+              throw new TypeError("addChange: node must be an element of t3template.page()");
+            selector = selectorFor(spec.node, root);
+          }
+          let id;
+          if (selector !== undefined) {
+            if (mode === "page") {
+              id = annotator.addElement(selector, { note: spec.note }).id;
+            } else if (mode === "live") {
+              const found = await ws.preview.inspect(selector);
+              if (!found)
+                throw new Error(`addChange: no element matches "${selector}" on the live page`);
+              id = addLivePick(found, { note: spec.note, priority });
+            } else throw new Error("addChange: a screenshot has no elements; give x, y or rect");
+          } else {
+            const a = { id: nextId(), note: spec.note, status: "open" };
+            if (spec.rect) Object.assign(a, { kind: "rect", rect: { ...spec.rect } });
+            else Object.assign(a, { kind: "pin", points: [{ x: spec.x, y: spec.y }] });
+            annotator.set({ annotations: [...annotations(), a] });
+            id = a.id;
+          }
+          const m = metaFor(id);
+          m.priority = priority;
+          if (mode === "live") m.url = live.session.url;
+          if (spec.tweaks !== undefined) {
+            if (!isPlain(spec.tweaks))
+              throw new TypeError("addChange: tweaks is { property: value }");
+            for (const [prop, value] of Object.entries(spec.tweaks)) {
+              if (!TWEAK_PROPS.has(prop))
+                throw new RangeError(
+                  `addChange: tweak "${prop}" is not one of ${[...TWEAK_PROPS].join(", ")}`,
+                );
+              if (!validTweak(prop, value))
+                throw new RangeError(`addChange: "${value}" is not a valid ${prop}`);
+              m.tweaks[prop] = value.trim();
+            }
+          }
+          return id;
+        }
+        // A stable selector inside the snapshot for a bolt-on's node: an id, else tag + nth-of-type steps.
+        function selectorFor(node, root) {
+          const steps = [];
+          for (
+            let cur = node;
+            cur && cur.nodeType === 1 && cur.localName !== "html";
+            cur = cur.parentElement
+          ) {
+            if (cur.id && root.querySelectorAll(`#${CSS.escape(cur.id)}`).length === 1) {
+              steps.unshift(`#${CSS.escape(cur.id)}`);
+              break;
+            }
+            const same = cur.parentElement
+              ? [...cur.parentElement.children].filter((c) => c.localName === cur.localName)
+              : [];
+            steps.unshift(
+              same.length > 1
+                ? `${cur.localName}:nth-of-type(${same.indexOf(cur) + 1})`
+                : cur.localName,
+            );
+            if (root.querySelectorAll(steps.join(" > ")).length === 1) break;
+          }
+          return steps.join(" > ");
+        }
+        async function applyInitialNotes() {
+          for (const n of OPTS.notes) {
+            const spec = { note: n.note, priority: n.priority };
+            if (typeof n.selector === "string") spec.selector = n.selector;
+            else if (n.rect) spec.rect = n.rect;
+            else Object.assign(spec, { x: n.x, y: n.y });
+            if (spec.selector !== undefined && mode === "image") {
+              console.warn(
+                `${ID}: notes with a selector need an HTML snapshot or a live page; "${n.selector}" skipped.`,
+              );
+              continue;
+            }
+            await addChangeRaw(spec);
+          }
+          lastAnnotations = annotations();
+        }
+
+        // ---- Runtime values ------------------------------------------------------------------------------------------
+        function getValues() {
+          return {
+            title: OPTS.title,
+            mode,
+            source: sourceInfo(),
+            viewport: { name: vpKey, width: vp.width, height: vp.height },
+            hideResolved,
+            changes: records().map(publicRecord),
+          };
+        }
+        function setValues(partial, label) {
+          const { viewport, changes, hideResolved: hide, ...rest } = partial;
+          const unknown = Object.keys(rest);
+          if (unknown.length)
+            throw new Error(
+              `setValues: unknown key "${unknown[0]}" (use viewport, changes, hideResolved)`,
+            );
+          if (viewport !== undefined && !viewportOk(viewport))
+            throw new Error(
+              `setValues: viewport must be ${Object.keys(VIEWPORTS).join(", ")} or { width, height }`,
+            );
+          if (hide !== undefined && typeof hide !== "boolean")
+            throw new Error("setValues: hideResolved must be a boolean");
+          if (changes !== undefined) {
+            if (!Array.isArray(changes))
+              throw new Error(
+                "setValues: changes must be [{ id, note?, priority?, status?, tweaks? }]",
+              );
+            const ids = new Set(annotations().map((a) => a.id));
+            for (const c of changes) {
+              if (!isPlain(c) || !ids.has(c.id))
+                throw new Error(`setValues: no change with id ${JSON.stringify(c && c.id)}`);
+              const extra = Object.keys(c).filter(
+                (k) => !["id", "note", "priority", "status", "tweaks"].includes(k),
+              );
+              if (extra.length)
+                throw new Error(
+                  `setValues: change key "${extra[0]}" is not note, priority, status or tweaks`,
+                );
+              if (c.note !== undefined && typeof c.note !== "string")
+                throw new Error("setValues: note must be a string");
+              if (c.priority !== undefined && !hasOwn(PRIORITIES, c.priority))
+                throw new Error("setValues: priority must be high, medium or low");
+              if (c.status !== undefined && c.status !== "open" && c.status !== "resolved")
+                throw new Error("setValues: status must be open or resolved");
+              if (c.tweaks !== undefined) {
+                if (!isPlain(c.tweaks))
+                  throw new Error("setValues: tweaks is { property: value | '' }");
+                for (const [p, v] of Object.entries(c.tweaks)) {
+                  if (!TWEAK_PROPS.has(p))
+                    throw new Error(
+                      `setValues: tweak "${p}" is not one of ${[...TWEAK_PROPS].join(", ")}`,
+                    );
+                  if (v !== "" && !validTweak(p, v))
+                    throw new Error(`setValues: "${v}" is not a valid ${p}`);
+                }
+              }
+            }
+          }
+          flushNote();
+          return (async () => {
+            if (viewport !== undefined) await setViewport(viewport);
+            if (hide !== undefined) hideResolved = hide;
+            if (changes !== undefined) {
+              const anns = annotations();
+              for (const c of changes) {
+                const a = anns.find((x) => x.id === c.id);
+                if (c.note !== undefined) a.note = c.note;
+                if (c.status !== undefined) a.status = c.status;
+                const m = metaFor(c.id);
+                if (c.priority !== undefined) m.priority = c.priority;
+                for (const [p, v] of Object.entries(c.tweaks ?? {})) {
+                  if (v === "") delete m.tweaks[p];
+                  else m.tweaks[p] = v.trim();
+                }
+              }
+              annotator.set({ annotations: anns });
+              if (selectedId) annotator.select(selectedId);
+            }
+            edited(label);
+            return getValues();
+          })();
+        }
+
+        // ---- Persistence ---------------------------------------------------------------------------------------------
+        function persist() {
+          if (!booted) return;
+          clearTimeout(persistTimer);
+          persistTimer = setTimeout(() => {
+            ws.setState({
+              v: 1,
+              key: ID,
+              values: getState(),
+              history: historyObj.get(),
+              viewport: hasOwn(VIEWPORTS, vpKey) ? vpKey : { width: vp.width, height: vp.height },
+              hideResolved,
+              tweakPreview,
+              controls: rt.state(),
+            });
+          }, 300);
+        }
+
+        // ---- Errors ----------------------------------------------------------------------------------------------------
+        function showError(err) {
+          rt.reportError(err, ID);
+        }
+        function guard(fn) {
+          return (e) => {
+            if (!booted) return;
+            Promise.resolve()
+              .then(() => fn(e))
+              .catch(showError);
+          };
+        }
+
+        // ---- Runtime ---------------------------------------------------------------------------------------------------
+        rt = t3kit.templateRuntime.create({
+          id: ID,
+          pipeline: "data",
+          // 'top': right below Changes (so the list stays first and the panel is in view); 'bottom': after Keys.
+          addPanel(title, { open, position }) {
+            const section = document.createElement("details");
+            section.className = "panel";
+            section.open = open;
+            const summary = document.createElement("summary");
+            summary.textContent = title;
+            const body = document.createElement("div");
+            body.className = "panel-body";
+            section.append(summary, body);
+            const panels = $("panels");
+            if (position === "top") {
+              const changes = panels.querySelector('[data-panel="changes"]');
+              let after = changes;
+              while (after.nextElementSibling && after.nextElementSibling.dataset.boltOn === "top")
+                after = after.nextElementSibling;
+              section.dataset.boltOn = "top";
+              after.after(section);
+            } else panels.append(section);
+            return body;
+          },
+          toolbar: $("extra-tools"),
+          buttonClass: "btn",
+          getValues,
+          setValues,
+          export: () => exportReview(),
+          reservedKeys: RESERVED_KEYS,
+          onBoltOnChange() {
+            renderAll();
+            persist();
+          },
+        });
+
+        // ---- Wiring ----------------------------------------------------------------------------------------------------
+        function buildToolbar() {
+          for (const [name, label, key] of TOOLS) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.tool = name;
+            b.title = `${label} (${key.toUpperCase()})`;
+            b.append(`${label} `);
+            const k = document.createElement("kbd");
+            k.className = "hide-md";
+            k.textContent = key.toUpperCase();
+            b.append(k);
+            b.addEventListener(
+              "click",
+              guard(() => setTool(name)),
+            );
+            $("tools").append(b);
+          }
+          for (const [key, v] of Object.entries(VIEWPORTS)) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.vp = key;
+            b.append(`${v.label} `);
+            const k = document.createElement("kbd");
+            k.className = "hide-md";
+            k.textContent = v.key.toUpperCase();
+            b.append(k);
+            b.addEventListener(
+              "click",
+              guard(() => setViewport(key)),
+            );
+            $("viewports").append(b);
+          }
+        }
+        buildToolbar();
+        $("undo").addEventListener(
+          "click",
+          guard(() => historyObj.canUndo() && historyObj.undo()),
+        );
+        $("redo").addEventListener(
+          "click",
+          guard(() => historyObj.canRedo() && historyObj.redo()),
+        );
+        $("resolve").addEventListener(
+          "click",
+          guard(() => selectedId && toggleResolved(selectedId)),
+        );
+        $("delete").addEventListener(
+          "click",
+          guard(() => selectedId && removeChange(selectedId)),
+        );
+        $("hide-resolved").addEventListener(
+          "click",
+          guard(() => {
+            hideResolved = !hideResolved;
+            renderAll();
+            persist();
+          }),
+        );
+        $("refresh").addEventListener(
+          "click",
+          guard(() => reloadLive()),
+        );
+        $("export").addEventListener(
+          "click",
+          guard(() => api.export()),
+        );
+        $("send").addEventListener(
+          "click",
+          guard(() => sendToAgent()),
+        );
+        wireLiveLayer();
+
+        const isTyping = (t) =>
+          t instanceof HTMLElement &&
+          (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+        // Capture phase: undo/redo belong to the template's history, tool keys to this toolbar (the live Element
+        // tool is the template's own), and the live picker's arrows to the live hover.
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (!booted || isTyping(e.target)) return;
+            const mod = e.metaKey || e.ctrlKey;
+            const key = e.key.toLowerCase();
+            if (mod && !e.altKey && (key === "z" || key === "y")) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (key === "y" || e.shiftKey) {
+                if (historyObj.canRedo()) historyObj.redo();
+              } else if (historyObj.canUndo()) historyObj.undo();
+              return;
+            }
+            if (live.pick && !mod && !e.altKey) {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                setTool("select");
+                return;
+              }
+              if (livePickKey(e)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
+            }
+            if (mod || e.altKey || e.shiftKey || e.repeat) return;
+            if (hasOwn(TOOL_FOR_KEY, key)) {
+              e.preventDefault();
+              e.stopPropagation();
+              guard(() => setTool(TOOL_FOR_KEY[key]))();
+            }
+          },
+          true,
+        );
+        document.addEventListener("keydown", (e) => {
+          if (!booted || isTyping(e.target)) return;
+          // The annotator handled Esc, X, Del or arrows itself (focus was on it): only re-sync the toolbar.
+          const inAnnotator = e.target instanceof Element && !!e.target.closest("#annotator");
+          if (e.defaultPrevented || (inAnnotator && e.key === "Escape")) {
+            renderChrome();
+            return;
+          }
+          const mod = e.metaKey || e.ctrlKey;
+          const key = e.key.toLowerCase();
+          let action = null;
+          if (mod && !e.altKey && key === "enter") action = () => sendToAgent();
+          else if (mod && !e.altKey && key === "e") action = () => api.export();
+          else if (mod || e.altKey || e.repeat) return;
+          else if (
+            !e.shiftKey &&
+            Object.values(VIEWPORTS).some((v) => v.key === key) &&
+            mode !== "image"
+          ) {
+            action = () =>
+              setViewport(Object.keys(VIEWPORTS).find((k) => VIEWPORTS[k].key === key));
+          } else if (key === "l" && mode === "live") action = () => reloadLive();
+          else if (key === "h")
+            action = () => {
+              hideResolved = !hideResolved;
+              renderAll();
+              persist();
+            };
+          else if (hasOwn(PRIORITY_KEYS, key) && selectedId)
+            action = () => setPriority(selectedId, PRIORITY_KEYS[key]);
+          else if (key === "x" && selectedId) action = () => toggleResolved(selectedId);
+          else if ((key === "delete" || key === "backspace") && selectedId)
+            action = () => removeChange(selectedId);
+          else if (key === "escape")
+            action = () => {
+              if (annotator.getTool() !== "select") setTool("select");
+              else annotator.select(null);
+            };
+          if (!action) {
+            renderChrome();
+            return;
+          }
+          e.preventDefault();
+          guard(action)();
+        });
+
+        // ---- Boot --------------------------------------------------------------------------------------------------------
+        function pickAsset(list, name, ok, what) {
+          if (name === "none") return null;
+          if (name) {
+            const hit = list.find((a) => a.name === name);
+            if (!hit)
+              throw new Error(
+                `${ID}: no attached ${what} named "${name}" (attached: ${list.map((a) => a.name).join(", ") || "none"})`,
+              );
+            if (!ok(hit))
+              throw new Error(
+                `${ID}: "${name}" is not ${what === "HTML snapshot" ? "an" : "a"} ${what}`,
+              );
+            return hit;
+          }
+          return list.find(ok) ?? null;
+        }
+        async function openLive() {
+          const hasPreview = !!(ws.preview && typeof ws.preview.open === "function");
+          if (!hasPreview) return { error: "this T3 client has no live preview" };
+          return ws.preview
+            .open(OPTS.url || undefined, { viewport: { width: vp.width, height: vp.height } })
+            .then(
+              (session) => ({ session }),
+              (err) => ({ error: err && err.message ? err.message : String(err) }),
+            );
+        }
+        async function boot() {
+          const ready = await ws.ready();
+          const saved = ready.state ?? (await ws.initialState()) ?? null;
+          const restored =
+            isPlain(saved) &&
+            saved.v === 1 &&
+            saved.key === ID &&
+            isPlain(saved.values) &&
+            isPlain(saved.history)
+              ? saved
+              : null;
+          const assets = ready.assets ?? [];
+          const startVp = viewportFrom(
+            restored && viewportOk(restored.viewport) ? restored.viewport : OPTS.viewport,
+          );
+          vpKey = startVp.key;
+          vp = startVp.size;
+          if (restored) {
+            hideResolved = restored.hideResolved === true;
+            tweakPreview = restored.tweakPreview !== false;
+          }
+          htmlAsset =
+            OPTS.mode === "live"
+              ? null
+              : pickAsset(assets, OPTS.snapshot, isHtmlAsset, "HTML snapshot");
+          imageAsset =
+            OPTS.mode === "live"
+              ? null
+              : pickAsset(assets, OPTS.screenshot, isImageAsset, "screenshot");
+          annotator = t3kit.annotator.create($("annotator"), {
+            list: false,
+            screenshot: cropRegion,
+          });
+          annotator.on("change", (value) => {
+            if (booted) onAnnotatorChange(value);
+          });
+          annotator.on("select", onSelect);
+
+          const wantLive = OPTS.mode === "live" || (OPTS.mode === "auto" && OPTS.url !== "");
+          if (wantLive) {
+            const r = await openLive();
+            if (r.session) {
+              mode = "live";
+              live.session = r.session;
+            } else if (OPTS.mode === "live" || (!htmlAsset && !imageAsset)) {
+              throw new Error(
+                `Live preview of ${OPTS.url || "the declared page"} failed: ${r.error}.`,
+              );
+            } else {
+              notice = `live preview unavailable (${r.error}), showing the snapshot`;
+              rt.showBanner(
+                `Live preview unavailable: ${r.error}. Reviewing the attached snapshot instead.`,
+              );
+            }
+          }
+          if (!mode) mode = htmlAsset ? "page" : imageAsset ? "image" : null;
+          if (!mode) {
+            throw new Error(
+              "Nothing to review: attach an HTML snapshot (.html) and/or a full-page screenshot (PNG or JPEG), or pass url for a live preview of a running site.",
+            );
+          }
+          if (mode === "live") {
+            ws.on("preview-changed", (change) => {
+              if (!booted || !live.session || change.sessionId !== live.session.sessionId) return;
+              live.session = { ...live.session, url: change.url, title: change.title };
+              if (change.reason === "closed") {
+                setStatus("The live page closed; Refresh (L) opens it again");
+                live.shot = null;
+                live.closed = true;
+                return;
+              }
+              queueLiveCapture();
+              renderChrome();
+            });
+            // A finished agent turn may have changed the site: show the result without a manual Refresh.
+            ws.on("agent-status", (status) => {
+              if (status === "working") {
+                live.agentWorking = true;
+                return;
+              }
+              if (status !== "idle" || !live.agentWorking || !booted) return;
+              live.agentWorking = false;
+              reloadLive().catch(showError);
+            });
+            await liveCapture();
+          } else if (mode === "page") {
+            snapshotDoc = parseSnapshot(await htmlAsset.file.text());
+            await annotator.setPage(snapshotDoc, {
+              viewport: { width: vp.width, height: vp.height },
+            });
+            if (imageAsset) {
+              const bitmap = await createImageBitmap(imageAsset.file);
+              pageShot = {
+                bitmap,
+                cssWidth: startVp.size.width,
+                scale: bitmap.width / startVp.size.width,
+              };
+            }
+          } else {
+            const size = await annotator.setImage(imageAsset.file);
+            vpKey = "screenshot";
+            vp = { label: "Screenshot", width: size.width, height: size.height };
+          }
+          $("stage-empty").hidden = true;
+          if (!restored) await applyInitialNotes();
+          historyObj = t3kit.history.create($("history"), { title: "History", keys: false });
+          if (restored) historyObj.set(restored.history);
+          link = rt.linkHistory(historyObj, getState, applyState);
+          historyObj.on("change", () => {
+            renderChrome();
+            persist();
+            rt.emitChange();
+          });
+          api = rt.publish({
+            instances: { annotator, history: historyObj },
+            saved: restored ? restored.controls : undefined,
+            extras: {
+              addChange(spec) {
+                if (!isPlain(spec) || typeof (spec.note ?? "") !== "string")
+                  throw new TypeError(
+                    "addChange({ selector | node | x, y | rect, note, priority?, tweaks? })",
+                  );
+                return addChangeRaw({ ...spec, note: spec.note ?? "" }).then((id) => {
+                  edited(`Add ${numberOf(id)}`);
+                  return id;
+                });
+              },
+              page: () => pageRoot(),
+              selectorOf(node) {
+                const root = pageRoot();
+                if (!root || !(node instanceof Element) || !root.contains(node))
+                  throw new TypeError("selectorOf: node must be an element of t3template.page()");
+                return selectorFor(node, root);
+              },
+              send: () => sendToAgent(),
+            },
+          });
+          lastAnnotations = annotations();
+          booted = true;
+          const tool = OPTS.tool === "auto" ? (mode === "image" ? "pin" : "element") : OPTS.tool;
+          setTool(tool === "element" && mode === "image" ? "pin" : tool);
+          applyTweakPreview();
+          renderAll();
+          persist();
+          rt.runCustomScript(OPTS.customScript, OPTS);
+        }
+        $("title").textContent = OPTS.title;
+        document.title = OPTS.title;
+        renderChrome();
+        boot().catch((err) => {
+          console.error(err);
+          $("stage-empty").hidden = false;
+          $("stage-empty-text").textContent = err && err.message ? err.message : String(err);
+          $("mode").textContent = "Not Ready";
+        });
+      })();
+    </script>
+  </body>
+</html>
