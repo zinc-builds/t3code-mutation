@@ -28,6 +28,8 @@ import * as Schema from "effect/Schema";
 import * as ServerConfig from "../config.ts";
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
+import { WORKSPACE_MUTATE_TOOL_NAME } from "@t3tools/shared/mutationWorkspace";
+import { matchInstantWorkspace } from "../mutationWorkspace/instantWorkspace.ts";
 import * as WorkspaceTurnContext from "../mutationWorkspace/WorkspaceTurnContext.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
@@ -525,6 +527,79 @@ export const layer: Layer.Layer<
           }
         },
       );
+      // Before the provider starts, because the model's first response takes seconds.
+      const instantMatch =
+        message.createdBy === "user" && sideChatHandoff === undefined
+          ? matchInstantWorkspace({
+              text: message.text,
+              hasImageAttachment: message.attachments.some(
+                (attachment) => attachment.type === "image",
+              ),
+            })
+          : undefined;
+      const instantWorkspace =
+        instantMatch === undefined
+          ? Option.none<WorkspaceTurnContext.InstantWorkspaceOpened>()
+          : yield* Effect.gen(function* () {
+              const project = yield* projects
+                .getById(projection.thread.projectId)
+                .pipe(Effect.map(Option.getOrUndefined));
+              const cwd = projection.thread.worktreePath ?? project?.workspaceRoot;
+              if (cwd === undefined) return Option.none();
+              return yield* workspaceTurnContext.openInstant({
+                threadId: projection.thread.id,
+                cwd,
+                text: message.text,
+                match: instantMatch,
+              });
+            }).pipe(Effect.orElseSucceed(() => Option.none()));
+      if (Option.isSome(instantWorkspace)) {
+        const now = yield* DateTime.now;
+        const item: OrchestrationV2TurnItem = {
+          id: idAllocator.derive.runSignalTurnItem({ runId, signal: "instant-workspace" }),
+          threadId: projection.thread.id,
+          runId,
+          nodeId: rootNode.id,
+          providerThreadId: providerThread.id,
+          providerTurnId: null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal:
+            Math.max(
+              0,
+              ...projection.turnItems
+                .filter((candidate) => candidate.runId === runId)
+                .map((candidate) => candidate.ordinal),
+            ) + 1,
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+          updatedAt: now,
+          type: "dynamic_tool",
+          title: "Workspace",
+          toolName: `mcp__t3-code__${WORKSPACE_MUTATE_TOOL_NAME}`,
+          input: instantWorkspace.value.input,
+          output: instantWorkspace.value.output,
+        };
+        yield* eventSink.writeIfRunCurrent({
+          threadId: projection.thread.id,
+          runId,
+          activeAttemptId: attempt.id,
+          expectedStatus: "starting",
+          events: [
+            {
+              type: "turn-item.updated",
+              payload: item,
+              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+              threadId: projection.thread.id,
+              runId,
+              nodeId: rootNode.id,
+              providerInstanceId: run.providerInstanceId,
+              occurredAt: now,
+            } satisfies OrchestrationV2DomainEvent,
+          ],
+        });
+      }
       const settleStartFailure = Effect.fn("ProviderTurnStartService.settleStartFailure")(
         function* (failed: {
           readonly signal: string;
@@ -858,8 +933,11 @@ export const layer: Layer.Layer<
         records: message.context?.records ?? [],
       });
       // The prompt only: the thread keeps the message as the user wrote it.
+      const leadingContext = Option.isSome(instantWorkspace)
+        ? instantWorkspace.value.context
+        : workspaceContext;
       const userText =
-        workspaceContext === "" ? composedText : `${workspaceContext}\n\n${composedText}`;
+        leadingContext === "" ? composedText : `${leadingContext}\n\n${composedText}`;
       // Codex and Claude parse /goal from the prompt, so it goes verbatim and history waits a turn.
       const goalDriver = session.driver === "codex" || session.driver === "claudeAgent";
       const goalCommand = goalDriver && parseGoalCommand(message) !== null;

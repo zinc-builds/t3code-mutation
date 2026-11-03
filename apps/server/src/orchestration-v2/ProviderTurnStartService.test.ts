@@ -290,6 +290,12 @@ function makeLocalCommandHarness(input: {
   readonly failReadsAfterRunning?: boolean;
   /** What the thread's open workspace adds to a user's message. */
   readonly workspaceContext?: string;
+  /** What opening an instant workspace returns, when the message asks for one. */
+  readonly instantWorkspace?: {
+    readonly input: unknown;
+    readonly output: unknown;
+    readonly context: string;
+  };
   readonly previousTurn?: {
     readonly runStatus: "failed" | "completed";
     readonly turnStatus: "running" | "completed" | "interrupted";
@@ -966,6 +972,7 @@ function makeLocalCommandHarness(input: {
         }),
         Layer.mock(WorkspaceTurnContext.WorkspaceTurnContext)({
           forUserMessage: () => Effect.succeed(input.workspaceContext ?? ""),
+          openInstant: () => Effect.succeed(Option.fromNullishOr(input.instantWorkspace)),
         }),
       ),
     ),
@@ -1708,6 +1715,34 @@ effectIt.effect("does not mistake a failed state read for a superseded run", () 
     const finalizeCheck = yield* Effect.flip(controls.shouldFinalizeRun!());
     expect(startCheck._tag).toBe("ProjectionStoreReadError");
     expect(finalizeCheck._tag).toBe("ProjectionStoreReadError");
+  }),
+);
+
+effectIt.effect("opens an obvious request's workspace before the provider starts", () =>
+  Effect.gen(function* () {
+    const instantWorkspace = {
+      input: { title: "sunset.jpg", template: { id: "photo-develop" }, assets: [] },
+      output: { structuredContent: { mutationWorkspace: { attachmentId: "instant" } } },
+      context: "<workspace_context>already open</workspace_context>",
+    };
+    const text = "Open sunset.jpg in an editor so I can grade it myself.";
+    const harness = makeLocalCommandHarness({
+      text,
+      failReadsAfterRunning: true,
+      instantWorkspace,
+    });
+
+    yield* harness.start;
+
+    const started = harness.startRootRun.mock.calls[0]?.[0];
+    expect(started?.message.text).toBe(`${instantWorkspace.context}\n\n${text}`);
+    expect(
+      harness.projection().turnItems.find((item) => item.type === "dynamic_tool"),
+    ).toMatchObject({
+      status: "completed",
+      toolName: "mcp__t3-code__workspace_mutate",
+      output: instantWorkspace.output,
+    });
   }),
 );
 

@@ -2,6 +2,7 @@ import * as GuestShareService from "../guest/GuestShareService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as Layer from "effect/Layer";
+import { FetchHttpClient } from "effect/http";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as OrchestrationCommandReceipts from "../persistence/OrchestrationCommandReceipts.ts";
 import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore.ts";
@@ -57,6 +58,9 @@ import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as WorkspaceState from "../mutationWorkspace/WorkspaceState.ts";
+import * as HtmlRender from "../htmlRender/HtmlRender.ts";
+import * as PreviewBrowser from "../preview/PreviewBrowser.ts";
+import * as MutationWorkspace from "../mutationWorkspace/MutationWorkspace.ts";
 import * as WorkspaceTurnContext from "../mutationWorkspace/WorkspaceTurnContext.ts";
 
 export const layerEventInfrastructure = Layer.mergeAll(
@@ -175,7 +179,19 @@ const layerProviderTurnStartServiceProvided = ProviderTurnStartService.layer.pip
       layerRunExecutionServiceProvided,
       layerRuntimePolicyProvided,
       WorkspaceTurnContext.layer.pipe(
-        Layer.provide(Layer.merge(WorkspaceState.layer, ProjectionStore.layer)),
+        Layer.provide(
+          Layer.mergeAll(
+            WorkspaceState.layer,
+            ProjectionStore.layer,
+            MutationWorkspace.layer.pipe(
+              Layer.provide(
+                HtmlRender.layer.pipe(
+                  Layer.provide(PreviewBrowser.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     ),
   ),

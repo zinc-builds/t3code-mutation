@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 
 import * as ServerConfig from "../config.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as MutationWorkspace from "./MutationWorkspace.ts";
 import * as WorkspaceState from "./WorkspaceState.ts";
 import * as WorkspaceTurnContext from "./WorkspaceTurnContext.ts";
 
@@ -28,6 +29,7 @@ const restore = (id: string) =>
 const layerContext = (items: ReadonlyArray<OrchestrationV2TurnItem>) =>
   WorkspaceTurnContext.layer.pipe(
     Layer.provideMerge(WorkspaceState.layer),
+    Layer.provide(Layer.mock(MutationWorkspace.MutationWorkspace)({})),
     Layer.provide(
       Layer.mock(ProjectionStore.ProjectionStoreV2)({
         getThreadRecords: () => Effect.succeed({ turnItems: items } as never),
