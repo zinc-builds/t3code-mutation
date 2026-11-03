@@ -1,4 +1,5 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import { workspaceKit } from "@t3tools/workspace-kit";
 import * as Effect from "effect/Effect";
 
 import * as MutationWorkspace from "../../../mutationWorkspace/MutationWorkspace.ts";
@@ -7,6 +8,7 @@ import * as WorkspaceState from "../../../mutationWorkspace/WorkspaceState.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { WorkspaceToolkit } from "./tools.ts";
+import { WORKSPACE_GUIDES, workspaceKitIndex } from "./guides.ts";
 
 const INVALID_REQUEST_ERRORS = new Set([
   "HtmlRenderImagesNotFoundError",
@@ -70,7 +72,23 @@ const handlers = {
   workspace_kit_docs: McpToolAccess.reads((input) =>
     Effect.gen(function* () {
       const workspace = yield* MutationWorkspace.MutationWorkspace;
-      return yield* workspace.kitDocs(input.names).pipe(Effect.mapError(toFailure));
+      const names = input.names ?? [];
+      const guideNames = Object.keys(WORKSPACE_GUIDES);
+      if (names.length === 0) {
+        return {
+          catalog: workspaceKitIndex(workspaceKit.catalog),
+          guides: guideNames.map((name) => ({ name, docs: "" })),
+          primitives: [],
+          templates: [],
+        };
+      }
+      const guides = names.flatMap((name) =>
+        guideNames.includes(name) ? [{ name, docs: WORKSPACE_GUIDES[name] ?? "" }] : [],
+      );
+      const kitNames = names.filter((name) => !guideNames.includes(name));
+      if (kitNames.length === 0) return { guides, primitives: [], templates: [] };
+      const docs = yield* workspace.kitDocs(kitNames).pipe(Effect.mapError(toFailure));
+      return { ...docs, guides };
     }),
   ),
   workspace_state: McpToolAccess.readsAsCaller(() =>
