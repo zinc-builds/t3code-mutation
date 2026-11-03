@@ -2,8 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { instantChartsForRequest, matchInstantWorkspace } from "./instantWorkspace.ts";
 
-const match = (text: string, hasImageAttachment = false) =>
-  matchInstantWorkspace({ text, hasImageAttachment });
+const match = (text: string, imageAttachments = 0) =>
+  matchInstantWorkspace({ text, imageAttachments });
 
 describe("matchInstantWorkspace", () => {
   it.each([
@@ -16,11 +16,15 @@ describe("matchInstantWorkspace", () => {
   });
 
   it("leaves a named file with an attached image to the agent", () => {
-    expect(match("Open sunset.jpg in an editor so I can grade it myself.", true)).toBeUndefined();
+    expect(match("Open sunset.jpg in an editor so I can grade it myself.", 1)).toBeUndefined();
+  });
+
+  it("leaves several attached images to the agent", () => {
+    expect(match("open the second one in an editor so I can grade it", 2)).toBeUndefined();
   });
 
   it("opens an attached image", () => {
-    expect(match("open this in an editor so I can grade it", true)).toEqual({
+    expect(match("open this in an editor so I can grade it", 1)).toEqual({
       templateId: "photo-develop",
       file: undefined,
     });
@@ -45,7 +49,7 @@ describe("matchInstantWorkspace", () => {
 describe("instantChartsForRequest", () => {
   const sample = "trip_id,distance_km,duration_min,city\n1,10.2,34.5,Leeds\n2,4.5,19.8,York\n3,1";
   const charts = (text: string, file = "trips.csv") =>
-    instantChartsForRequest({ text, file, sample });
+    instantChartsForRequest({ text, file, sample, truncated: true });
 
   it("charts the two number columns a request names", () => {
     expect(charts("how distance relates to duration")).toEqual([
@@ -63,10 +67,37 @@ describe("instantChartsForRequest", () => {
     expect(charts(text, file)).toBeUndefined();
   });
 
+  it("uses the last row of a whole file with no trailing newline", () => {
+    expect(
+      instantChartsForRequest({
+        text: "distance against duration",
+        file: "a.csv",
+        sample: "distance_km,duration_min\n10,20",
+        truncated: false,
+      }),
+    ).toHaveLength(2);
+  });
+
+  it("does not trust the last line of a cut-off sample", () => {
+    expect(
+      instantChartsForRequest({
+        text: "distance against duration",
+        file: "a.csv",
+        sample: "distance_km,duration_min\n10,20",
+        truncated: true,
+      }),
+    ).toBeUndefined();
+  });
+
   it("skips a word that fits two columns", () => {
     const ambiguous = "time_start,time_end,cost\n1,2,3\n4,5,6\n";
     expect(
-      instantChartsForRequest({ text: "time against cost", file: "a.csv", sample: ambiguous }),
+      instantChartsForRequest({
+        text: "time against cost",
+        file: "a.csv",
+        sample: ambiguous,
+        truncated: false,
+      }),
     ).toBeUndefined();
   });
 });

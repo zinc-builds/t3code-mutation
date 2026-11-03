@@ -44,7 +44,7 @@ const FILE = /(?:^|[\s"'`(])((?:[\w.\-/]*\/)?[\w.-]+\.([a-z0-9]{2,5}))(?=$|[\s"'
 
 export function matchInstantWorkspace(input: {
   readonly text: string;
-  readonly hasImageAttachment: boolean;
+  readonly imageAttachments: number;
 }): InstantWorkspaceMatch | undefined {
   const text = input.text.toLowerCase();
   if (text.trimStart().startsWith("/") || !BY_HAND.test(text) || OTHER_EDITOR.test(text)) {
@@ -56,9 +56,10 @@ export function matchInstantWorkspace(input: {
   }
   const [only, ...others] = named;
   // A named file and an attached image leave which one they mean unclear.
-  if (others.length > 0 || (only !== undefined && input.hasImageAttachment)) return undefined;
+  if (others.length > 0 || (only !== undefined && input.imageAttachments > 0)) return undefined;
   const extension = only?.[1];
-  if (only === undefined && !input.hasImageAttachment) return undefined;
+  // Several images leave which one they mean unclear too.
+  if (only === undefined && input.imageAttachments !== 1) return undefined;
   const template =
     extension === undefined
       ? TEMPLATES[0]
@@ -78,10 +79,14 @@ export function instantChartsForRequest(input: {
   readonly text: string;
   readonly file: string;
   readonly sample: string;
+  /** Whether the sample stops before the end of the file, so its last line may be cut short. */
+  readonly truncated: boolean;
 }) {
   const lines = input.sample.split(/\r?\n/);
-  // The sample stops mid-file, so its last line may be cut short.
-  const rows = lines.slice(1, -1).slice(0, SAMPLE_ROWS);
+  const rows = lines
+    .slice(1, input.truncated ? -1 : undefined)
+    .filter((line) => line.trim() !== "")
+    .slice(0, SAMPLE_ROWS);
   const columns = (lines[0] ?? "").split(/[,\t]/).map((column) => column.trim());
   const isNumberColumn = (index: number) =>
     rows.length > 0 &&

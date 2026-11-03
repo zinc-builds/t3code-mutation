@@ -80,6 +80,7 @@ export interface InstantWorkspaceOpened {
 }
 
 const SAMPLE_BYTES = 8192;
+const EMPTY_SAMPLE = { text: "", truncated: false };
 
 const make = Effect.gen(function* () {
   const workspaceState = yield* WorkspaceState.WorkspaceState;
@@ -130,12 +131,15 @@ const make = Effect.gen(function* () {
       Effect.flatMap((file) => file.readAlloc(SAMPLE_BYTES)),
       Effect.map((bytes) =>
         Option.match(bytes, {
-          onNone: () => "",
-          onSome: (read) => new TextDecoder().decode(read),
+          onNone: () => EMPTY_SAMPLE,
+          onSome: (read) => ({
+            text: new TextDecoder().decode(read),
+            truncated: read.byteLength >= SAMPLE_BYTES,
+          }),
         }),
       ),
       Effect.scoped,
-      Effect.orElseSucceed(() => ""),
+      Effect.orElseSucceed(() => EMPTY_SAMPLE),
     );
 
   // The page lists a thread's images oldest first and photo-develop opens the first, so with
@@ -178,7 +182,9 @@ const make = Effect.gen(function* () {
           : instantChartsForRequest({
               text: input.text,
               file,
-              sample: yield* readSample(asset),
+              ...(yield* readSample(asset).pipe(
+                Effect.map(({ text, truncated }) => ({ sample: text, truncated })),
+              )),
             });
       const template =
         charts === undefined ? { id: templateId } : { id: templateId, options: { charts } };

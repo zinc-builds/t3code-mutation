@@ -532,9 +532,9 @@ export const layer: Layer.Layer<
         message.createdBy === "user" && sideChatHandoff === undefined
           ? matchInstantWorkspace({
               text: message.text,
-              hasImageAttachment: message.attachments.some(
+              imageAttachments: message.attachments.filter(
                 (attachment) => attachment.type === "image",
-              ),
+              ).length,
             })
           : undefined;
       const instantWorkspace =
