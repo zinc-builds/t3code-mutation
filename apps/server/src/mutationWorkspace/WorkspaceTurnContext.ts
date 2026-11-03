@@ -1,4 +1,4 @@
-import type { ThreadId, WorkspaceStateError } from "@t3tools/contracts";
+import type { RunId, ThreadId, WorkspaceStateError } from "@t3tools/contracts";
 import {
   WORKSPACE_MUTATE_TOOL_NAME,
   WORKSPACE_RESTORE_TOOL_NAME,
@@ -63,6 +63,7 @@ export class WorkspaceTurnContext extends Context.Service<
      */
     readonly openInstant: (input: {
       readonly threadId: ThreadId;
+      readonly runId: RunId;
       readonly cwd: string;
       readonly text: string;
       readonly match: InstantWorkspaceMatch;
@@ -78,7 +79,7 @@ export interface InstantWorkspaceOpened {
   readonly context: string;
 }
 
-const HEADER_BYTES = 8192;
+const SAMPLE_BYTES = 8192;
 
 const make = Effect.gen(function* () {
   const workspaceState = yield* WorkspaceState.WorkspaceState;
@@ -123,29 +124,62 @@ const make = Effect.gen(function* () {
     return false;
   });
 
-  const readHeader = (filePath: string) =>
-    fileSystem.readFile(filePath).pipe(
-      Effect.map(
-        (bytes) =>
-          new TextDecoder().decode(bytes.subarray(0, HEADER_BYTES)).split(/\r?\n/, 1)[0] ?? "",
+  // Only the start of the file: a request should not wait on reading a huge dataset.
+  const readSample = (filePath: string) =>
+    fileSystem.open(filePath).pipe(
+      Effect.flatMap((file) => file.readAlloc(SAMPLE_BYTES)),
+      Effect.map((bytes) =>
+        Option.match(bytes, {
+          onNone: () => "",
+          onSome: (read) => new TextDecoder().decode(read),
+        }),
       ),
+      Effect.scoped,
       Effect.orElseSucceed(() => ""),
     );
+
+  // The page lists a thread's images oldest first and photo-develop opens the first, so with
+  // another image in the thread only the agent can pick the one this message means.
+  const hasOtherThreadImages = Effect.fn("WorkspaceTurnContext.hasOtherThreadImages")(function* (
+    threadId: ThreadId,
+    runId: RunId,
+  ) {
+    const { turnItems } = yield* projectionStore.getThreadRecords(threadId, ["turnItems"], {
+      turnItemTypes: ["user_message"],
+    });
+    return turnItems.some(
+      (item) =>
+        item.type === "user_message" &&
+        item.runId !== runId &&
+        item.attachments.some((attachment) => attachment.type === "image"),
+    );
+  });
 
   const openInstant = Effect.fn("WorkspaceTurnContext.openInstant")(
     function* (input: {
       readonly threadId: ThreadId;
+      readonly runId: RunId;
       readonly cwd: string;
       readonly text: string;
       readonly match: InstantWorkspaceMatch;
     }) {
-      if (yield* hasOpenWorkspace(input.threadId)) return Option.none<InstantWorkspaceOpened>();
       const { file, templateId } = input.match;
+      if (
+        (yield* hasOpenWorkspace(input.threadId)) ||
+        (templateId === "photo-develop" &&
+          (yield* hasOtherThreadImages(input.threadId, input.runId)))
+      ) {
+        return Option.none<InstantWorkspaceOpened>();
+      }
       const asset = file === undefined ? undefined : path.resolve(input.cwd, file);
       const charts =
-        asset === undefined || templateId !== "data-explore"
+        asset === undefined || file === undefined || templateId !== "data-explore"
           ? undefined
-          : instantChartsForRequest(input.text, yield* readHeader(asset));
+          : instantChartsForRequest({
+              text: input.text,
+              file,
+              sample: yield* readSample(asset),
+            });
       const template =
         charts === undefined ? { id: templateId } : { id: templateId, options: { charts } };
       const title = asset === undefined ? "Workspace" : path.basename(asset);

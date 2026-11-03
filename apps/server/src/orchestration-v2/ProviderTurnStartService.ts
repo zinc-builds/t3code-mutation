@@ -548,6 +548,7 @@ export const layer: Layer.Layer<
               if (cwd === undefined) return Option.none();
               return yield* workspaceTurnContext.openInstant({
                 threadId: projection.thread.id,
+                runId,
                 cwd,
                 text: message.text,
                 match: instantMatch,

@@ -55,7 +55,8 @@ export function matchInstantWorkspace(input: {
     if (file !== undefined && extension !== undefined) named.set(file, extension.toLowerCase());
   }
   const [only, ...others] = named;
-  if (others.length > 0) return undefined;
+  // A named file and an attached image leave which one they mean unclear.
+  if (others.length > 0 || (only !== undefined && input.hasImageAttachment)) return undefined;
   const extension = only?.[1];
   if (only === undefined && !input.hasImageAttachment) return undefined;
   const template =
@@ -67,18 +68,40 @@ export function matchInstantWorkspace(input: {
 }
 
 const COLUMN_WORD_MIN_LENGTH = 4;
+const SAMPLE_ROWS = 20;
 
-/** The chart a data request names, when its words pick two columns: "distance" and "duration". */
-export function instantChartsForRequest(text: string, header: string) {
-  const columns = header
-    .split(/[,\t]/)
-    .map((column) => column.trim().replace(/^"|"$/g, ""))
-    .filter((column) => column !== "");
+/**
+ * The chart a data request names, when its words pick two number columns: "distance" and
+ * "duration". `sample` is the start of the file. Anything unclear keeps the template's own charts.
+ */
+export function instantChartsForRequest(input: {
+  readonly text: string;
+  readonly file: string;
+  readonly sample: string;
+}) {
+  const lines = input.sample.split(/\r?\n/);
+  // The sample stops mid-file, so its last line may be cut short.
+  const rows = lines.slice(1, -1).slice(0, SAMPLE_ROWS);
+  const columns = (lines[0] ?? "").split(/[,\t]/).map((column) => column.trim());
+  const isNumberColumn = (index: number) =>
+    rows.length > 0 &&
+    rows.every((row) => {
+      const value = row.split(/[,\t]/)[index]?.trim();
+      return value !== undefined && value !== "" && Number.isFinite(Number(value));
+    });
+  const isIdColumn = (column: string) => /(?:^|[_-])id$/i.test(column);
+  const candidates = columns.filter(
+    (column, index) => !isIdColumn(column) && isNumberColumn(index),
+  );
+  const words = input.text.toLowerCase().replaceAll(input.file.toLowerCase(), " ");
   const picked: Array<string> = [];
-  for (const word of text.toLowerCase().match(/[a-z_]+/g) ?? []) {
+  for (const word of words.match(/[a-z_]+/g) ?? []) {
     if (word.length < COLUMN_WORD_MIN_LENGTH) continue;
-    const column = columns.find((candidate) => candidate.toLowerCase().includes(word));
-    if (column !== undefined && !picked.includes(column)) picked.push(column);
+    const named = candidates.filter((column) => column.toLowerCase().includes(word));
+    const [column, ...others] = named;
+    if (column !== undefined && others.length === 0 && !picked.includes(column)) {
+      picked.push(column);
+    }
   }
   const [x, y] = picked;
   return x === undefined || y === undefined

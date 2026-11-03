@@ -15,6 +15,10 @@ describe("matchInstantWorkspace", () => {
     expect(match(text)).toEqual({ templateId, file });
   });
 
+  it("leaves a named file with an attached image to the agent", () => {
+    expect(match("Open sunset.jpg in an editor so I can grade it myself.", true)).toBeUndefined();
+  });
+
   it("opens an attached image", () => {
     expect(match("open this in an editor so I can grade it", true)).toEqual({
       templateId: "photo-develop",
@@ -39,16 +43,30 @@ describe("matchInstantWorkspace", () => {
 });
 
 describe("instantChartsForRequest", () => {
-  const header = "trip_id,distance_km,duration_min,city";
+  const sample = "trip_id,distance_km,duration_min,city\n1,10.2,34.5,Leeds\n2,4.5,19.8,York\n3,1";
+  const charts = (text: string, file = "trips.csv") =>
+    instantChartsForRequest({ text, file, sample });
 
-  it("charts the two columns a request names", () => {
-    expect(instantChartsForRequest("how distance relates to duration", header)).toEqual([
+  it("charts the two number columns a request names", () => {
+    expect(charts("how distance relates to duration")).toEqual([
       { type: "scatter", x: "distance_km", y: "duration_min" },
       { type: "histogram", x: "duration_min" },
     ]);
   });
 
-  it("leaves the template's own charts without two named columns", () => {
-    expect(instantChartsForRequest("show me the distance", header)).toBeUndefined();
+  it.each([
+    ["only one column", "show me the distance", "trips.csv"],
+    ["a text column", "how distance varies by city", "trips.csv"],
+    ["an id column", "each trip_id against distance", "trips.csv"],
+    ["a word in the filename", "explore distance.csv against nothing", "distance.csv"],
+  ])("keeps the template's charts for %s", (_, text, file) => {
+    expect(charts(text, file)).toBeUndefined();
+  });
+
+  it("skips a word that fits two columns", () => {
+    const ambiguous = "time_start,time_end,cost\n1,2,3\n4,5,6\n";
+    expect(
+      instantChartsForRequest({ text: "time against cost", file: "a.csv", sample: ambiguous }),
+    ).toBeUndefined();
   });
 });
