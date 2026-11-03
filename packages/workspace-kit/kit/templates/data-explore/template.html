@@ -805,7 +805,11 @@
           const cats = cols.filter((id) => types.get(id) === "string" && distinct(id) >= 2);
           const cat = cats.find((id) => distinct(id) <= AUTO_CATEGORY_MAX) ?? null;
           const series = cats.find((id) => id !== cat && distinct(id) <= AUTO_SERIES_MAX) ?? null;
-          const num = cols.find((id) => types.get(id) === "number") ?? null;
+          const isId = (id) => /(?:^|[_-])id$/i.test(id) || id === "id";
+          const num =
+            cols.find((id) => types.get(id) === "number" && !isId(id)) ??
+            cols.find((id) => types.get(id) === "number") ??
+            null;
           const date = cols.find((id) => types.get(id) === "date") ?? null;
           const first = cat
             ? { type: "bar", x: cat, series }
