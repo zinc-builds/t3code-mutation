@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
@@ -82,8 +83,7 @@ describe.skipIf(process.env.T3CODE_TEST_PHONON !== "1")("MediaPrepare with Phono
         expect(again.totals).toMatchObject({ fromCache: 1, transcribed: 1 });
       }).pipe(
         Effect.scoped,
-        Effect.provide(ProcessRunner.layer),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(ProcessRunner.layer.pipe(Layer.provideMerge(NodeServices.layer))),
       ),
     20 * 60_000,
   );

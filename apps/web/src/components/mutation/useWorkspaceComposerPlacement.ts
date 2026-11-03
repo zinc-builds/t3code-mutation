@@ -1,5 +1,5 @@
 import type { WorkspaceBridgeRect } from "@t3tools/shared/mutationWorkspace";
-import { useCallback, useLayoutEffect, useState, type CSSProperties } from "react";
+import { useLayoutEffect, useState, type CSSProperties } from "react";
 
 import { observeResize } from "../../lib/observeResize";
 
@@ -53,18 +53,16 @@ export function useWorkspaceComposerPlacement(
   }>({ key: null, rect: null });
   const [size, setSize] = useState({ composer: 0, dock: 0 });
 
-  const onComposerSlotChange = useCallback(
-    (rect: WorkspaceBridgeRect | null) => {
-      const next = roundRect(rect);
-      setSlotState((current) =>
-        current.key === workspaceKey && rectsEqual(current.rect, next)
-          ? current
-          : { key: workspaceKey, rect: next },
-      );
-    },
-    [workspaceKey],
-  );
+  const onComposerSlotChange = (rect: WorkspaceBridgeRect | null) => {
+    const next = roundRect(rect);
+    setSlotState((current) =>
+      current.key === workspaceKey && rectsEqual(current.rect, next)
+        ? current
+        : { key: workspaceKey, rect: next },
+    );
+  };
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the composer overlay's DOM boxes and follows them with a resize observer
   useLayoutEffect(() => {
     if (workspaceKey === null || overlayElement === null) return;
     const stack = overlayElement.querySelector<HTMLElement>("[data-chat-composer-stack]");

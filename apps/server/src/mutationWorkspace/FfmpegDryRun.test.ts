@@ -162,54 +162,42 @@ it.layer(NodeServices.layer)("FfmpegDryRun", (it) => {
 const TEST_FFMPEG_ENV = "T3CODE_TEST_FFMPEG";
 
 describe("FfmpegDryRun with the host's ffmpeg", () => {
-  it.live(
-    "passes a valid filter graph and returns ffmpeg's complaint about a broken one",
-    (ctx) =>
-      Effect.gen(function* () {
-        if (!(yield* HostProcess.Environment)[TEST_FFMPEG_ENV]) {
-          return ctx.skip(`Set ${TEST_FFMPEG_ENV} to run this test.`);
-        }
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const runner = yield* ProcessRunner.ProcessRunner;
-        const media = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-ffmpeg-real-" });
-        const tone = path.join(media, "tone.wav");
-        yield* runner.run({
-          command: "ffmpeg",
-          args: [
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "lavfi",
-            "-i",
-            "sine=duration=2",
-            tone,
-          ],
-        });
-        const dryRun = yield* FfmpegDryRun.FfmpegDryRun;
-        const checks = yield* dryRun.dryRun({
-          commands: [
-            "ffmpeg -y -i 'tone.wav' -filter_complex '[0:a]atrim=start=0:end=1,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.2[out]' -map '[out]' -vn -c:a aac -b:a 192k 'tone-edit.m4a'",
-            "ffmpeg -y -i 'tone.wav' -af 'notafilter=1' 'broken.m4a'",
-          ],
-          assetPaths: [tone],
-          files: [],
-          budget: "8 seconds",
-        });
-        const [ok, broken] = Option.getOrThrow(checks);
-        expect(ok).toEqual({ command: 1, status: "ok" });
-        expect(broken).toMatchObject({ command: 2, status: "failed" });
-        expect(broken?.status === "failed" ? broken.stderr : "").toMatch(/notafilter/);
-      }).pipe(
-        Effect.scoped,
-        Effect.provide(
-          Layer.mergeAll(FfmpegDryRun.layer, ProcessRunner.layer).pipe(
-            Layer.provideMerge(NodeServices.layer),
-          ),
+  it.live("passes a valid filter graph and returns ffmpeg's complaint about a broken one", (ctx) =>
+    Effect.gen(function* () {
+      if (!(yield* HostProcess.Environment)[TEST_FFMPEG_ENV]) {
+        return ctx.skip(`Set ${TEST_FFMPEG_ENV} to run this test.`);
+      }
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const runner = yield* ProcessRunner.ProcessRunner;
+      const media = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-ffmpeg-real-" });
+      const tone = path.join(media, "tone.wav");
+      yield* runner.run({
+        command: "ffmpeg",
+        args: ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=2", tone],
+      });
+      const dryRun = yield* FfmpegDryRun.FfmpegDryRun;
+      const checks = yield* dryRun.dryRun({
+        commands: [
+          "ffmpeg -y -i 'tone.wav' -filter_complex '[0:a]atrim=start=0:end=1,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.2[out]' -map '[out]' -vn -c:a aac -b:a 192k 'tone-edit.m4a'",
+          "ffmpeg -y -i 'tone.wav' -af 'notafilter=1' 'broken.m4a'",
+        ],
+        assetPaths: [tone],
+        files: [],
+        budget: "8 seconds",
+      });
+      const [ok, broken] = Option.getOrThrow(checks);
+      expect(ok).toEqual({ command: 1, status: "ok" });
+      expect(broken).toMatchObject({ command: 2, status: "failed" });
+      expect(broken?.status === "failed" ? broken.stderr : "").toMatch(/notafilter/);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(FfmpegDryRun.layer, ProcessRunner.layer).pipe(
+          Layer.provideMerge(NodeServices.layer),
         ),
       ),
-    20_000,
+    ),
   );
 });
 

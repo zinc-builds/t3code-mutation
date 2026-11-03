@@ -1,4 +1,4 @@
-import { audioMimeTypeFromExtension } from "@t3tools/shared/filePreview";
+import { audioMimeTypeFromExtension } from "@t3tools/shared/mediaPreview";
 import { VIDEO_FILE_EXTENSIONS } from "@t3tools/shared/video";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -36,12 +36,10 @@ interface ExpandedSources {
 }
 
 /**
- * Turns the agent's paths into source files. A file is taken as named, whatever
- * its extension, since ffprobe decides what it holds; a folder yields its media
- * files, recursively, skipping dot-files such as the `._IMG_0151.MOV`
- * AppleDouble files exFAT drives carry. Paths resolve through symlinks, and a
- * file named twice appears once. Paths that yield nothing are problems, not
- * failures, so one bad path does not cost the rest.
+ * A named file is taken whatever its extension, since ffprobe decides what it holds; a folder
+ * yields its media files recursively, skipping dot-files such as the `._IMG_0151.MOV` AppleDouble
+ * files exFAT drives carry. Paths that yield nothing are problems, not failures, so one bad path
+ * does not cost the rest.
  */
 export const expandMediaSources = Effect.fn("mediaSources.expand")(function* (
   paths: ReadonlyArray<string>,

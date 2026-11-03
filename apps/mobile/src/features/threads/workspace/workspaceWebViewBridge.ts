@@ -10,27 +10,10 @@ import { readHtmlRenderLinkRequest } from "@t3tools/shared/htmlRender";
 import * as Predicate from "effect/Predicate";
 
 /**
- * The React Native side of a mutation workspace's bridge.
- *
- * The WebView loads a small outer page that hosts the workspace page in a real
- * opaque-origin iframe, as web does, so the page's bridge (`window.parent`
- * postMessage, File objects) works unchanged. The outer page only relays:
- *
- * - page → React Native: each message, with any File in it encoded as base64
- *   (React Native messages are strings), in the order the page sent them, and
- *   whether the user had just touched the page when it arrived.
- * - React Native → page: `__t3WorkspaceReceive(message)`, and
- *   `__t3WorkspaceInitialize(id, state, assets)`, which fetches each asset's
- *   signed URL into a File before answering the page's `initialize`, except
- *   video and audio, which the page plays from their URL and gets as the URL
- *   and size.
- *
- * The outer page is loaded with the environment's origin as its base URL, so
- * those asset fetches are same-origin and need no CORS. The page's own media
- * loads are cross-origin from its opaque origin, which the asset route allows. Every frame can reach
- * `ReactNativeWebView`, so the outer page wraps what it relays with a secret
- * only it holds, and React Native drops anything else. Once the page frame
- * loads a second time (it navigated itself), the outer page stops relaying.
+ * The outer page hosts the workspace page in an opaque-origin iframe, as web does, on the
+ * environment's origin so asset fetches need no CORS. Every frame can reach `ReactNativeWebView`,
+ * so it wraps what it relays with a secret only it holds and React Native drops anything else. It
+ * stops relaying once the page frame navigates itself.
  */
 
 /** Largest file a page may hand React Native in one message (send, attach, download). */

@@ -1,8 +1,8 @@
 import { Pressable } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
-import { SymbolView } from "../../../components/AppSymbol";
-import { AppText as Text } from "../../../components/AppText";
+import { SymbolView } from "../../../components/ui/AppSymbol";
+import { AppText as Text } from "../../../components/ui/AppText";
 
 /** The way from a mutation workspace back to the thread's chat, floating over the page's corner. */
 export function WorkspaceBackButton(props: { readonly top: number; readonly onPress: () => void }) {

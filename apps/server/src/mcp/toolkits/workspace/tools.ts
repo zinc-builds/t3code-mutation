@@ -1,15 +1,12 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
-import { HTML_RENDER_THEME_GUIDE } from "@t3tools/shared/htmlRender";
 import {
   WORKSPACE_KIT_DOCS_TOOL_NAME,
   WORKSPACE_MAX_ASSETS,
   WORKSPACE_MAX_TITLE_LENGTH,
   WORKSPACE_MUTATE_TOOL_NAME,
-  WORKSPACE_PAGE_GUIDE,
   WORKSPACE_RESTORE_TOOL_NAME,
   WORKSPACE_STATE_TOOL_NAME,
 } from "@t3tools/shared/mutationWorkspace";
-import { WORKSPACE_CHROME_GUIDE } from "@t3tools/shared/mutationWorkspaceChrome";
 import { workspaceKit } from "@t3tools/workspace-kit";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
@@ -19,6 +16,7 @@ import * as WorkspaceState from "../../../mutationWorkspace/WorkspaceState.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import { WORKSPACE_VALIDATION_LEVELS } from "../../../mutationWorkspace/workspaceValidation.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import { WORKSPACE_GUIDES } from "./guides.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,
@@ -27,11 +25,8 @@ const dependencies = [
   WorkspaceState.WorkspaceState,
 ];
 
-// Order matters to agents: the cheapest path that fits comes first.
-const WORKSPACE_BUILD_GUIDE = `Build it the fastest way that fits, in this order. 1) A template, when one matches the task: pass template: {id, options} and no html; it is a complete pro app ready in seconds, and options.customScript (JS run with (t3template, options)) bolts on anything it lacks, using only the calls in that template's boltOn docs. 2) Otherwise kit primitives plus glue: pass kit: [names] and write only the layout and wiring in html; T3 injects each primitive as window.t3kit.<name> before your scripts, at no cost to your output. 3) Only when neither covers the task, write the whole interface from scratch. Call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with the names you will use for their exact APIs and options before writing glue; never hand-roll what a primitive does.\n${workspaceKit.catalog}`;
-
 const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
-  description: `Transform this thread's interface into a workspace built for the user's task, replacing the chat view until the task is done. Use it for hands-on, iterative work on an artifact that the user will adjust by eye over several steps, in space or in time, which a dedicated professional application serves better than chat: grading or retouching a photo they attached or one on disk, cutting a video, mixing audio, exploring a dataset, laying out a design. Do not use it for a one-shot edit the user fully specified ("make it black and white", "trim the first five seconds"): make that edit with your own tools, and offer a workspace in your reply when fine-tuning by hand would help. ${WORKSPACE_BUILD_GUIDE}\nCalling it again rebuilds the workspace in place (the user's control state is kept), so iterate when the user asks for more tools. A page you write is one self-contained document with inline <style> and <script>; remote http(s) libraries load as-is. ${WORKSPACE_PAGE_GUIDE} ${HTML_RENDER_THEME_GUIDE} T3 boots the published page itself (and, at validation "full", runs its export) and returns what broke in the result's validation, so do not screenshot or test it yourself; when validation lists errors, fix them with another call. validation.notValidated names what it could not check, such as media its browser cannot decode; those are not errors to fix. After calling it, reply briefly about what you built; the user is already looking at it. When the user is finished, call ${WORKSPACE_RESTORE_TOOL_NAME}. Declare the app's toolbar, sidebar, and inspector with \`chrome\` so T3 renders them natively and the page only needs its canvas or timeline.`,
+  description: `Replace this thread's chat view with a workspace built for the user's task, until they are done. Use it for hands-on, iterative work the user will adjust by eye, which a dedicated application serves better than chat: grading a photo, cutting a video, mixing audio, exploring a dataset, laying out a design. Not for a one-shot edit they fully specified: make that with your own tools and offer a workspace in your reply. Prefer template: {id} when one fits, which is ready in seconds: ${workspaceKit.templateIds.join(", ")}. For anything else, first call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with no arguments for the catalog and guides, and read page-guide before writing html. Calling this again rebuilds in place and keeps the user's control state. T3 tests the page itself and returns what broke in validation; fix listed errors with another call. Then reply briefly, because the user is already looking at it, and call ${WORKSPACE_RESTORE_TOOL_NAME} when they are finished.`,
   parameters: Schema.Struct({
     html: Schema.optional(
       Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000_000)),
@@ -41,7 +36,7 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
     }),
     template: Schema.optional(
       Schema.Struct({
-        id: Schema.String.annotate({ description: "A template id from the catalog." }),
+        id: Schema.String.annotate({ description: "A template id." }),
         options: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
           description: `The template's options (see ${WORKSPACE_KIT_DOCS_TOOL_NAME}); omitted keys take their defaults.`,
         }),
@@ -65,7 +60,7 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
         "Absolute paths of files on this machine the workspace works on (images, video), in addition to images the user attached in this thread. Each appears in t3.workspace.assets().",
     }),
     chrome: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
-      description: `${WORKSPACE_CHROME_GUIDE} A template that declares its own chrome gets it when you omit this; passing chrome replaces the template's.`,
+      description: `Native toolbar, sidebar and inspector. See chrome-guide in ${WORKSPACE_KIT_DOCS_TOOL_NAME}.`,
     }),
     preview: Schema.optional(
       Schema.Struct({
@@ -78,8 +73,7 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
         "A live web page the workspace reviews, usually the user's dev server for a design review. The page reaches it through t3.workspace.preview; it may open any URL on this origin, and no other.",
     }),
     validation: Schema.optional(Schema.Literals(WORKSPACE_VALIDATION_LEVELS)).annotate({
-      description:
-        'How far T3 checks the page before returning. "boot" loads it with your assets for a few seconds and reports uncaught exceptions, console errors, customScript failures, and setChrome patches T3 would reject. "full" then also calls window.t3template.export() (up to 6 s; its files are captured, not delivered to the user) and dry-runs each ffmpeg command the export returns against your assets with this machine\'s ffmpeg (0.5 s of output each, up to 4 s in all; skipped when ffmpeg is not installed). Default: "full" for a template with options.customScript, since bolt-ons most often break an export that loads fine; "boot" otherwise. Pass "full" after changing what an export reads; pass "boot" to skip the export while iterating on layout.',
+      description: `"boot" loads the page; "full" also runs its export. See validation-guide in ${WORKSPACE_KIT_DOCS_TOOL_NAME}.`,
     }),
   }),
   success: Schema.Struct({
@@ -151,13 +145,15 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
   .annotate(Tool.OpenWorld, true);
 
 const WorkspaceKitDocsTool = Tool.make(WORKSPACE_KIT_DOCS_TOOL_NAME, {
-  description: `Read the workspace kit's exact docs before building with ${WORKSPACE_MUTATE_TOOL_NAME}: each primitive's API header (create options, methods, events, a usage example) and each template's summary, kit, options with defaults, examples, and boltOn: the exact window.t3template API for options.customScript (summary, one line per call, reservedShortcuts, a runnable example). Read a template's boltOn before writing its customScript; do not guess calls. Pass the primitive names and template ids you plan to use; omit names for everything (large). Primitives: ${workspaceKit.primitiveNames.join(", ")}. Templates: ${workspaceKit.templateIds.join(", ") || "none installed yet"}.`,
+  description: `Workspace docs, in tiers. No arguments: the catalog of templates by category, kit primitives, and guide names. With names: the full docs for those templates (options, examples, boltOn, the exact window.t3template API for options.customScript; read it before writing one), primitives (API, usage), and guides (${Object.keys(WORKSPACE_GUIDES).join(", ")}).`,
   parameters: Schema.Struct({
     names: Schema.optional(Schema.Array(Schema.String)).annotate({
-      description: "Primitive names and template ids to document.",
+      description: "Template ids, primitive names and guide names to read.",
     }),
   }),
   success: Schema.Struct({
+    catalog: Schema.optional(Schema.String),
+    guides: Schema.Array(Schema.Struct({ name: Schema.String, docs: Schema.String })),
     primitives: Schema.Array(Schema.Struct({ name: Schema.String, docs: Schema.String })),
     // Each template's manifest as written: fields beyond these reach the agent too.
     templates: Schema.Array(

@@ -40,17 +40,17 @@ function runShortcut(attachmentId: string, event: WorkspaceKeyInput): boolean {
 }
 
 /**
- * The chrome half of the workspace bridge for the page in `frameRef`: sends
- * it control values (when it initializes and on every user change) and user
- * commands, applies its `setChrome` patches, and runs toolbar shortcuts from
- * keys it forwards or that reach T3 itself. A workspace without chrome gets
- * empty controls and a clear error from `setChrome`.
+ * The chrome half of the bridge for the page in `frameRef`: sends it control values and user
+ * commands, applies its `setChrome` patches, and runs toolbar shortcuts from keys it forwards or
+ * that reach T3 itself. A workspace without chrome gets empty controls and a clear error from
+ * `setChrome`.
  */
 export function useWorkspaceChromeBridge(
   frameRef: RefObject<HTMLIFrameElement | null>,
   enabled: boolean,
   attachmentId: string,
 ) {
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds the window message and keydown listeners and the chrome event subscription for the iframe page while enabled
   useEffect(() => {
     if (!enabled) return;
     const post = (message: unknown) => frameRef.current?.contentWindow?.postMessage(message, "*");

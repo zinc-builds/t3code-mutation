@@ -46,8 +46,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
-import { AppText as Text } from "../../../components/AppText";
-import { validateDraftFileAttachments } from "../../../lib/attachmentUpload";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { tryOpenExternalUrl } from "../../../lib/openExternalUrl";
 import { scopedThreadKey } from "../../../lib/scopedEntities";
 import { uuidv4 } from "../../../lib/uuid";
@@ -90,11 +89,9 @@ const commandError = (result: {
 }) => new Error(workspaceErrorMessage(squashAtomCommandFailure(result)));
 
 /**
- * A thread's mutation workspace on a phone: the agent's page filling the
- * thread's view in a WebView that speaks the workspace bridge. The native
- * composer stays docked below it (the page's composer slot is not used), and
- * the thread screen gives the way back to chat. A new workspace (a new
- * attachment) is a new page.
+ * The agent's page in a WebView speaking the workspace bridge. The native composer stays docked
+ * below it (the page's composer slot is not used). A new workspace (a new attachment) is a new
+ * page.
  */
 export function ThreadWorkspace(props: ThreadWorkspaceProps) {
   // Reloading after the page left its document, or its web process died, loads the page again.
@@ -148,6 +145,7 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
   // Read on every message, so the bridge sees current props without being rebuilt.
   const live = { props, theme, httpBaseUrl, createAssetUrl, readState, updateState };
   const latest = useRef(live);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors this commit's props and commands into a ref for WebView message handlers, which must not rebuild the bridge
   useEffect(() => {
     latest.current = live;
   });
@@ -161,10 +159,12 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
     webView.current?.injectJavaScript(workspaceReceiveScript(message));
 
   // The page sees the theme and the agent's status change once it is running.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- injects the theme into the running WebView page, which only hears it over the bridge
   useEffect(() => {
     if (loaded) post(htmlRenderThemeMessage(theme));
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Resent when the theme changes.
   }, [theme, loaded]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- injects the agent's status into the initialized WebView page, which only hears it over the bridge
   useEffect(() => {
     if (initialized.current) post(workspaceAgentStatusNotification(props.agentWorking));
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Resent when the status changes.
@@ -183,6 +183,7 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
   // Renews the streamed URLs the page holds; replaced when the page initializes again.
   const urlRefresher = useRef<ReturnType<typeof startWorkspaceAssetUrlRefresher> | null>(null);
   const lastUrlFailure = useRef<string | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- stops the asset URL refresher's timers when the page unmounts
   useEffect(() => () => urlRefresher.current?.dispose(), []);
 
   const initialize = async (id: string | number) => {
@@ -234,13 +235,7 @@ function WorkspaceDocument(props: ThreadWorkspaceProps & { readonly onReload: ()
   };
 
   const composerAttachments = async (files: ReadonlyArray<WorkspaceEncodedFile>) => {
-    const attachments = await workspaceDraftAttachments(files);
-    const blocked = validateDraftFileAttachments({
-      attachments,
-      serverConfig: latest.current.props.serverConfig,
-    });
-    if (blocked !== null) throw new Error(blocked);
-    return attachments;
+    return await workspaceDraftAttachments(files);
   };
 
   const run = async (request: WorkspaceBridgeRequest<WorkspaceEncodedFile>, active: boolean) => {

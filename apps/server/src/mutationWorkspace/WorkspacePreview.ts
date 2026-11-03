@@ -1,3 +1,5 @@
+// @effect-diagnostics nodeBuiltinImport:off -- Effect has no crypto module here
+import * as NodeCrypto from "node:crypto";
 import {
   type ThreadId,
   type WorkspacePreviewActInput,
@@ -11,7 +13,6 @@ import {
 import { workspacePreviewOrigin } from "@t3tools/shared/mutationWorkspace";
 import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -25,13 +26,10 @@ import * as WorkspaceAssets from "./WorkspaceAssets.ts";
 import * as WorkspacePreviewBrowser from "./WorkspacePreviewBrowser.ts";
 
 /**
- * Live pages a workspace reviews, such as the user's dev server for a design
- * review. The workspace's sandboxed page cannot load or read the site, so the
- * environment opens it in a review page of its own browser and the workspace
- * works through these methods. A review page opens only on an origin the
- * thread's `workspace_mutate` calls declared or one of its preview tabs shows,
- * and lives while a client follows its events (`subscribe`), so a closed tab
- * or dropped connection cannot leave it running.
+ * The sandboxed page cannot load or read a reviewed site, so the environment opens it in a review
+ * page of its own browser. A review page opens only on an origin the thread's `workspace_mutate`
+ * calls declared or one of its preview tabs shows, and lives while a client follows `subscribe`,
+ * so a closed tab or dropped connection cannot leave it running.
  */
 export class WorkspacePreview extends Context.Service<
   WorkspacePreview,
@@ -79,7 +77,6 @@ const make = Effect.gen(function* () {
   const browser = yield* WorkspacePreviewBrowser.WorkspacePreviewBrowser;
   const workspaceAssets = yield* WorkspaceAssets.WorkspaceAssets;
   const previewManager = yield* PreviewManager.PreviewManager;
-  const crypto = yield* Crypto.Crypto;
   const serviceScope = yield* Effect.scope;
   // Page events arrive from the browser, outside any fiber.
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
@@ -166,7 +163,7 @@ const make = Effect.gen(function* () {
       }
       opening += 1;
       const session = yield* Effect.gen(function* () {
-        const id = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
+        const id = NodeCrypto.randomUUID();
         const scope = yield* Scope.make();
         let opened: Session | undefined;
         const page = yield* Effect.gen(function* () {
@@ -289,7 +286,7 @@ const make = Effect.gen(function* () {
             const session = find(input.threadId, input.sessionId);
             if (session === undefined) {
               listener({ _tag: "closed", sessionId: input.sessionId, reason: "unknown" });
-              return Effect.succeed(undefined);
+              return Effect.undefined;
             }
             session.listeners.add(listener);
             const expiry = session.expiry;

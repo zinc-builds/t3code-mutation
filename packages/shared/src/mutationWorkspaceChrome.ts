@@ -1,20 +1,14 @@
 /**
- * The chrome manifest of a mutation workspace: the toolbar, sidebar, and
- * inspector an agent declares with `workspace_mutate({ chrome })`, which T3
- * renders with its own components around the page, so the app itself
- * reshapes instead of hosting a foreign panel. T3 owns the control values:
- * native controls change them, the page reads them over the bridge
- * (`controls` and `command` notifications) and can reshape the chrome live
- * with `t3.workspace.setChrome(patch)`.
- *
- * Values persist in the thread's one workspace state object, as
- * `{ controls, page }` (see `workspaceStateEnvelope`).
+ * The toolbar, sidebar, and inspector an agent declares with `workspace_mutate({ chrome })`. T3
+ * owns the control values: native controls change them, the page reads them over the bridge and
+ * can reshape the chrome with `t3.workspace.setChrome(patch)`. They persist as `{ controls, page
+ * }` (see `workspaceStateEnvelope`).
  */
 
 /** JSON bytes a manifest passed to `workspace_mutate` may take; it rides in the tool result. */
 export const WORKSPACE_CHROME_MAX_BYTES = 6_000;
 /** JSON bytes of chrome a page may set live; larger, since sidebar thumbnails come from the page. */
-export const WORKSPACE_CHROME_PATCH_MAX_BYTES = 512_000;
+const WORKSPACE_CHROME_PATCH_MAX_BYTES = 512_000;
 
 const MAX_TOOLBAR_ITEMS = 24;
 const MAX_MENU_ITEMS = 24;
@@ -502,17 +496,6 @@ export function readStoredWorkspaceChrome(value: unknown): WorkspaceChrome | und
   return result.ok ? result.chrome : undefined;
 }
 
-export function hasWorkspaceChrome(chrome: WorkspaceChrome | undefined): chrome is WorkspaceChrome {
-  return (
-    chrome !== undefined &&
-    ((chrome.toolbar?.length ?? 0) > 0 ||
-      (chrome.sidebar?.length ?? 0) > 0 ||
-      (chrome.inspector?.length ?? 0) > 0)
-  );
-}
-
-// Values ---------------------------------------------------------------------
-
 /** An entry that holds a value, with the rule that admits one. */
 type ValueEntry =
   | {
@@ -649,8 +632,6 @@ export function workspaceChromeValuesEqual(
   );
 }
 
-// Live patches from the page ---------------------------------------------------
-
 export interface WorkspaceChromePatchResult {
   readonly chrome: WorkspaceChrome;
   readonly values: WorkspaceChromeValues;
@@ -700,8 +681,6 @@ export function applyWorkspaceChromePatch(
   return { chrome: read.chrome, values: next };
 }
 
-// Stored state ------------------------------------------------------------------
-
 /**
  * How a workspace with chrome stores its state: T3's control values beside
  * the page's own `setState` object. A workspace without chrome stores the
@@ -747,8 +726,6 @@ export function workspacePageState(stored: unknown): unknown {
   return readWorkspaceStateEnvelope(stored).page;
 }
 
-// Shortcuts ---------------------------------------------------------------------
-
 export interface WorkspaceShortcut {
   readonly key: string;
   readonly mod: boolean;
@@ -790,7 +767,7 @@ const NAMED_KEYS: Readonly<Record<string, string>> = {
 };
 
 /** Parses "mod+shift+e", "alt+[", "space", or "v"; `mod` is Cmd on macOS and Ctrl elsewhere. */
-export function parseWorkspaceShortcut(value: string): WorkspaceShortcut | undefined {
+function parseWorkspaceShortcut(value: string): WorkspaceShortcut | undefined {
   if (value.length === 0 || value.length > 32) return undefined;
   const parts = value.toLowerCase().split("+");
   // "mod++" names the plus key.
@@ -894,8 +871,6 @@ export function workspaceChromeShortcutCommand(
   return undefined;
 }
 
-// Bridge ----------------------------------------------------------------------------
-
 /** What a page's `setChrome` rejects with when its workspace has no chrome to patch. */
 export const WORKSPACE_CHROME_MISSING_ERROR =
   "This workspace has no native chrome; pass `chrome` to workspace_mutate to add it.";
@@ -959,11 +934,10 @@ export function readWorkspaceChromeBridgeMessage(
 }
 
 /**
- * The page side of the chrome, appended to the workspace bridge script. It
- * extends `window.t3.workspace` with `controls()`, `setChrome(patch)`, and
- * the `controls` and `command` events (a late `on('controls')` gets the
- * current values at once), and forwards key presses the page leaves
- * unhandled so toolbar shortcuts work while the page has focus.
+ * The page side of the chrome, appended to the bridge script: `controls()`, `setChrome(patch)`,
+ * and the `controls` and `command` events (a late `on('controls')` gets the current values at
+ * once). Key presses the page leaves unhandled are forwarded so toolbar shortcuts work while it
+ * has focus.
  */
 export const WORKSPACE_CHROME_BRIDGE_SCRIPT = `(function(){
 var M=${JSON.stringify(WORKSPACE_CHROME_BRIDGE_METHODS)},w=window.t3&&window.t3.workspace;if(!w)return;

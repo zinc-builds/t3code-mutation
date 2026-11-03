@@ -311,5 +311,5 @@ describe.skipIf(browser === undefined)("workspace vendor route in a browser", ()
       unknownFile:
         't3kit.vendor: demo has no file "add.wasm" (files: classic.js, esm/demo.mjs, esm/two.mjs, wasm/add.wasm)',
     });
-  }, 30_000);
+  });
 });

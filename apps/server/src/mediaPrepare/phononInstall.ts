@@ -216,16 +216,14 @@ export const installRuntime = Effect.fn("phononInstall.installRuntime")(function
       })
       .pipe(
         Effect.mapError((cause) => new PhononInstallError({ stage, cause })),
-        Effect.flatMap((result) =>
-          result.code === 0
-            ? Effect.succeed(result)
-            : Effect.fail(
-                new PhononInstallError({
-                  stage,
-                  exitCode: Number(result.code),
-                  output: outputTail(result),
-                }),
-              ),
+        Effect.filterOrFail(
+          (result) => result.code === 0,
+          (result) =>
+            new PhononInstallError({
+              stage,
+              exitCode: Number(result.code),
+              output: outputTail(result),
+            }),
         ),
       );
   };

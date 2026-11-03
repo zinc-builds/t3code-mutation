@@ -1,8 +1,5 @@
 /**
- * The clip publish-time validation hands a page in place of video or audio
- * its browser cannot play: 10 seconds of a flat 192x108 VP8 picture at 4 fps
- * with a quiet 440 Hz Opus tone, which every Chrome build decodes in software.
- * Made with:
+ * Handed to a page in place of media its browser cannot play; every Chrome build decodes this in software:
  *   ffmpeg -f lavfi -i "color=c=0x3b5b7a:s=192x108:r=4:d=10" \
  *     -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=10" -filter:a "volume=0.05" \
  *     -c:v libvpx -b:v 20k -g 40 -c:a libopus -b:a 8k -ac 1 stand-in.webm

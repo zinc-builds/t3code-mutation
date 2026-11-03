@@ -7,7 +7,7 @@
 import { parse } from "shell-quote";
 
 /** Seconds of output each dry run renders: enough to build and run every filter graph. */
-export const FFMPEG_DRY_RUN_SECONDS = 0.5;
+const FFMPEG_DRY_RUN_SECONDS = 0.5;
 
 /** Options whose value names a file ffmpeg writes or reads beyond its inputs. */
 const FILE_OPTIONS = new Set([
@@ -47,11 +47,10 @@ const notRun = (reason: string): FfmpegDryRunPlan => ({ ok: false, reason });
 const clipArg = (arg: string) => (arg.length > 80 ? `${arg.slice(0, 80)}…` : arg);
 
 /**
- * Plans the dry run of one exported ffmpeg command. It must be a single
- * `ffmpeg …` invocation whose last argument is its output; `allowedPaths` are
- * the absolute paths it may name (the workspace's assets). Everything else it
- * names must be a plain relative name, which the dry run resolves in a
- * scratch folder holding the assets and the export's own files.
+ * Plans one exported command's dry run. It must be a single `ffmpeg …` invocation whose last
+ * argument is its output; `allowedPaths` are the absolute paths it may name. Anything else it
+ * names must be a plain relative name, resolved in a scratch folder holding the assets and the
+ * export's own files.
  */
 export function planFfmpegDryRun(
   command: string,

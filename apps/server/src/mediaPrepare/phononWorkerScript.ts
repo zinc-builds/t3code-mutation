@@ -1,16 +1,8 @@
 /**
- * The Python worker T3 runs in its Phonon venv. The server is bundled and
- * cannot read a sibling .py at runtime, so the source lives here and
- * PhononRuntime writes it beside the venv before each start.
- *
- * Protocol, one JSON object per line. The worker loads the model once and
- * writes `{"type":"ready"}`. Each request `{"id","path","ffmpeg","hotwords"}`
- * gets `{"type":"result","id","transcript"}` or `{"type":"error","id",
- * "message"}`. A startup failure writes `{"type":"fatal","message"}` and
- * exits. The worker decodes each source's first audio track with ffmpeg
- * straight into memory (16 kHz mono float32), so it never writes audio to
- * disk. It exits when stdin closes. Library output goes to stderr, which T3
- * logs; stdout carries only the protocol.
+ * Inline because the bundled server cannot read a sibling .py at runtime. One JSON object per
+ * line: `ready` once loaded, a `result` or `error` per `{"id","path","ffmpeg","hotwords"}`
+ * request, and `fatal` on a startup failure, then exit. It exits when stdin closes. Library
+ * output goes to stderr because stdout carries only the protocol.
  */
 export const PHONON_WORKER_SCRIPT = String.raw`import json
 import os

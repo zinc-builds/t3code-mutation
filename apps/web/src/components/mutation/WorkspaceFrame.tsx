@@ -11,7 +11,7 @@ import {
   type WorkspaceBridgeRect,
   type WorkspaceReference,
 } from "@t3tools/shared/mutationWorkspace";
-import { type JSX, useEffect, useMemo, useRef, useState } from "react";
+import { type JSX, useEffect, useRef, useState } from "react";
 
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
@@ -65,16 +65,13 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
   const { attachmentId, title } = props.workspace;
   const theme = useHtmlRenderTheme();
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const resource = useMemo(
-    () => ({
-      _tag: "attachment" as const,
-      attachmentId,
-      fileName: htmlRenderFileName(title),
-      mimeType: "text/html",
-      disposition: "inline" as const,
-    }),
-    [attachmentId, title],
-  );
+  const resource = {
+    _tag: "attachment" as const,
+    attachmentId,
+    fileName: htmlRenderFileName(title),
+    mimeType: "text/html",
+    disposition: "inline" as const,
+  };
 
   // The frame keeps its first URL: a re-minted one would reload the page and
   // drop the user's unsaved work. A cached URL near expiry is minted afresh
@@ -87,6 +84,7 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
   const refresh = useAssetUrlRefresh(props.environmentId, resource);
   const cachedUrl = asset._tag === "Success" ? asset.url : null;
   const cachedExpiresAt = asset._tag === "Success" ? asset.expiresAt : 0;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- freezes the frame's first URL, minting a fresh one over RPC when the cached URL is near expiry
   useEffect(() => {
     if (src !== null || cachedUrl === null || minting.current) return;
     // The page reads the theme from its fragment before first paint.
@@ -112,6 +110,7 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
   const postTheme = () => {
     frameRef.current?.contentWindow?.postMessage(htmlRenderThemeMessage(theme), "*");
   };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- posts the theme to the iframe page, which only hears it over postMessage
   useEffect(postTheme, [theme]);
 
   useWorkspaceBridge(frameRef, src !== null && !navigatedAway, props);
@@ -119,6 +118,7 @@ function WorkspaceDocument(props: WorkspaceFrameProps & { readonly onReload: () 
 
   // Links in the page open in the browser, only right after the user clicked
   // in the workspace, as with HTML renders.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds the window message listener that opens links the iframe page asks for
   useEffect(() => {
     const openLink = (event: MessageEvent) => {
       const frame = frameRef.current;

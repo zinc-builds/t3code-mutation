@@ -344,33 +344,35 @@ const reviewPage = (page: Page, styles: { css: string }): WorkspacePreviewPage =
     viewport,
     setViewport: (size) =>
       Effect.tryPromise({ try: () => page.setViewportSize(size), catch: failed }),
-    screenshot: ({ fullPage, maxHeight }) =>
-      Effect.gen(function* () {
-        const size = yield* viewport;
-        const metrics = yield* review<{ readonly scrollY: number; readonly height: number }>(page, {
-          op: "metrics",
-        });
-        const height = fullPage ? Math.min(Math.max(metrics.height, 1), maxHeight) : size.height;
-        const png = yield* Effect.tryPromise({
-          // A full page is captured at one image pixel per CSS pixel to bound its size.
-          try: () =>
-            fullPage
-              ? page.screenshot({
-                  fullPage: true,
-                  clip: { x: 0, y: 0, width: size.width, height },
-                  scale: "css",
-                  timeout: ACTION_TIMEOUT_MS,
-                })
-              : page.screenshot({ timeout: ACTION_TIMEOUT_MS }),
-          catch: failed,
-        });
-        return {
-          png: new Uint8Array(png),
-          width: size.width,
-          height,
-          scrollY: fullPage ? 0 : metrics.scrollY,
-        };
-      }),
+    screenshot: Effect.fn("WorkspacePreviewBrowser.screenshot")(function* ({
+      fullPage,
+      maxHeight,
+    }) {
+      const size = yield* viewport;
+      const metrics = yield* review<{ readonly scrollY: number; readonly height: number }>(page, {
+        op: "metrics",
+      });
+      const height = fullPage ? Math.min(Math.max(metrics.height, 1), maxHeight) : size.height;
+      const png = yield* Effect.tryPromise({
+        // A full page is captured at one image pixel per CSS pixel to bound its size.
+        try: () =>
+          fullPage
+            ? page.screenshot({
+                fullPage: true,
+                clip: { x: 0, y: 0, width: size.width, height },
+                scale: "css",
+                timeout: ACTION_TIMEOUT_MS,
+              })
+            : page.screenshot({ timeout: ACTION_TIMEOUT_MS }),
+        catch: failed,
+      });
+      return {
+        png: new Uint8Array(png),
+        width: size.width,
+        height,
+        scrollY: fullPage ? 0 : metrics.scrollY,
+      };
+    }),
     elementsAt: (x, y) =>
       review<ReadonlyArray<WorkspacePreviewElement>>(page, { op: "elementsAt", x, y }),
     inspect: (selector) =>
@@ -413,20 +415,21 @@ export const layerServerBrowser = Layer.effect(
   WorkspacePreviewBrowser,
   Effect.gen(function* () {
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
-    const open: WorkspacePreviewBrowser["Service"]["open"] = ({ viewport, onEvent }) =>
-      Effect.gen(function* () {
-        const page = yield* serverBrowser.scratchPage.pipe(
-          Effect.mapError((error) => {
-            const cause = error.cause;
-            return new WorkspacePreviewError({
-              reason: "unavailable",
-              detail: isHostError(cause) ? cause.message : undefined,
-              cause: error,
-            });
-          }),
-        );
-        return yield* makePlaywrightPreviewPage(page, viewport, onEvent);
-      });
+    const open: WorkspacePreviewBrowser["Service"]["open"] = Effect.fn(
+      "WorkspacePreviewBrowser.open",
+    )(function* ({ viewport, onEvent }) {
+      const page = yield* serverBrowser.scratchPage.pipe(
+        Effect.mapError((error) => {
+          const cause = error.cause;
+          return new WorkspacePreviewError({
+            reason: "unavailable",
+            detail: isHostError(cause) ? cause.message : undefined,
+            cause: error,
+          });
+        }),
+      );
+      return yield* makePlaywrightPreviewPage(page, viewport, onEvent);
+    });
     return WorkspacePreviewBrowser.of({ open });
   }),
 );

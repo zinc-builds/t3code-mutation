@@ -254,7 +254,7 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
   // the kit, then the page.
   const assemble = (plan: WorkspacePagePlan) =>
     htmlRender
-      .prepare(plan.html)
+      .prepare(plan.html, { fillsWindow: true })
       .pipe(Effect.map((prepared) => injectWorkspaceBridge(kit.inject(prepared, plan))));
 
   // A template page differs between publishes only in its options, so everything
@@ -383,8 +383,8 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
     });
 
   /** Boots the page, then at level `full` runs its export; bounded by the three budgets. */
-  const observe = (input: ValidationInput) =>
-    Effect.gen(function* () {
+  const observe = Effect.fn("MutationWorkspace.observe")(
+    function* (input: ValidationInput) {
       const { assets, resources, omitted } = yield* validationAssets(input.assetPaths);
       for (const [routePath, resource] of validationVendorResources(input.vendor)) {
         resources.set(routePath, resource);
@@ -414,17 +414,20 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
       );
       const report = Option.isNone(probed) ? undefined : yield* decodePageReport(probed.value);
       return { observation, report, omitted };
-    }).pipe(
-      Effect.timeoutOption(
-        totalOf(
-          VALIDATION_TIMEOUT[input.level],
-          input.level === "full" ? VALIDATION_EXPORT_BUDGET : VALIDATION_REPORT_BUDGET,
+    },
+    (effect, input) =>
+      effect.pipe(
+        Effect.timeoutOption(
+          totalOf(
+            VALIDATION_TIMEOUT[input.level],
+            input.level === "full" ? VALIDATION_EXPORT_BUDGET : VALIDATION_REPORT_BUDGET,
+          ),
         ),
       ),
-    );
+  );
 
-  const validate = (input: ValidationInput) =>
-    Effect.gen(function* () {
+  const validate = Effect.fn("MutationWorkspace.validate")(
+    function* (input: ValidationInput) {
       const observed = yield* observe(input);
       if (Option.isNone(observed)) {
         return skippedValidation(
@@ -465,14 +468,16 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         pageBudget: VALIDATION_PAGE_BUDGET[input.level],
         exportBudget: VALIDATION_EXPORT_BUDGET,
       });
-    }).pipe(
-      Effect.catch((cause) =>
-        Effect.logWarning("Could not validate a workspace page; publishing it unchecked.", {
-          cause,
-        }).pipe(Effect.as(skippedValidation(input.level, cause.message))),
+    },
+    (effect, input) =>
+      effect.pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("Could not validate a workspace page; publishing it unchecked.", {
+            cause,
+          }).pipe(Effect.as(skippedValidation(input.level, cause.message))),
+        ),
       ),
-      Effect.withSpan("MutationWorkspace.validate"),
-    );
+  );
 
   const publish = Effect.fn("MutationWorkspace.publish")(function* (input: WorkspacePublishInput) {
     const plan = kit.planPage({ html: input.html, kit: input.kit, template: input.template });

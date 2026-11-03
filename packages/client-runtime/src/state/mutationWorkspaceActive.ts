@@ -54,7 +54,7 @@ export interface ThreadImage {
 }
 
 /** The workspace a completed tool item published, if it is a `workspace_mutate` call. */
-export function workspaceFromTurnItem(item: WorkspaceTurnItem): WorkspaceReference | undefined {
+function workspaceFromTurnItem(item: WorkspaceTurnItem): WorkspaceReference | undefined {
   return item.type === "dynamic_tool" && item.status === "completed"
     ? workspaceFromToolItem({ toolName: item.toolName, output: item.output })
     : undefined;

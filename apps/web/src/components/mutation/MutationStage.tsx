@@ -8,12 +8,10 @@ import { useWorkspaceChromeStore } from "./workspaceChromeStore";
 const ignoreSlot = () => {};
 
 /**
- * The workspace page in place of the timeline. It fills the chat canvas, the
- * same box the composer overlay is positioned in, so the slot rect the page
- * reports is already in overlay coordinates. A docked composer takes
- * `dockHeight` from the bottom instead of floating over the page. When the
- * workspace declares an inspector, it is a native column beside the page and
- * the composer docks at its bottom instead of in a page slot.
+ * The page fills the chat canvas, the box the composer overlay is positioned in, so the slot rect
+ * it reports is already in overlay coordinates. A docked composer takes `dockHeight` from the
+ * bottom instead of floating over the page; with an inspector, it docks at the inspector's bottom
+ * instead of in a page slot.
  */
 export function MutationStage({
   dockHeight,

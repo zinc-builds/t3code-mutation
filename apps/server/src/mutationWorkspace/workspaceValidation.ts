@@ -1,10 +1,7 @@
 /**
- * Publish-time validation of a workspace page: T3 boots the finished page in
- * its preview browser, with a stand-in for the client that hosts the
- * workspace bridge, optionally runs its export, and hands what went wrong
- * back to the agent in the `workspace_mutate` result. This module holds the
- * pure parts: the host stand-in, the in-page report, and how an observation
- * becomes the agent-facing result.
+ * Pure parts of publish-time validation, which boots the finished page in the preview browser and
+ * hands what went wrong back in the `workspace_mutate` result: the host stand-in, the in-page
+ * report, and how an observation becomes the agent-facing result.
  */
 import {
   WORKSPACE_BRIDGE_METHODS,
@@ -124,7 +121,7 @@ export const VALIDATION_STAND_IN_MEDIA_URL = "/t3-validation/stand-in.webm";
  * Starts the message of a failure that comes from validation's own limits, not
  * the page: such a console error or exception is reported in `notValidated`.
  */
-export const VALIDATION_LIMIT_MARKER = "[t3 validation limit]";
+const VALIDATION_LIMIT_MARKER = "[t3 validation limit]";
 /** How long the stand-in waits for a streamed asset's first frame before it counts as unplayable. */
 const PLAYBACK_PROBE_MS = 1_500;
 /** Streamed assets probed at once, so many 4K clips do not decode together. */
@@ -146,29 +143,10 @@ export const VALIDATION_PROBLEM_PREFIXES = [TEMPLATE_CUSTOM_SCRIPT_ERROR_MARKER]
 export const VALIDATION_SANDBOX = `sandbox ${WORKSPACE_FRAME_SANDBOX}`;
 
 /**
- * The client's side of the workspace bridge, for a page loaded on its own.
- * A live preview is answered with a stand-in session on the declared URL whose
- * screenshots are blank and whose element reads find nothing, so a page's
- * review flow boots without the agent's dev server.
- * There the bridge's `window.parent` is the page itself, so this script, run
- * first, takes over `postMessage` and answers the bridge the way the client
- * would: `initialize` with the assets (or a placeholder photo when there are
- * none, standing in for the thread's attached images) and the chrome's
- * control values. Video and audio arrive as a range-served URL and size, as
- * clients hand them; one this browser cannot play (no HEVC decoder, say) is
- * swapped for a stand-in clip and reported as not validated, never as a page
- * error, and so is a whole-file read of media too large to load here.
- * `setChrome` fails without chrome, as in the client, and is otherwise
- * recorded for T3 to check; files the page attaches or downloads
- * are kept for the export report (an export may return those Files, or
- * describe them as `{ name, type, size }`, which must match one the page
- * delivered); every other request succeeds;
- * notifications are dropped.
- * A template page counts as booted only once it has published
- * `window.t3template` and been quiet since: templates run `customScript` right
- * after that, which on a photo can come well over a second after `initialize`.
- * `report` (see `validationReportExpression`) then hands back what the page
- * did, after running its export when asked.
+ * The client's bridge for a page loaded alone, where `window.parent` is the page: run first, it takes over `postMessage`.
+ * Media this browser cannot play or load is swapped for a stand-in and reported as not validated, never as a page error.
+ * A live preview gets a blank stand-in session, so a page's review flow boots without the agent's dev server.
+ * A template counts as booted once `window.t3template` is published and quiet: `customScript` runs right after, maybe a second past `initialize`.
  */
 export function validationHostScript(input: {
   readonly assets: ReadonlyArray<ValidationAsset>;
