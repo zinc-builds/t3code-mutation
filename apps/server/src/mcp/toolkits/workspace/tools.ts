@@ -26,7 +26,7 @@ const dependencies = [
 ];
 
 const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
-  description: `Replace this thread's chat view with a workspace built for the user's task, until they are done. Use it for hands-on, iterative work the user will adjust by eye, which a dedicated application serves better than chat: grading a photo, cutting a video, mixing audio, exploring a dataset, laying out a design. Not for a one-shot edit they fully specified: make that with your own tools and offer a workspace in your reply. Prefer template: {id} when one fits, which is ready in seconds: ${workspaceKit.templateIds.join(", ")}. For anything else, first call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with no arguments for the catalog and guides, and read page-guide before writing html. Calling this again rebuilds in place and keeps the user's control state. T3 tests the page itself and returns what broke in validation; fix listed errors with another call. Then reply briefly, because the user is already looking at it, and call ${WORKSPACE_RESTORE_TOOL_NAME} when they are finished.`,
+  description: `Replace this thread's chat view with a workspace built for the user's task, until they are done. Use it for hands-on, iterative work the user will adjust by eye, which a dedicated application serves better than chat: grading a photo, cutting a video, mixing audio, exploring a dataset, laying out a design. Not for a one-shot edit they fully specified: make that with your own tools and offer a workspace in your reply. Speed is the point: when a template fits, call this as your first action with just template: {id}, assets and title, without checking files or reading docs, because T3 reports a missing file. Analyse afterwards, and if they asked about something specific, call this once more in the same turn with options that show it; rebuilding keeps the user's state. Templates: ${workspaceKit.templateIds.join(", ")}. For anything else, first call ${WORKSPACE_KIT_DOCS_TOOL_NAME} with no arguments for the catalog and guides, and read page-guide before writing html. Calling this again rebuilds in place and keeps the user's control state. T3 tests the page itself and returns what broke in validation; fix listed errors with another call. Then reply briefly, because the user is already looking at it, and call ${WORKSPACE_RESTORE_TOOL_NAME} when they are finished.`,
   parameters: Schema.Struct({
     html: Schema.optional(
       Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000_000)),
@@ -138,6 +138,7 @@ const WorkspaceMutateTool = Tool.make(WORKSPACE_MUTATE_TOOL_NAME, {
   failureMode: "return",
   dependencies,
 })
+  .annotate(Tool.Meta, { "anthropic/alwaysLoad": true })
   .annotate(Tool.Title, "Build workspace")
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false)

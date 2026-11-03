@@ -515,15 +515,20 @@ const make = Effect.fn("MutationWorkspace.make")(function* (kit: WorkspaceKit) {
         fileSystem
           .writeFileString(filePath, html)
           .pipe(Effect.mapError((cause) => new WorkspaceStoreError({ cause }))),
-        validate({
-          html,
-          level: input.validation ?? defaultValidationLevel(plan.value.template),
-          template: plan.value.template !== undefined,
-          vendor: plan.value.vendor,
-          assetPaths: input.assetPaths,
-          chrome: chrome?.chrome,
-          previewUrl: input.preview?.url,
-        }),
+        // A shipped template with no bolt-on is tested with the kit; booting it again costs seconds.
+        input.validation === undefined &&
+        plan.value.template !== undefined &&
+        plan.value.template.options?.customScript === undefined
+          ? Effect.succeed(skippedValidation("boot", "this template is tested when it ships"))
+          : validate({
+              html,
+              level: input.validation ?? defaultValidationLevel(plan.value.template),
+              template: plan.value.template !== undefined,
+              vendor: plan.value.vendor,
+              assetPaths: input.assetPaths,
+              chrome: chrome?.chrome,
+              previewUrl: input.preview?.url,
+            }),
       ],
       { concurrency: 2 },
     );

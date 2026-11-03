@@ -285,6 +285,7 @@ it.layer(NodeServices.layer)("MutationWorkspace shipped templates", (it) => {
           const { reference, validation } = yield* workspace.publish({
             threadId: thread,
             template: { id: template.id, options },
+            validation: "boot",
             title: template.title,
             assetPaths: [],
           });
@@ -696,6 +697,7 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
           yield* workspace.publish({
             threadId: thread,
             template: { id: "query", options: { sql } },
+            validation: "boot",
             title: "Query",
             assetPaths: [],
           });
@@ -853,11 +855,12 @@ it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
         [
           'window.__t3WorkspaceValidation.report({"export":true})',
           'window.__t3WorkspaceValidation.report({"export":false})',
-          'window.__t3WorkspaceValidation.report({"export":false})',
           'window.__t3WorkspaceValidation.report({"export":true})',
           'window.__t3WorkspaceValidation.report({"export":false})',
         ],
       );
+      // A shipped template with no bolt-on is not booted again.
+      assert.equal(plain.validation.skipped, "this template is tested when it ships");
       assert.deepEqual(asked.validation.export, {
         skipped: "the page has no window.t3template.export()",
         files: [],
@@ -1214,6 +1217,7 @@ it.layer(NodeServices.layer)("MutationWorkspace template chrome", (it) => {
         title: "Grade",
         assetPaths: [],
         template: { id: "grade" },
+        validation: "boot",
       });
       assert.include(seen[0]!.html, '"chrome":true');
       assert.include(seen[0]!.html, '"controls":{"exposure":-4}');
