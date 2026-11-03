@@ -193,6 +193,8 @@ export default defineConfig({
   lint: {
     ignorePatterns: [
       ".repos",
+      // Read as text and baked into generated.ts; pages, not app code.
+      "packages/workspace-kit/kit/**",
       ".repos/**",
       "infra/task-cache/vendor/**",
       "dist",

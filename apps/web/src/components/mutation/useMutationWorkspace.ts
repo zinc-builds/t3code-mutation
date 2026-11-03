@@ -132,7 +132,7 @@ function useWorkspaceSidebarOpen(wanted: boolean | null) {
       restoreRef.current = null;
       return;
     }
-    restoreRef.current ??= sidebar.open;
+    restoreRef.current = restoreRef.current ?? sidebar.open;
     if (sidebar.open !== wanted) void sidebar.setOpen(wanted);
   }, [wanted, isMobile]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- puts the app sidebar back on unmount, using the latest context from the ref
