@@ -304,17 +304,16 @@ export const makePhononRuntime = Effect.fn("PhononRuntime.make")(function* (
             }),
           ),
       }),
-      Effect.flatMap((message) =>
-        message.type === "ready"
-          ? Effect.succeed(message)
-          : Effect.fail(
-              new PhononWorkerStartError({
-                reason:
-                  message.type === "fatal"
-                    ? message.message
-                    : `it answered "${message.type}" before it was ready.`,
-              }),
-            ),
+      Effect.filterOrFail(
+        (message): message is Extract<WorkerMessage, { readonly type: "ready" }> =>
+          message.type === "ready",
+        (message) =>
+          new PhononWorkerStartError({
+            reason:
+              message.type === "fatal"
+                ? message.message
+                : `it answered "${message.type}" before it was ready.`,
+          }),
       ),
       Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
     );
@@ -331,47 +330,49 @@ export const makePhononRuntime = Effect.fn("PhononRuntime.make")(function* (
     ),
   );
 
-  const request = (running: RunningWorker, input: TranscribeRequest) =>
-    Effect.gen(function* () {
-      const id = nextId++;
-      const line = yield* encodeRequest({
-        id,
-        path: input.path,
-        ffmpeg: input.ffmpeg,
-        hotwords: [...input.hotwords],
-      }).pipe(Effect.orDie);
-      const crashed = Deferred.await(running.exited).pipe(
-        Effect.flatMap((exitCode) =>
-          Effect.fail(new PhononWorkerCrashedError({ exitCode, stderr: running.stderrTail() })),
+  const request = Effect.fn("PhononRuntime.request")(function* (
+    running: RunningWorker,
+    input: TranscribeRequest,
+  ) {
+    const id = nextId++;
+    const line = yield* encodeRequest({
+      id,
+      path: input.path,
+      ffmpeg: input.ffmpeg,
+      hotwords: [...input.hotwords],
+    }).pipe(Effect.orDie);
+    const crashed = Deferred.await(running.exited).pipe(
+      Effect.flatMap((exitCode) =>
+        Effect.fail(new PhononWorkerCrashedError({ exitCode, stderr: running.stderrTail() })),
+      ),
+    );
+    // A closed stdin means the worker is gone; its exit says why.
+    yield* Stream.run(Stream.encodeText(Stream.make(`${line}\n`)), running.handle.stdin).pipe(
+      Effect.catch(() =>
+        crashed.pipe(
+          Effect.timeoutOrElse({
+            duration: "3 seconds",
+            orElse: () =>
+              Effect.fail(
+                new PhononWorkerCrashedError({
+                  exitCode: null,
+                  stderr: `T3 could not write to the worker. ${running.stderrTail()}`,
+                }),
+              ),
+          }),
         ),
-      );
-      // A closed stdin means the worker is gone; its exit says why.
-      yield* Stream.run(Stream.encodeText(Stream.make(`${line}\n`)), running.handle.stdin).pipe(
-        Effect.catch(() =>
-          crashed.pipe(
-            Effect.timeoutOrElse({
-              duration: "3 seconds",
-              orElse: () =>
-                Effect.fail(
-                  new PhononWorkerCrashedError({
-                    exitCode: null,
-                    stderr: `T3 could not write to the worker. ${running.stderrTail()}`,
-                  }),
-                ),
-            }),
-          ),
-        ),
-      );
-      const message = yield* Effect.raceFirst(Queue.take(running.messages), crashed);
-      if (message.type === "result" && message.id === id) return message.transcript;
-      if (message.type === "error" && message.id === id) {
-        return yield* new PhononTranscribeError({ reason: message.message });
-      }
-      return yield* new PhononWorkerCrashedError({
-        exitCode: null,
-        stderr: `the worker answered out of turn (${message.type}).`,
-      });
+      ),
+    );
+    const message = yield* Effect.raceFirst(Queue.take(running.messages), crashed);
+    if (message.type === "result" && message.id === id) return message.transcript;
+    if (message.type === "error" && message.id === id) {
+      return yield* new PhononTranscribeError({ reason: message.message });
+    }
+    return yield* new PhononWorkerCrashedError({
+      exitCode: null,
+      stderr: `the worker answered out of turn (${message.type}).`,
     });
+  });
 
   const scheduleIdleStop = Effect.gen(function* () {
     idleFiber = yield* Effect.sleep(idleTimeout).pipe(

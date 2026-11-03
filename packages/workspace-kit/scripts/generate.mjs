@@ -1,16 +1,8 @@
 #!/usr/bin/env node
-// Bakes the workspace kit (primitives, templates and vendored libraries) into
-// src/generated.ts. The server is bundled, so it cannot read these files from
-// disk at runtime.
-//
+// Bakes the kit into src/generated.ts, since the bundled server cannot read these files at runtime.
 //   node packages/workspace-kit/scripts/generate.mjs   (sources: packages/workspace-kit/kit)
-//
-// <kitDir> holds primitives/<name>.js (and optionally primitives/_core.js),
-// templates/<id>/{template.html,template.json}, and vendor/runtime.js with
-// vendor/<name>/{vendor.json,init.js}. A vendored library's files come from
-// the npm package it names, installed in the package that owns the kit (here
-// packages/workspace-kit) and pinned there to that exact version. Anything
-// malformed fails the run; nothing is skipped.
+// A vendored library's files come from the npm package it names, installed in the package that
+// owns the kit and pinned there to that exact version. Anything malformed fails the run.
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";

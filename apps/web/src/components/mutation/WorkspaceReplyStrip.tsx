@@ -1,18 +1,30 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { OrchestrationV2ProjectedTurnItem, ScopedThreadRef } from "@t3tools/contracts";
 import { MessageSquareTextIcon } from "lucide-react";
 import { memo, useState } from "react";
 
-import type { ChatMessage } from "../../types";
+import { useTimelineVisibleTurnItems } from "../../state/entities";
 import ChatMarkdown from "../ChatMarkdown";
 import { ComposerBanner } from "../chat/ComposerBanner";
 import { Spinner } from "../ui/spinner";
 
+interface WorkspaceReply {
+  readonly id: string;
+  readonly text: string;
+  readonly streaming: boolean;
+}
+
 /** The agent's answer to the newest user message, or null while it has not replied yet. */
-export function latestWorkspaceReply(messages: ReadonlyArray<ChatMessage>): ChatMessage | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]!;
-    if (message.role === "assistant") return message.text.trim() === "" ? null : message;
-    if (message.role === "user") return null;
+function latestWorkspaceReply(
+  rows: ReadonlyArray<OrchestrationV2ProjectedTurnItem>,
+): WorkspaceReply | null {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const item = rows[index]!.item;
+    if (item.type === "assistant_message") {
+      return item.text.trim() === ""
+        ? null
+        : { id: item.id, text: item.text, streaming: item.streaming };
+    }
+    if (item.type === "user_message") return null;
   }
   return null;
 }
@@ -31,8 +43,8 @@ function replyPreview(text: string) {
  * The conversation while the timeline is replaced: the agent's latest reply,
  * attached above the composer and expandable to the full message.
  */
-export const WorkspaceReplyStrip = memo(function WorkspaceReplyStrip(props: {
-  readonly reply: ChatMessage | null;
+const WorkspaceReplyStrip = memo(function WorkspaceReplyStrip(props: {
+  readonly reply: WorkspaceReply | null;
   readonly working: boolean;
   readonly threadRef: ScopedThreadRef | null;
   readonly cwd: string | undefined;
@@ -89,3 +101,13 @@ export const WorkspaceReplyStrip = memo(function WorkspaceReplyStrip(props: {
     </ComposerBanner.Attachment>
   );
 });
+
+/** Reads the streamed items here, so a growing reply never re-renders ChatView. */
+export function WorkspaceReplyLane(props: {
+  readonly threadRef: ScopedThreadRef | null;
+  readonly working: boolean;
+  readonly cwd: string | undefined;
+}) {
+  const rows = useTimelineVisibleTurnItems(props.threadRef);
+  return <WorkspaceReplyStrip {...props} reply={latestWorkspaceReply(rows)} />;
+}

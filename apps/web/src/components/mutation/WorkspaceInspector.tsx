@@ -272,6 +272,7 @@ export function WorkspaceInspector(props: {
 }) {
   const { onComposerSlotChange } = props;
   const slotRef = useRef<HTMLDivElement>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the inspector's composer slot in the DOM and follows it with a resize observer
   useLayoutEffect(() => {
     const slot = slotRef.current;
     const stage = slot?.closest<HTMLElement>("[data-mutation-stage]");

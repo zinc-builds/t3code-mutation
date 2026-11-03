@@ -87,12 +87,10 @@ const agentStatus = workspaceAgentStatusNotification;
 const composerSize = workspaceComposerSizeNotification;
 
 /**
- * Hosts the `t3/workspace/*` bridge for the page in `frameRef` while `enabled`:
- * answers its requests from the thread (stored state, media, chat), and tells it
- * the composer's height and whether the agent is working. Only messages from
- * that frame's own window are read. A failed request is returned to the page as
- * a JSON-RPC error; failures of the host's own work (loading, saving state,
- * downloads) are also shown to the user.
+ * Hosts the `t3/workspace/*` bridge for the page in `frameRef` while `enabled`, reading only
+ * messages from that frame's own window. A failed request returns to the page as a JSON-RPC
+ * error; failures of the host's own work (loading, saving state, downloads) are also shown to the
+ * user.
  */
 export function useWorkspaceBridge(
   frameRef: RefObject<HTMLIFrameElement | null>,
@@ -117,10 +115,12 @@ export function useWorkspaceBridge(
   // re-subscribing (which would drop requests in flight).
   const live = { options, readState, updateState, mintAsset, previewOpen, previewAct, registry };
   const latest = useRef(live);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors this commit's props into a ref for the window message listener, which must not resubscribe and drop requests in flight
   useEffect(() => {
     latest.current = live;
   });
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds the window message listener and URL refresher that serve the iframe page's bridge while enabled
   useEffect(() => {
     if (!enabled) return;
     // The page's origin is opaque, so "*" is the only target that reaches it;
@@ -354,9 +354,11 @@ export function useWorkspaceBridge(
   }, [enabled, frameRef]);
 
   const { composerHeight, agentWorking } = options;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- posts the composer height to the iframe page, which only hears it over the bridge
   useEffect(() => {
     if (enabled) frameRef.current?.contentWindow?.postMessage(composerSize(composerHeight), "*");
   }, [enabled, frameRef, composerHeight]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- posts the agent's status to the iframe page, which only hears it over the bridge
   useEffect(() => {
     if (enabled) frameRef.current?.contentWindow?.postMessage(agentStatus(agentWorking), "*");
   }, [enabled, frameRef, agentWorking]);

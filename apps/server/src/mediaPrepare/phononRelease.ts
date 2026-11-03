@@ -1,14 +1,8 @@
 /**
- * The transcription runtime T3 installs on a host: the `fermion-research` CLI
- * and library (Apache-2.0) running the Phonon-2 speech model (CC-BY-4.0, by
- * Fermion Research). Everything is pinned so every host resolves the same
- * packages.
- *
- * To bump the pin, build a scratch venv with the new version on macOS arm64,
- * check `fermion.load_speech("phonon-2").transcribe_array_detailed(...)` still
- * returns words and segments, replace APPLE_SILICON_LOCK with its `pip
- * freeze`, and update the direct pins below. Hosts install the new runtime
- * beside the old one and drop the old one after.
+ * Pinned so every host resolves the same `fermion-research` (Apache-2.0) and Phonon-2 model
+ * (CC-BY-4.0). To bump, check `fermion.load_speech("phonon-2").transcribe_array_detailed(...)`
+ * still returns words and segments in a scratch macOS arm64 venv, replace APPLE_SILICON_LOCK with
+ * its `pip freeze`, and update the direct pins. Hosts install the new runtime beside the old one.
  */
 
 export const FERMION_VERSION = "0.2.11";

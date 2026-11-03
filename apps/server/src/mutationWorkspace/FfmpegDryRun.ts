@@ -89,104 +89,57 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const runner = yield* ProcessRunner.ProcessRunner;
 
-  const dryRun = Effect.fn("FfmpegDryRun.dryRun")(function* (input: FfmpegDryRunInput) {
-    const ffmpeg = yield* resolveCommandPath("ffmpeg");
-    if (ffmpeg === null) return Option.none();
-    const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-ffmpeg-dry-run-" });
-    // Assets by file name, then the export's own files (an overlay PNG, say) over them.
-    for (const assetPath of input.assetPaths) {
-      yield* fileSystem.symlink(assetPath, path.join(directory, path.basename(assetPath)));
-    }
-    for (const file of input.files) {
-      yield* fileSystem.writeFile(path.join(directory, path.basename(file.name)), file.bytes);
-    }
-    const allowed = new Set(input.assetPaths);
-    const deadline = (yield* Clock.currentTimeMillis) + Duration.toMillis(input.budget);
-    const checks: Array<FfmpegCommandCheck> = [];
-    for (const [index, command] of input.commands.entries()) {
-      const number = index + 1;
-      const plan = planFfmpegDryRun(command, allowed);
-      if (!plan.ok) {
-        checks.push({ command: number, status: "not-run", reason: plan.reason });
-        continue;
+  const dryRun = Effect.fn("FfmpegDryRun.dryRun")(
+    function* (input: FfmpegDryRunInput) {
+      const ffmpeg = yield* resolveCommandPath("ffmpeg");
+      if (ffmpeg === null) return Option.none();
+      const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-ffmpeg-dry-run-" });
+      // Assets by file name, then the export's own files (an overlay PNG, say) over them.
+      for (const assetPath of input.assetPaths) {
+        yield* fileSystem.symlink(assetPath, path.join(directory, path.basename(assetPath)));
       }
-      const remaining = deadline - (yield* Clock.currentTimeMillis);
-      if (remaining <= 0) {
-        checks.push({ command: number, status: "not-run", reason: "the dry-run budget ran out" });
-        continue;
+      for (const file of input.files) {
+        yield* fileSystem.writeFile(path.join(directory, path.basename(file.name)), file.bytes);
       }
-      const result = yield* runner.run({
-        command: ffmpeg,
-        args: plan.args,
-        cwd: directory,
-        timeout: Duration.millis(remaining),
-        timeoutBehavior: "timedOutResult",
-        maxOutputBytes: MAX_STDERR_BYTES,
-        outputMode: "truncate",
-      });
-      checks.push(
-        result.timedOut
-          ? { command: number, status: "not-run", reason: "it ran past the dry-run budget" }
-          : result.code === 0
-            ? { command: number, status: "ok" }
-            : { command: number, status: "failed", stderr: stderrTail(result.stderr) },
-      );
-    }
-    return Option.some(checks);
-  }, Effect.scoped);
-
-  const codecs = Effect.fn("FfmpegDryRun.codecs")(function* (paths: ReadonlyArray<string>) {
-    const found = new Map<string, string>();
-    if (paths.length === 0) return found;
-    const ffprobe = yield* resolveCommandPath("ffprobe");
-    if (ffprobe === null) return found;
-    yield* Effect.forEach(
-      paths,
-      (filePath) =>
-        runner
-          .run({
-            command: ffprobe,
-            args: [
-              "-v",
-              "error",
-              "-show_entries",
-              "stream=codec_type,codec_name",
-              "-of",
-              "json",
-              filePath,
-            ],
-            timeout: CODEC_PROBE_TIMEOUT,
-            timeoutBehavior: "timedOutResult",
-            maxOutputBytes: MAX_STDERR_BYTES,
-            outputMode: "truncate",
-          })
-          .pipe(
-            Effect.map((result) => {
-              const codec =
-                result.timedOut || result.code !== 0 ? undefined : firstCodec(result.stdout);
-              if (codec !== undefined) found.set(filePath, codec);
-            }),
-          ),
-      { concurrency: 4, discard: true },
-    );
-    return found;
-  });
-
-  return FfmpegDryRun.of({
-    codecs: (paths) =>
-      codecs(paths).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-        Effect.provideService(Path.Path, path),
-        Effect.catch((cause) =>
-          Effect.logWarning("Could not probe media codecs.", { cause }).pipe(
-            Effect.as(new Map<string, string>()),
-          ),
-        ),
-      ),
-    dryRun: (input) =>
-      dryRun(input).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-        Effect.provideService(Path.Path, path),
+      const allowed = new Set(input.assetPaths);
+      const deadline = (yield* Clock.currentTimeMillis) + Duration.toMillis(input.budget);
+      const checks: Array<FfmpegCommandCheck> = [];
+      for (const [index, command] of input.commands.entries()) {
+        const number = index + 1;
+        const plan = planFfmpegDryRun(command, allowed);
+        if (!plan.ok) {
+          checks.push({ command: number, status: "not-run", reason: plan.reason });
+          continue;
+        }
+        const remaining = deadline - (yield* Clock.currentTimeMillis);
+        if (remaining <= 0) {
+          checks.push({ command: number, status: "not-run", reason: "the dry-run budget ran out" });
+          continue;
+        }
+        const result = yield* runner.run({
+          command: ffmpeg,
+          args: plan.args,
+          cwd: directory,
+          timeout: Duration.millis(remaining),
+          timeoutBehavior: "timedOutResult",
+          maxOutputBytes: MAX_STDERR_BYTES,
+          outputMode: "truncate",
+        });
+        checks.push(
+          result.timedOut
+            ? { command: number, status: "not-run", reason: "it ran past the dry-run budget" }
+            : result.code === 0
+              ? { command: number, status: "ok" }
+              : { command: number, status: "failed", stderr: stderrTail(result.stderr) },
+        );
+      }
+      return Option.some(checks);
+    },
+    Effect.scoped,
+    Effect.provideService(FileSystem.FileSystem, fileSystem),
+    Effect.provideService(Path.Path, path),
+    (effect, input) =>
+      effect.pipe(
         Effect.catch((cause) =>
           Effect.logWarning("Could not dry-run a workspace export's ffmpeg commands.", {
             cause,
@@ -203,7 +156,55 @@ const make = Effect.gen(function* () {
           ),
         ),
       ),
-  });
+  );
+
+  const codecs = Effect.fn("FfmpegDryRun.codecs")(
+    function* (paths: ReadonlyArray<string>) {
+      const found = new Map<string, string>();
+      if (paths.length === 0) return found;
+      const ffprobe = yield* resolveCommandPath("ffprobe");
+      if (ffprobe === null) return found;
+      yield* Effect.forEach(
+        paths,
+        (filePath) =>
+          runner
+            .run({
+              command: ffprobe,
+              args: [
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type,codec_name",
+                "-of",
+                "json",
+                filePath,
+              ],
+              timeout: CODEC_PROBE_TIMEOUT,
+              timeoutBehavior: "timedOutResult",
+              maxOutputBytes: MAX_STDERR_BYTES,
+              outputMode: "truncate",
+            })
+            .pipe(
+              Effect.map((result) => {
+                const codec =
+                  result.timedOut || result.code !== 0 ? undefined : firstCodec(result.stdout);
+                if (codec !== undefined) found.set(filePath, codec);
+              }),
+            ),
+        { concurrency: 4, discard: true },
+      );
+      return found;
+    },
+    Effect.provideService(FileSystem.FileSystem, fileSystem),
+    Effect.provideService(Path.Path, path),
+    Effect.catch((cause) =>
+      Effect.logWarning("Could not probe media codecs.", { cause }).pipe(
+        Effect.as(new Map<string, string>()),
+      ),
+    ),
+  );
+
+  return FfmpegDryRun.of({ codecs, dryRun });
 });
 
 /** Runs ffmpeg through the given process runner; tests pass a fake one. */

@@ -25,12 +25,11 @@ const toFailure = (error: { readonly _tag: string; readonly message: string }) =
     message: error.message,
   });
 
-const callingThread = (operation: string) =>
-  Effect.gen(function* () {
-    const scope = yield* McpInvocationContext.McpInvocationContext;
-    const { thread } = yield* McpInvocationContext.requireThreadScope(scope, operation);
-    return thread.threadId;
-  });
+const callingThread = Effect.fn("WorkspaceToolkit.callingThread")(function* (operation: string) {
+  const scope = yield* McpInvocationContext.McpInvocationContext;
+  const { thread } = yield* McpInvocationContext.requireThreadScope(scope, operation);
+  return thread.threadId;
+});
 
 const handlers = {
   // The workspace replaces the calling thread's view, so it needs that thread's live run.

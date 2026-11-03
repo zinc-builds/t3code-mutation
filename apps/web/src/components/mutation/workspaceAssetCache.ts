@@ -1,15 +1,10 @@
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 
 /**
- * Workspace files fetched before the page asks for them. While an agent's
- * `workspace_mutate` call runs, the thread's images and the paths it passed
- * start loading here, so the page's `initialize` can answer from memory.
- * Video and audio never come here: the page plays them from their URL.
- *
- * Attachments never change, so a loaded one is shared by every page that asks.
- * A file on disk can, so a prefetched file is handed to the first page that
- * asks and then forgotten, and only while it is fresh. The cache holds one
- * thread's media at a time and a bounded number of entries.
+ * Files fetched before the page asks, so `initialize` can answer from memory; video and audio
+ * never come here. Attachments never change, so a loaded one is shared by every page that asks. A
+ * file on disk can, so a prefetched one goes to the first page that asks, only while fresh, and
+ * is then forgotten. Holds one thread's media and a bounded number of entries.
  */
 
 const MAX_ENTRIES = 12;

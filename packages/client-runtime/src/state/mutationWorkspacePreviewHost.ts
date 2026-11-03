@@ -37,7 +37,7 @@ export interface WorkspacePreviewScreenshot<F> {
 }
 
 /** An action's result as the page receives it; the page's bridge unwraps the field it returns. */
-export function workspacePreviewPageResult<F>(
+function workspacePreviewPageResult<F>(
   result: WorkspacePreviewActResult,
   toFile: (base64: string, mimeType: string) => F,
 ) {

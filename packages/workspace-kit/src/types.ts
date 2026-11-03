@@ -112,11 +112,10 @@ export interface KitTemplateManifest {
   readonly examples: ReadonlyArray<unknown>;
   readonly boltOn: TemplateBoltOn;
   /**
-   * Whether the page projects its toolbar into T3's native chrome. `true`
-   * opens a chrome session with an empty seed manifest (the page fills its
-   * regions on load through `setChrome`); `false` or absent opens none. An
-   * object is the seed manifest itself. Used when the agent passes no chrome;
-   * T3 checks the manifest on publish.
+   * Whether the page projects its toolbar into T3's native chrome. `true` opens a session with an
+   * empty seed manifest the page fills through `setChrome` on load; `false` or absent opens none;
+   * an object is the seed manifest itself. Used when the agent passes no chrome; T3 checks it on
+   * publish.
    */
   readonly chrome?: boolean | Readonly<Record<string, unknown>>;
   readonly [key: string]: unknown;

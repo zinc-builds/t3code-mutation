@@ -7,7 +7,7 @@
 import {
   audioMimeTypeFromExtension,
   mediaMimeTypeFromExtension,
-} from "@t3tools/shared/filePreview";
+} from "@t3tools/shared/mediaPreview";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Mime from "effect/http/Mime";
@@ -39,7 +39,7 @@ export interface WorkspaceAssetContent {
  * download-safe, and as `application/octet-stream` otherwise, so it never
  * renders as a document.
  */
-export function workspaceAssetContent(filePath: string): WorkspaceAssetContent {
+function workspaceAssetContent(filePath: string): WorkspaceAssetContent {
   const dot = filePath.lastIndexOf(".");
   const extension = dot > filePath.search(/[^\\/]*$/) ? filePath.slice(dot) : "";
   const media = mediaMimeTypeFromExtension(extension) ?? audioMimeTypeFromExtension(extension);

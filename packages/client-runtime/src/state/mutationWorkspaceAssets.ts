@@ -1,26 +1,22 @@
 // @effect-diagnostics globalTimers:off - The host renews a page's URLs from React, outside an Effect runtime.
 /**
- * How every mutation workspace host (web and desktop through an iframe,
- * mobile through a WebView relay) hands a page its assets: each asset's URL
- * is minted first, which also says its type and size; video and audio are
- * then handed over as that URL, playing from where the file is stored, and
- * every other type as its bytes. Streamed URLs are signed for an hour, so the
- * host re-mints them while the page is open and tells the page the new ones.
+ * How every host (web and desktop through an iframe, mobile through a WebView relay) hands a page
+ * its assets: each URL is minted first, which also says type and size; video and audio are handed
+ * over as that URL, every other type as bytes. Streamed URLs are signed for an hour, so the host
+ * re-mints them while the page is open and tells the page.
  */
 import { WORKSPACE_BRIDGE_METHODS, workspaceAssetStreams } from "@t3tools/shared/mutationWorkspace";
 
 import type { WorkspaceAssetResource, WorkspaceAssetSource } from "./mutationWorkspaceHost.ts";
 
 /**
- * A new URL for every streamed asset this often. Asset URLs are signed for an
- * hour (`ASSET_TOKEN_TTL_MS` on the server), so a renewal that fails has half
- * that left to retry before the page's URL stops working; the app's other
- * asset URLs refresh on the same cadence. Timed on the client's own clock, so
- * a skewed clock does not shift it.
+ * Half the hour asset URLs are signed for (`ASSET_TOKEN_TTL_MS` on the server), so a renewal that
+ * fails has half left to retry before the page's URL stops working. Timed on the client's own
+ * clock, so a skewed clock does not shift it.
  */
-export const WORKSPACE_ASSET_URL_REFRESH_MS = 30 * 60_000;
+const WORKSPACE_ASSET_URL_REFRESH_MS = 30 * 60_000;
 /** After a failed renewal, how soon the assets it missed are tried again. */
-export const WORKSPACE_ASSET_URL_RETRY_MS = 60_000;
+const WORKSPACE_ASSET_URL_RETRY_MS = 60_000;
 
 /** What minting an asset's URL returned, resolved against the environment's HTTP origin. */
 export interface MintedWorkspaceAsset {
@@ -91,7 +87,7 @@ export function workspaceBridgeAssetIdentity(asset: PlannedWorkspaceAsset) {
 }
 
 /** Tells the page the asset at `index` of `initialize`'s answer now plays from `url`. */
-export function workspaceAssetUrlNotification(index: number, name: string, url: string) {
+function workspaceAssetUrlNotification(index: number, name: string, url: string) {
   return {
     jsonrpc: "2.0",
     method: WORKSPACE_BRIDGE_METHODS.assetUrl,
@@ -128,13 +124,10 @@ export interface WorkspaceAssetUrlRefresherInput {
 }
 
 /**
- * Keeps a page's streamed URLs from expiring under it: every `refreshMs` it
- * mints each again and notifies the page, and retries the ones that failed
- * every `retryMs` until they succeed. Re-minting goes through the client's own
- * authenticated connection, so a remote or tunnelled client renews as it
- * minted, a URL follows a changed HTTP origin, and a client whose access was
- * revoked stops getting new ones. `dispose` stops it, and drops renewals
- * still in flight.
+ * Re-mints a page's streamed URLs every `refreshMs`, notifying the page, and retries failures
+ * every `retryMs`. It goes through the client's authenticated connection, so a remote client
+ * renews as it minted, a URL follows a changed HTTP origin, and a revoked client stops getting
+ * new ones. `dispose` stops it and drops renewals still in flight.
  */
 export function startWorkspaceAssetUrlRefresher(input: WorkspaceAssetUrlRefresherInput): {
   readonly dispose: () => void;

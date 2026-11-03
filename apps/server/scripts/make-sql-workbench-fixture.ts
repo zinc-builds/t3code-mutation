@@ -2,17 +2,10 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalConsole:off - A plain Node fixture writer, not server code.
 
 /**
- * Writes the sample data the `sql-workbench` template is tested with: a bike
- * share database (`trips.sqlite`: cities, stations, bike types, riders, trips
- * and a `trip_facts` view) and a daily `weather.csv` from "another source",
- * which the template imports as a table to join against.
- *
+ * Writes the deterministic `sql-workbench` test data: `trips.sqlite` and a `weather.csv` to join against.
  *   node apps/server/scripts/make-sql-workbench-fixture.ts [outDir] [--trips N]
- *
- * outDir defaults to the shipped-template fixture the server tests publish
- * with; --trips defaults to 1500, which keeps it near 200 KB. The data is
- * deterministic (seeded), shaped like the kit's trips.csv sample: four cities,
- * 24 stations, April to September 2026.
+ * outDir defaults to the shipped-template fixture the server tests publish with; --trips defaults
+ * to 1500, which keeps it near 200 KB.
  */
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";

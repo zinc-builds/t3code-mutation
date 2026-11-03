@@ -45,12 +45,14 @@ export function useWorkspaceChromeSession(
     reportFailure: false,
   });
   const latest = useRef({ chrome, readState, updateState });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors this commit's manifest and commands into a ref so the session effects stay keyed by attachment alone
   useLayoutEffect(() => {
     latest.current = { chrome, readState, updateState };
   });
 
   // Keyed by attachment alone: a manifest is fixed per attachment, and
   // reopening would drop the values.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds the attachment's session in the chrome store until the workspace closes
   useLayoutEffect(() => {
     const declared = latest.current.chrome;
     if (attachmentId === null || declared === undefined) return;
@@ -58,6 +60,7 @@ export function useWorkspaceChromeSession(
     return () => closeWorkspaceChromeSession(attachmentId);
   }, [attachmentId]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- loads the session's stored values over RPC and subscribes to the store to save changes with a debounce timer
   useEffect(() => {
     if (attachmentId === null || environmentId === null || threadId === null) return;
     let cancelled = false;

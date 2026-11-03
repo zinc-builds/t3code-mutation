@@ -90,5 +90,4 @@ it.effect.skipIf(executable === undefined)(
         yield* Deferred.await(mutated);
       }),
     ),
-  30_000,
 );

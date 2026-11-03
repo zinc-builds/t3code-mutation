@@ -8,13 +8,10 @@ import {
   workspaceFileResource,
   type WorkspaceAssetResource,
 } from "@t3tools/client-runtime/state/mutation-workspace-host";
-import type {
-  EnvironmentId,
-  OrchestrationV2ProjectedTurnItem,
-  ScopedThreadRef,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import type { ThreadStructureVisibleTurnItem } from "@t3tools/client-runtime/state/models";
 import { workspaceAssetStreams } from "@t3tools/shared/mutationWorkspace";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { resolveAssetUrl } from "~/assets/assetUrls";
 import { assetEnvironment } from "~/state/assets";
@@ -64,33 +61,35 @@ export async function fetchWorkspaceAssetBytes(url: string, name: string): Promi
 }
 
 /**
- * Starts loading a workspace's files while the agent's `workspace_mutate` call
- * still runs: the thread's images and the paths the call passed, when its
- * input is visible. Video and audio are never loaded: the page plays them
- * from their URL. The page's `initialize` then answers from the cache. The
+ * Starts loading a workspace's files while the agent's `workspace_mutate` call still runs, so the
+ * page's `initialize` can answer from the cache: the thread's images, and the call's paths once
+ * its input is visible. Video and audio never load, since the page plays them from their URL. The
  * cache follows the shown thread.
  */
 export function useWorkspaceAssetPrewarm(
   threadRef: ScopedThreadRef | null,
-  visibleTurnItems: ReadonlyArray<OrchestrationV2ProjectedTurnItem>,
+  visibleTurnItems: ReadonlyArray<ThreadStructureVisibleTurnItem>,
 ) {
   const environmentId = threadRef?.environmentId ?? null;
   const threadId = threadRef?.threadId ?? null;
   const threadKey = threadRef === null ? null : scopedThreadKey(threadRef);
   // Each call prefetches once; a file the page already took is not fetched again.
   const prefetched = useRef(new Set<string>());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- points the module-level asset cache at the shown thread, dropping the previous thread's media
   useEffect(() => {
     setWorkspaceAssetScope(threadKey);
     prefetched.current.clear();
   }, [threadKey]);
 
-  const running = useMemo(() => runningWorkspaceMutations(visibleTurnItems), [visibleTurnItems]);
+  const running = runningWorkspaceMutations(visibleTurnItems);
   const mint = useWorkspaceAssetMinter();
   const latest = useRef({ mint, visibleTurnItems });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors the minter and turn items into a ref so new turn items alone do not restart prefetching
   useEffect(() => {
     latest.current = { mint, visibleTurnItems };
   });
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts network prefetches into the module-level asset cache when a workspace_mutate call starts
   useEffect(() => {
     if (environmentId === null || threadId === null) return;
     const fresh = running.filter(({ itemId }) => !prefetched.current.has(itemId));

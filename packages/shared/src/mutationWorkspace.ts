@@ -1,13 +1,8 @@
 /**
- * Mutation workspaces: an agent rebuilds a thread's interface around the task
- * at hand (a photo editor, a video timeline) with T3's `workspace_mutate` MCP
- * tool, and hands it back to chat with `workspace_restore`. The page is a
- * self-contained document stored as a thread attachment, like an HTML render,
- * with a bridge script injected so it can read the thread's media, keep its
- * control state, and host the chat composer.
- *
- * The bridge speaks JSON-RPC 2.0 over postMessage, like HTML renders and MCP
- * Apps, under its own `t3/workspace/*` methods.
+ * An agent rebuilds a thread's interface around a task with `workspace_mutate` and hands it back
+ * to chat with `workspace_restore`. The page is a self-contained document stored as a thread
+ * attachment, with a bridge script injected. The bridge speaks JSON-RPC 2.0 over postMessage,
+ * like HTML renders and MCP Apps, under its own `t3/workspace/*` methods.
  */
 
 import {
@@ -40,15 +35,11 @@ export const WORKSPACE_MAX_TITLE_LENGTH = 120;
  * clips plus one transcript each fits (84 iPhone clips and their transcripts need 168).
  */
 export const WORKSPACE_MAX_ASSETS = 256;
-// The RPC contract's state error names the limit, so the contract owns it.
-export { WORKSPACE_MAX_STATE_BYTES } from "@t3tools/contracts";
 
 /**
- * Whether a workspace asset of this type reaches the page as a URL that plays
- * it from where it is stored, rather than as bytes copied in before the page
- * starts: video and audio do, every other type arrives as a File. The rule is
- * the type alone, so a page knows from `mimeType` which shape it gets, and
- * every host (web, mobile, publish-time validation) applies the same one.
+ * Whether an asset of this type reaches the page as a URL playing it from where it is stored
+ * (video and audio) rather than as a File. The rule is the type alone, so a page knows the shape
+ * from `mimeType` and every host (web, mobile, publish-time validation) applies the same one.
  */
 export function workspaceAssetStreams(mimeType: string): boolean {
   return /^(?:video|audio)\//i.test(mimeType.trim());
@@ -375,12 +366,10 @@ export function workspaceBridgeNotification(method: string, params: unknown) {
 }
 
 /**
- * The page-side bridge, `window.t3.workspace`. It runs in <head> before the
- * page's own scripts. The composer slot is any element marked
- * `data-t3-composer`; the bridge reports where it sits (again after any
- * layout change that can move it) and sizes it to the composer the host lays
- * over it. The bridge runs before the theme bootstrap, so its `theme` event
- * waits a task for the bootstrap to apply the new variables.
+ * `window.t3.workspace`, run in <head> before the page's own scripts. It reports where the
+ * `data-t3-composer` slot sits (again after any layout change that can move it) and sizes it to
+ * the composer laid over it. It runs before the theme bootstrap, so its `theme` event waits a
+ * task for the bootstrap to apply the new variables.
  */
 const BRIDGE_SCRIPT = `(function(){
 var M=${JSON.stringify(WORKSPACE_BRIDGE_METHODS)},n=0,pending={},listeners={},stateTimer=null,lastState;

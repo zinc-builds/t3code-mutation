@@ -14,6 +14,7 @@ import * as NodeURL from "node:url";
 
 import * as ServerConfig from "../config.ts";
 import * as HeadlessChrome from "../htmlRender/headlessChrome.ts";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
 import * as PreviewBrowser from "../preview/PreviewBrowser.ts";
 import * as ProcessRunner from "../processRunner.ts";
@@ -26,7 +27,7 @@ import { workspaceMutateAdvice } from "./workspaceValidation.ts";
 const htmlRenderWith = (overrides: Partial<HtmlRender.HtmlRender["Service"]> = {}) =>
   Layer.succeed(HtmlRender.HtmlRender, {
     prepare: (html: string) => Effect.succeed(html),
-    observe: () => Effect.succeed(Option.none()),
+    observe: () => Effect.succeedNone,
     ...overrides,
   } as unknown as HtmlRender.HtmlRender["Service"]);
 const htmlRenderStub = htmlRenderWith();
@@ -255,12 +256,13 @@ it.layer(NodeServices.layer)("MutationWorkspace kit", (it) => {
 const layerShippedKitWorkspace = () =>
   MutationWorkspace.layer.pipe(
     Layer.provide(HtmlRender.layer),
+    Layer.provide(McpProviderSessions.layer),
     Layer.provide(
       Layer.succeed(
         PreviewBrowser.PreviewBrowser,
         PreviewBrowser.PreviewBrowser.of({
           executable: Effect.die("Publishing a workspace needs no preview browser."),
-          installed: Effect.succeed(Option.none()),
+          installed: Effect.succeedNone,
         }),
       ),
     ),
@@ -606,6 +608,7 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
       const htmlRender = observing((input) => {
         const clip = /"path":("[^"]*IMG_0151\.MOV")/.exec(input.html)![1]!;
         const path = JSON.parse(clip) as string;
+        // @effect-diagnostics-next-line preferSucceedSomeOrNone:off
         return Effect.succeed(
           Option.some({
             problems: [
@@ -751,6 +754,7 @@ it.layer(NodeServices.layer)("MutationWorkspace validation", (it) => {
       Effect.provide(
         layerKitWorkspace(
           observing(() =>
+            // @effect-diagnostics-next-line preferSucceedSomeOrNone:off
             Effect.succeed(
               Option.some({
                 problems: Array.from({ length: 12 }, (_, index) => ({
@@ -997,7 +1001,7 @@ it.layer(NodeServices.layer)("MutationWorkspace export validation", (it) => {
               problems: [],
             },
           }),
-          ffmpegWith(() => Effect.succeed(Option.none())),
+          ffmpegWith(() => Effect.succeedNone),
         ),
       ),
     ),
@@ -1311,12 +1315,13 @@ const TEST_BROWSER_ENV = "T3CODE_TEST_HEADLESS_SHELL";
 const layerBrowserWorkspace = (executable: string) =>
   MutationWorkspace.layer.pipe(
     Layer.provide(HtmlRender.layer),
+    Layer.provide(McpProviderSessions.layer),
     Layer.provide(
       Layer.succeed(
         PreviewBrowser.PreviewBrowser,
         PreviewBrowser.PreviewBrowser.of({
           executable: Effect.die("Validation never installs the preview browser."),
-          installed: Effect.succeed(Option.some(executable)),
+          installed: Effect.succeedSome(executable),
         }),
       ),
     ),
@@ -1327,141 +1332,138 @@ const layerBrowserWorkspace = (executable: string) =>
   );
 
 describe("MutationWorkspace validation in a browser", () => {
-  it.live(
-    "hands the page its assets and controls, and reports what broke",
-    (ctx) =>
-      Effect.gen(function* () {
-        const executable = (yield* HostProcess.Environment)[TEST_BROWSER_ENV];
-        if (!executable) return ctx.skip(`Set ${TEST_BROWSER_ENV} to run this test.`);
-        yield* Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
-          const clip = path.join(directory, "clip.mp4");
-          yield* fileSystem.writeFileString(clip, "0123456789");
-          const workspace = yield* MutationWorkspace.MutationWorkspace;
-          const publish = (body: string, assetPaths: ReadonlyArray<string>) =>
-            workspace.publish({
-              threadId: thread,
-              html: `<!doctype html><html><head></head><body><script>${body}</script></body></html>`,
-              title: "Check",
-              assetPaths,
-              chrome: {
-                inspector: [
-                  {
-                    title: "Light",
-                    controls: [
-                      { type: "slider", id: "exposure", label: "Exposure", min: -4, max: 4 },
-                    ],
-                  },
-                ],
-              },
-            });
-
-          const healthy = yield* publish(
-            [
-              "Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(([{ assets }, controls]) => {",
-              "  const [a] = assets;",
-              '  if (a.name !== "clip.mp4" || a.source !== "file" || a.size !== 10 || a.file !== undefined || typeof a.url !== "string" || a.url === "" || a.mimeType !== "video/mp4") throw new Error("asset " + JSON.stringify(a));',
-              '  if (controls.exposure !== -4) throw new Error("controls " + JSON.stringify(controls));',
-              "  console.log('booted');",
-              "});",
-            ].join("\n"),
-            [clip],
-          );
-          // The ten-byte clip plays nowhere: the page boots on a stand-in, and the result says so.
-          expect(healthy.validation).toEqual({
-            level: "boot",
-            ok: true,
-            errors: [],
-            notValidated: [
-              expect.stringContaining("playback not validated: unknown video codec (clip.mp4)"),
-            ],
-          });
-
-          const placeholder = yield* publish(
-            [
-              "t3.workspace.ready().then(({ assets }) => {",
-              '  if (assets.length !== 1 || assets[0].mimeType !== "image/png" || assets[0].file.size === 0) throw new Error("placeholder");',
-              "});",
-            ].join("\n"),
-            [],
-          );
-          expect(placeholder.validation).toEqual({ level: "boot", ok: true, errors: [] });
-
-          const started = yield* Clock.currentTimeMillis;
-          const broken = yield* publish(
-            [
-              "t3.workspace.ready().then(() => {",
-              '  console.error("[t3template] customScript error:", "addPanel(title) needs a non-empty string");',
-              "  setTimeout(() => null.x, 10);",
-              "});",
-            ].join("\n"),
-            [clip],
-          );
-          expect(broken.validation).toEqual({
-            level: "boot",
-            ok: false,
-            errors: [
-              { source: "customScript", message: "addPanel(title) needs a non-empty string" },
-              {
-                source: "exception",
-                message: expect.stringMatching(/^TypeError: Cannot read properties of null/),
-              },
-            ],
-            notValidated: [
-              expect.stringContaining("playback not validated: unknown video codec (clip.mp4)"),
-            ],
-          });
-          // Settles a quiet second after boot, well inside the page budget.
-          expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(4_000);
-
-          // An image template runs customScript only once its photo is developed, well
-          // after the bridge's first quiet second; validation waits for it.
-          const boltOn = yield* workspace.publish({
+  it.live("hands the page its assets and controls, and reports what broke", (ctx) =>
+    Effect.gen(function* () {
+      const executable = (yield* HostProcess.Environment)[TEST_BROWSER_ENV];
+      if (!executable) return ctx.skip(`Set ${TEST_BROWSER_ENV} to run this test.`);
+      yield* Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+        const clip = path.join(directory, "clip.mp4");
+        yield* fileSystem.writeFileString(clip, "0123456789");
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        const publish = (body: string, assetPaths: ReadonlyArray<string>) =>
+          workspace.publish({
             threadId: thread,
-            title: "Develop",
-            assetPaths: [],
-            template: { id: "photo-develop", options: { customScript: "t3template.nope()" } },
-          });
-          expect(boltOn.validation).toMatchObject({
-            level: "full",
-            ok: false,
-            errors: [{ source: "customScript", message: "t3template.nope is not a function" }],
-          });
-
-          // A working bolt-on: the full export runs and its file is measured.
-          const exported = yield* workspace.publish({
-            threadId: thread,
-            title: "Develop",
-            assetPaths: [],
-            template: {
-              id: "photo-develop",
-              options: {
-                customScript:
-                  "t3template.addControl({ id: 'lift', label: 'Lift', type: 'slider', min: 0, max: 1, step: 0.1, default: 0.5 });",
-              },
-            },
-          });
-          expect(exported.validation).toEqual({
-            level: "full",
-            ok: true,
-            errors: [],
-            export: {
-              files: [
+            html: `<!doctype html><html><head></head><body><script>${body}</script></body></html>`,
+            title: "Check",
+            assetPaths,
+            chrome: {
+              inspector: [
                 {
-                  name: "placeholder-developed.jpg",
-                  type: "image/jpeg",
-                  size: expect.any(Number),
-                  width: 1600,
-                  height: 1067,
+                  title: "Light",
+                  controls: [
+                    { type: "slider", id: "exposure", label: "Exposure", min: -4, max: 4 },
+                  ],
                 },
               ],
             },
           });
-        }).pipe(Effect.scoped, Effect.provide(layerBrowserWorkspace(executable)));
-      }),
-    60_000,
+
+        const healthy = yield* publish(
+          [
+            "Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(([{ assets }, controls]) => {",
+            "  const [a] = assets;",
+            '  if (a.name !== "clip.mp4" || a.source !== "file" || a.size !== 10 || a.file !== undefined || typeof a.url !== "string" || a.url === "" || a.mimeType !== "video/mp4") throw new Error("asset " + JSON.stringify(a));',
+            '  if (controls.exposure !== -4) throw new Error("controls " + JSON.stringify(controls));',
+            "  console.log('booted');",
+            "});",
+          ].join("\n"),
+          [clip],
+        );
+        // The ten-byte clip plays nowhere: the page boots on a stand-in, and the result says so.
+        expect(healthy.validation).toEqual({
+          level: "boot",
+          ok: true,
+          errors: [],
+          notValidated: [
+            expect.stringContaining("playback not validated: unknown video codec (clip.mp4)"),
+          ],
+        });
+
+        const placeholder = yield* publish(
+          [
+            "t3.workspace.ready().then(({ assets }) => {",
+            '  if (assets.length !== 1 || assets[0].mimeType !== "image/png" || assets[0].file.size === 0) throw new Error("placeholder");',
+            "});",
+          ].join("\n"),
+          [],
+        );
+        expect(placeholder.validation).toEqual({ level: "boot", ok: true, errors: [] });
+
+        const started = yield* Clock.currentTimeMillis;
+        const broken = yield* publish(
+          [
+            "t3.workspace.ready().then(() => {",
+            '  console.error("[t3template] customScript error:", "addPanel(title) needs a non-empty string");',
+            "  setTimeout(() => null.x, 10);",
+            "});",
+          ].join("\n"),
+          [clip],
+        );
+        expect(broken.validation).toEqual({
+          level: "boot",
+          ok: false,
+          errors: [
+            { source: "customScript", message: "addPanel(title) needs a non-empty string" },
+            {
+              source: "exception",
+              message: expect.stringMatching(/^TypeError: Cannot read properties of null/),
+            },
+          ],
+          notValidated: [
+            expect.stringContaining("playback not validated: unknown video codec (clip.mp4)"),
+          ],
+        });
+        // Settles a quiet second after boot, well inside the page budget.
+        expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(4_000);
+
+        // An image template runs customScript only once its photo is developed, well
+        // after the bridge's first quiet second; validation waits for it.
+        const boltOn = yield* workspace.publish({
+          threadId: thread,
+          title: "Develop",
+          assetPaths: [],
+          template: { id: "photo-develop", options: { customScript: "t3template.nope()" } },
+        });
+        expect(boltOn.validation).toMatchObject({
+          level: "full",
+          ok: false,
+          errors: [{ source: "customScript", message: "t3template.nope is not a function" }],
+        });
+
+        // A working bolt-on: the full export runs and its file is measured.
+        const exported = yield* workspace.publish({
+          threadId: thread,
+          title: "Develop",
+          assetPaths: [],
+          template: {
+            id: "photo-develop",
+            options: {
+              customScript:
+                "t3template.addControl({ id: 'lift', label: 'Lift', type: 'slider', min: 0, max: 1, step: 0.1, default: 0.5 });",
+            },
+          },
+        });
+        expect(exported.validation).toEqual({
+          level: "full",
+          ok: true,
+          errors: [],
+          export: {
+            files: [
+              {
+                name: "placeholder-developed.jpg",
+                type: "image/jpeg",
+                size: expect.any(Number),
+                width: 1600,
+                height: 1067,
+              },
+            ],
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(layerBrowserWorkspace(executable)));
+    }),
   );
 
   // A template page that declares chrome, patches it at runtime, and exports
@@ -1485,94 +1487,92 @@ Promise.all([t3.workspace.ready(), t3.workspace.controls()]).then(function (read
 });
 </script></body></html>`;
 
-  it.live(
-    "runs a template page's setChrome and export against the stand-in",
-    (ctx) =>
-      Effect.gen(function* () {
-        const executable = (yield* HostProcess.Environment)[TEST_BROWSER_ENV];
-        if (!executable) return ctx.skip(`Set ${TEST_BROWSER_ENV} to run this test.`);
-        const dryRuns: Array<FfmpegDryRun.FfmpegDryRunInput> = [];
-        const kit = chromeTemplateKit(exposureChrome);
-        const template = kit.findTemplate("grade");
-        if (!template.ok) throw new Error(template.error);
-        const layer = MutationWorkspace.layerWithKit(
-          makeWorkspaceKit({
-            core: null,
-            vendorRuntime: null,
-            vendor: [],
-            primitives: [],
-            templates: [{ ...template.value, html: chromeTemplateHtml }],
-          }),
-        ).pipe(
-          Layer.provide(
-            ffmpegWith(
-              (input) =>
-                Effect.sync(() => {
-                  dryRuns.push(input);
-                  return Option.some([{ command: 1, status: "ok" as const }]);
-                }),
-              // The test clip is four bytes, which no browser plays: validation names the codec instead.
-              (paths) => Effect.succeed(new Map(paths.map((p) => [p, "pcm_s16le"]))),
-            ),
-          ),
-          Layer.provide(HtmlRender.layer),
-          Layer.provide(
-            Layer.succeed(
-              PreviewBrowser.PreviewBrowser,
-              PreviewBrowser.PreviewBrowser.of({
-                executable: Effect.die("Validation never installs the preview browser."),
-                installed: Effect.succeed(Option.some(executable)),
+  it.live("runs a template page's setChrome and export against the stand-in", (ctx) =>
+    Effect.gen(function* () {
+      const executable = (yield* HostProcess.Environment)[TEST_BROWSER_ENV];
+      if (!executable) return ctx.skip(`Set ${TEST_BROWSER_ENV} to run this test.`);
+      const dryRuns: Array<FfmpegDryRun.FfmpegDryRunInput> = [];
+      const kit = chromeTemplateKit(exposureChrome);
+      const template = kit.findTemplate("grade");
+      if (!template.ok) throw new Error(template.error);
+      const layer = MutationWorkspace.layerWithKit(
+        makeWorkspaceKit({
+          core: null,
+          vendorRuntime: null,
+          vendor: [],
+          primitives: [],
+          templates: [{ ...template.value, html: chromeTemplateHtml }],
+        }),
+      ).pipe(
+        Layer.provide(
+          ffmpegWith(
+            (input) =>
+              Effect.sync(() => {
+                dryRuns.push(input);
+                return Option.some([{ command: 1, status: "ok" as const }]);
               }),
-            ),
+            // The test clip is four bytes, which no browser plays: validation names the codec instead.
+            (paths) => Effect.succeed(new Map(paths.map((p) => [p, "pcm_s16le"]))),
           ),
-          Layer.provideMerge(
-            Layer.fresh(
-              ServerConfig.layerTest(process.cwd(), { prefix: "t3code-mutation-browser-" }),
-            ),
+        ),
+        Layer.provide(HtmlRender.layer),
+        Layer.provide(McpProviderSessions.layer),
+        Layer.provide(
+          Layer.succeed(
+            PreviewBrowser.PreviewBrowser,
+            PreviewBrowser.PreviewBrowser.of({
+              executable: Effect.die("Validation never installs the preview browser."),
+              installed: Effect.succeedSome(executable),
+            }),
           ),
-          Layer.provideMerge(NodeServices.layer),
-        );
-        yield* Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
-          const clip = path.join(directory, "clip.wav");
-          yield* fileSystem.writeFileString(clip, "RIFF");
-          const workspace = yield* MutationWorkspace.MutationWorkspace;
-          const { reference, validation } = yield* workspace.publish({
-            threadId: thread,
-            title: "Grade",
-            assetPaths: [clip],
-            template: { id: "grade" },
-            validation: "full",
-          });
-          expect(reference.chrome?.inspector?.[0]?.controls[0]?.id).toBe("exposure");
-          expect(validation).toEqual({
-            level: "full",
-            ok: false,
-            errors: [{ source: "chrome", message: expect.stringContaining("chrome.toolbar") }],
-            notValidated: [expect.stringContaining("playback not validated: pcm_s16le")],
-            export: {
-              files: [
-                {
-                  name: "grade-overlay.png",
-                  type: "image/png",
-                  size: expect.any(Number),
-                  width: 64,
-                  height: 32,
-                },
-                { name: "grade.edl.json", type: "application/json", size: 2 },
-              ],
-              ffmpeg: [{ command: 1, status: "ok" }],
-            },
-          });
-          const [dryRun] = dryRuns;
-          expect(dryRun?.assetPaths).toEqual([clip]);
-          expect(dryRun?.files.map((file) => file.name)).toEqual(["grade-overlay.png"]);
-          expect(Buffer.from(dryRun!.files[0]!.bytes.subarray(1, 4)).toString()).toBe("PNG");
-        }).pipe(Effect.scoped, Effect.provide(layer));
-      }),
-    30_000,
+        ),
+        Layer.provideMerge(
+          Layer.fresh(
+            ServerConfig.layerTest(process.cwd(), { prefix: "t3code-mutation-browser-" }),
+          ),
+        ),
+        Layer.provideMerge(NodeServices.layer),
+      );
+      yield* Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-validate-" });
+        const clip = path.join(directory, "clip.wav");
+        yield* fileSystem.writeFileString(clip, "RIFF");
+        const workspace = yield* MutationWorkspace.MutationWorkspace;
+        const { reference, validation } = yield* workspace.publish({
+          threadId: thread,
+          title: "Grade",
+          assetPaths: [clip],
+          template: { id: "grade" },
+          validation: "full",
+        });
+        expect(reference.chrome?.inspector?.[0]?.controls[0]?.id).toBe("exposure");
+        expect(validation).toEqual({
+          level: "full",
+          ok: false,
+          errors: [{ source: "chrome", message: expect.stringContaining("chrome.toolbar") }],
+          notValidated: [expect.stringContaining("playback not validated: pcm_s16le")],
+          export: {
+            files: [
+              {
+                name: "grade-overlay.png",
+                type: "image/png",
+                size: expect.any(Number),
+                width: 64,
+                height: 32,
+              },
+              { name: "grade.edl.json", type: "application/json", size: 2 },
+            ],
+            ffmpeg: [{ command: 1, status: "ok" }],
+          },
+        });
+        const [dryRun] = dryRuns;
+        expect(dryRun?.assetPaths).toEqual([clip]);
+        expect(dryRun?.files.map((file) => file.name)).toEqual(["grade-overlay.png"]);
+        expect(Buffer.from(dryRun!.files[0]!.bytes.subarray(1, 4)).toString()).toBe("PNG");
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    }),
   );
 });
 
@@ -1671,6 +1671,5 @@ describe("MutationWorkspace shipped templates in a browser", () => {
           ),
         );
       }),
-    180_000,
   );
 });

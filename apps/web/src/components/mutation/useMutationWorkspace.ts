@@ -1,6 +1,7 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { OrchestrationV2ProjectedTurnItem, ScopedThreadRef } from "@t3tools/contracts";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ThreadStructureVisibleTurnItem } from "@t3tools/client-runtime/state/models";
+import type { ScopedThreadRef } from "@t3tools/contracts";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { useSidebar } from "../ui/sidebar";
@@ -33,11 +34,11 @@ function useEqualValue<T>(value: T, equal: (left: T, right: T) => boolean): T {
  * The workspace the thread should show now, the agent's workspace the user
  * left (to offer it back), and the images the page can work on.
  */
-export function useActiveWorkspace(
+function useActiveWorkspace(
   threadRef: ScopedThreadRef | null,
-  visibleTurnItems: ReadonlyArray<OrchestrationV2ProjectedTurnItem>,
+  visibleTurnItems: ReadonlyArray<ThreadStructureVisibleTurnItem>,
 ) {
-  const latest = useMemo(() => latestWorkspaceEvent(visibleTurnItems), [visibleTurnItems]);
+  const latest = latestWorkspaceEvent(visibleTurnItems);
   const override = useMutationWorkspaceStore((state) =>
     threadRef === null ? undefined : state.overrideByThreadKey[scopedThreadKey(threadRef)],
   );
@@ -46,10 +47,7 @@ export function useActiveWorkspace(
     itemWorkspacesEqual,
   );
   const resumable = useEqualValue(resumableWorkspace(latest, active), itemWorkspacesEqual);
-  const images = useMemo(
-    () => (active === null ? EMPTY_IMAGES : threadImagesFromTurnItems(visibleTurnItems)),
-    [active, visibleTurnItems],
-  );
+  const images = active === null ? EMPTY_IMAGES : threadImagesFromTurnItems(visibleTurnItems);
   return { active, resumable, threadImages: useEqualValue(images, threadImagesEqual) };
 }
 
@@ -95,10 +93,12 @@ function useShownWorkspace(
 ): ItemWorkspace | null {
   const [shown, setShown] = useState({ threadKey, workspace: active });
   const latestRef = useRef({ threadKey, workspace: active });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors the newest workspace into a ref for the view transition callback, which runs a frame later
   useLayoutEffect(() => {
     latestRef.current = { threadKey, workspace: active };
   });
   if (shown.threadKey !== threadKey) setShown({ threadKey, workspace: active });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- runs the workspace change through the document's view transition API, which applies the update in its own callback
   useEffect(() => {
     if (shown.threadKey !== threadKey || itemWorkspacesEqual(shown.workspace, active)) return;
     // The transition calls back after a frame; show whatever is newest by then.
@@ -117,9 +117,11 @@ function useWorkspaceSidebarOpen(wanted: boolean | null) {
   const sidebarRef = useRef({ open, setOpen });
   // What the user had before the first workspace of this stretch; null outside one.
   const restoreRef = useRef<boolean | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors the sidebar context into a ref so the sidebar effects below do not rerun when the user toggles it
   useLayoutEffect(() => {
     sidebarRef.current = { open, setOpen };
   });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- drives the app sidebar from the workspace and remembers what the user had, before paint
   useLayoutEffect(() => {
     if (isMobile) return;
     const sidebar = sidebarRef.current;
@@ -133,6 +135,7 @@ function useWorkspaceSidebarOpen(wanted: boolean | null) {
     restoreRef.current ??= sidebar.open;
     if (sidebar.open !== wanted) void sidebar.setOpen(wanted);
   }, [wanted, isMobile]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- puts the app sidebar back on unmount, using the latest context from the ref
   useLayoutEffect(
     () => () => {
       if (restoreRef.current !== null) void sidebarRef.current.setOpen(restoreRef.current);
@@ -147,7 +150,7 @@ function useWorkspaceSidebarOpen(wanted: boolean | null) {
  */
 export function useMutationWorkspace(
   threadRef: ScopedThreadRef | null,
-  visibleTurnItems: ReadonlyArray<OrchestrationV2ProjectedTurnItem>,
+  visibleTurnItems: ReadonlyArray<ThreadStructureVisibleTurnItem>,
   animate: boolean,
 ) {
   const { active, resumable, threadImages } = useActiveWorkspace(threadRef, visibleTurnItems);

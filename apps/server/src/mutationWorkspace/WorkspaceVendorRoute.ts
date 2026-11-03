@@ -25,7 +25,7 @@ const matches = (ifNoneMatch: string, etag: string) =>
  * The response for a path under WORKSPACE_VENDOR_ROUTE: the vendored file it
  * names, or 404 for any library, version, hash or file the kit does not ship.
  */
-export function vendorFileResponse(
+function vendorFileResponse(
   kit: WorkspaceKit,
   path: string,
   ifNoneMatch: string | undefined,
@@ -46,13 +46,10 @@ export function vendorFileResponse(
 }
 
 /**
- * Serves the files of the kit's vendored libraries (`t3kit.vendor`) to
- * workspace pages, and to anything else that asks. It needs no auth: every
- * file is a pinned open-source release or the kit's own init script, the same
- * bytes in every T3 build, and nothing in a path or response depends on the
- * environment or its user. A page could not present credentials anyway: its
- * opaque origin sends no cookies, and a signed URL baked into a stored page
- * would expire.
+ * Serves `t3kit.vendor` files without auth: each is a pinned open-source release or the kit's own
+ * init script, the same bytes in every T3 build, independent of the environment and its user. A
+ * page could not present credentials anyway: its opaque origin sends no cookies, and a signed URL
+ * baked into a stored page would expire.
  */
 export const layerWithKit = (kit: WorkspaceKit) =>
   HttpRouter.add(

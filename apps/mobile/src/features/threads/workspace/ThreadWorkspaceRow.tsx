@@ -2,8 +2,8 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { WorkspaceReference } from "@t3tools/shared/mutationWorkspace";
 import { Pressable, View, type ColorValue } from "react-native";
 
-import { SymbolView } from "../../../components/AppSymbol";
-import { AppText as Text } from "../../../components/AppText";
+import { SymbolView } from "../../../components/ui/AppSymbol";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { openThreadWorkspace } from "../../../state/mutationWorkspace";
 
 /** Where the agent rebuilt the interface; reopens that workspace from chat. */

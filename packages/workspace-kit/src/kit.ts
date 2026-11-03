@@ -351,11 +351,9 @@ export function makeWorkspaceKit(source: KitSource) {
   };
 
   /**
-   * Inserts the vendor registry for the plan's libraries (their files load
-   * from WORKSPACE_VENDOR_ROUTE on `t3kit.vendor.load`), its primitives (after the kit's
-   * shared core, if any) and the template options at the start of the
-   * document head, so they run before the page's own scripts. T3 then inserts
-   * the workspace bridge ahead of them.
+   * Inserts the vendor registry, its primitives (after the kit's shared core, if any) and the
+   * template options at the start of the document head, so they run before the page's own
+   * scripts. T3 then inserts the workspace bridge ahead of them.
    */
   const inject = (html: string, plan: WorkspacePagePlan): string => {
     const scripts = [

@@ -45,20 +45,18 @@ export class WorkspaceStateError extends Schema.TaggedError<WorkspaceStateError>
 }
 
 /**
- * Live previews a workspace page drives, such as a design review of the
- * user's dev server. The page cannot reach the site from its sandbox, so the
- * environment loads it in a review page of its own browser and the page works
- * on screenshots and element reads. Coordinates are CSS pixels from the top
- * left of the document, not the viewport.
+ * Live previews a workspace page drives. The page cannot reach the site from its sandbox, so the
+ * environment loads it in a review page of its own browser and the page works on screenshots and
+ * element reads. Coordinates are CSS pixels from the top left of the document, not the viewport.
  */
 export const WORKSPACE_PREVIEW_MAX_URL_LENGTH = 2048;
-export const WORKSPACE_PREVIEW_MAX_SELECTOR_LENGTH = 1024;
+const WORKSPACE_PREVIEW_MAX_SELECTOR_LENGTH = 1024;
 
 const WorkspacePreviewSessionId = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(128),
 );
-export const WORKSPACE_PREVIEW_MAX_STYLES_LENGTH = 65_536;
+const WORKSPACE_PREVIEW_MAX_STYLES_LENGTH = 65_536;
 const WorkspacePreviewSelector = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(WORKSPACE_PREVIEW_MAX_SELECTOR_LENGTH),
